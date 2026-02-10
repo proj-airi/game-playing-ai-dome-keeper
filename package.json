@@ -1,0 +1,20 @@
+{
+  "name": "airi-dome-keeper-root",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "decompile": "bun scripts/decompile-domekeeper.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^7.4.2",
+    "@types/node": "^25.2.2",
+    "bun-types": "^1.3.9",
+    "eslint": "^10.0.0",
+    "typescript": "^5.9.3"
+  }
+}

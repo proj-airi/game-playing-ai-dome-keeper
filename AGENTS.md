@@ -29,8 +29,18 @@
 - Dome Keeper mods use the GDScript Mod Loader and require decompiling/importing the game into Godot, then placing mods under `res://mods-unpacked/Author-ModName` with `manifest.json` and `mod_main.gd`. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
 - The modding wiki recommends reviewing Mod Loader docs and proceeding to "Game Investigation" after the first mod setup. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
 
+## Mod Dev Workflow (Decision)
+- Keep mod source in this repo under `mods/domekeeper/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
+
+## Decompiled Project Layout (Decision)
+- Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
+- Link the repo mod source into each decompiled project at `external/domekeeper-decompiled/<game-version>/mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
+
 ## Modding EULA & Repo Hygiene (Brief)
 - Modding rules explicitly forbid distributing the decompiled project (including the `.pck`) and require that shared mod source contains only modded files, not original game files; they also recommend using a `.gitignore` to enforce this. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
+
+## Decompile Script (Decision)
+- It is acceptable to commit a local decompilation script as long as it does not include or distribute any game assets or decompiled outputs, and only operates on the user's local installation. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
 
 ## Repo Structure (Decision)
 - Store GDScript mod code under `mods/domekeeper/` (not under `crates/`).
@@ -40,6 +50,9 @@
 
 ## Tooling (Decision)
 - Use Bun as the main task runner/entry point for repo scripts. Reference: https://bun.sh/docs/cli/run
+
+## Linting (Decision)
+- Use ESLint with `@antfu/eslint-config` and the flat config (`eslint.config.mjs`). References: https://github.com/antfu/eslint-config , https://eslint.org/docs/latest/use/configure/configuration-files-new
 
 ## YOLO Python Dependency (Decision)
 - Training/export will use the Ultralytics CLI (`yolo ...`), which is installed via the `ultralytics` Python package. Reference: https://docs.ultralytics.com/quickstart/

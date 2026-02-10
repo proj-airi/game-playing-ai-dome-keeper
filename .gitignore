@@ -1,0 +1,10 @@
+# Data and recordings (local-only)
+data/
+
+# Decompiled game projects (never commit)
+external/domekeeper-decompiled/
+
+# OS / editor
+.DS_Store
+
+node_modules/

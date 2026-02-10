@@ -1,0 +1,4 @@
+interface:
+  display_name: Lint
+  short_description: Run eslint --fix and typecheck after edits
+  default_prompt: 'After modifying files, run eslint --fix and typecheck using bun before responding.'
