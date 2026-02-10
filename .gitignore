@@ -6,5 +6,6 @@ external/domekeeper-decompiled/
 
 # OS / editor
 .DS_Store
+.envrc
 
 node_modules/

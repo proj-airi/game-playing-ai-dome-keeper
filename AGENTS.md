@@ -41,6 +41,9 @@
 
 ## Decompile Script (Decision)
 - It is acceptable to commit a local decompilation script as long as it does not include or distribute any game assets or decompiled outputs, and only operates on the user's local installation. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
+- GodotSteam is required for modding per the Dome Keeper modding docs; the project should document how to obtain it, but avoid auto-downloading by default. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started
+- The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links all repo mods under `mods/` into the decompiled `mods-unpacked/` directory. Reference: https://github.com/GDRETools/gdsdecomp
+- Decompile script configuration is provided via environment variables only (`DOMEKEEPER_GAME_DIR`, `GODOT_BIN`, `GDRETOOLS_BIN`, `DOMEKEEPER_VERSION`, optional `DOMEKEEPER_OUT_ROOT`), read via `import.meta.env`. Reference: https://bun.com/reference/globals/ImportMeta
 
 ## Repo Structure (Decision)
 - Store GDScript mod code under `mods/domekeeper/` (not under `crates/`).
@@ -53,6 +56,9 @@
 
 ## Linting (Decision)
 - Use ESLint with `@antfu/eslint-config` and the flat config (`eslint.config.mjs`). References: https://github.com/antfu/eslint-config , https://eslint.org/docs/latest/use/configure/configuration-files-new
+
+## Exec Utilities (Decision)
+- Prefer minimal, actively maintained process-exec libraries when available. For this repo, use `tinyexec` as the lightweight command runner. Reference: https://www.npmjs.com/package/tinyexec
 
 ## YOLO Python Dependency (Decision)
 - Training/export will use the Ultralytics CLI (`yolo ...`), which is installed via the `ultralytics` Python package. Reference: https://docs.ultralytics.com/quickstart/
