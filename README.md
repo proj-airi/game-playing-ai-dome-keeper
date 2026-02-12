@@ -47,3 +47,31 @@ bun run decompile
 ```bash
 bun run godot:open
 ```
+
+### macOS Rendering Note
+
+If you experience crashes on macOS, set the rendering method to `forward_plus` in `project.godot`:
+
+```
+[rendering]
+renderer/rendering_method="forward_plus"
+```
+
+### DX notes
+
+- GDScript intellisense: Install the [Godot Tools](https://marketplace.visualstudio.com/items?itemName=geequlim.godot-tools) extension for VS Code, create a local workspace file to configure the Godot binary path.
+
+  ```json
+  {
+    "folders": [
+      {
+        "path": "."
+      }
+    ],
+    "settings": {
+      "godotTools.editorPath.godot4": "/path/to/Godot.app"
+    }
+  }
+  ```
+
+  Then run Godot Editor to serve a LSP server.

@@ -9,3 +9,5 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+
+*.local.code-workspace

@@ -31,6 +31,7 @@
 
 ## Mod Dev Workflow (Decision)
 - Keep mod source in this repo under `mods/domekeeper/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
+- Use Mod Loader script hooks for TitleStage UI tweaks; hook files must extend `Object`, take `ModLoaderHookChain` as first argument, and call `execute_next()` once. Reference: https://wiki.godotmodding.com/guides/modding/script_hooks/
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
@@ -44,9 +45,10 @@
 - GodotSteam is required for modding per the Dome Keeper modding docs; the project should document how to obtain it, but avoid auto-downloading by default. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started
 - The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links all repo mods under `mods/` into the decompiled `mods-unpacked/` directory. Reference: https://github.com/GDRETools/gdsdecomp
 - Decompile script configuration is provided via environment variables only (`DOMEKEEPER_GAME_DIR`, `GODOT_BIN`, `GDRETOOLS_BIN`, `DOMEKEEPER_VERSION`, optional `DOMEKEEPER_OUT_ROOT`), read via `import.meta.env`. Reference: https://bun.com/reference/globals/ImportMeta
+- For macOS stability, set the project rendering method to `forward_plus` in `project.godot` (rendering/renderer/rendering_method). Reference: https://docs.godotengine.org/en/stable/classes/class_projectsettings.html
 
 ## Repo Structure (Decision)
-- Store GDScript mod code under `mods/domekeeper/` (not under `crates/`).
+- Store each GDScript mod under `mods/<Author>-<ModName>/` (not under `crates/`). Reference: https://wiki.godotmodding.com/guides/modding/mod_structure/
 
 ## Dataset Versioning (Decision)
 - For Hugging Face datasets, use `main` for ongoing work and use git tags for released dataset versions; create branches only for long-lived variants. References: https://huggingface.co/docs/huggingface_hub/guides/repository , https://huggingface.tw/docs/huggingface_hub/guides/repository

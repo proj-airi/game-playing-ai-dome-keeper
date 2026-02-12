@@ -9,7 +9,8 @@
     "decompile": "bun scripts/decompile-domekeeper.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
-    "godot:open": "$GODOT_BIN --project external/domekeeper-decompiled/$DOMEKEEPER_VERSION/project.godot"
+    "godot:open": "$GODOT_BIN ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION/project.godot",
+    "godot:run": "$GODOT_BIN --path ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^7.4.2",
