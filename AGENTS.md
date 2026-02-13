@@ -31,7 +31,7 @@
 
 ## Mod Dev Workflow (Decision)
 - Keep mod source in this repo under `mods/domekeeper/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
-- Use Mod Loader script hooks for TitleStage UI tweaks; hook files must extend `Object`, take `ModLoaderHookChain` as first argument, and call `execute_next()` once. Reference: https://wiki.godotmodding.com/guides/modding/script_hooks/
+- Prefer script extensions for TitleStage UI tweaks (more reliable than hooks during editor runs). Extension scripts should `extends "res://stages/title/TitleStage.gd"` and call `super(...)` in overridden methods. Reference: https://wiki.godotmodding.com/guides/modding/script_extensions/
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
