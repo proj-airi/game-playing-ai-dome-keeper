@@ -24,6 +24,8 @@
 - Collect data via a gameplay capture tool that records frames while playing. Reference: https://docs.ultralytics.com/guides/data-collection-and-annotation/
 - Start with a small class set (player, dome, enemy; optional ore). Reference: https://docs.ultralytics.com/datasets/detect/
 - Fix training resolution (e.g., 640) and iterate after the end-to-end pipeline works. Reference: https://docs.ultralytics.com/modes/train/
+- Initial detection classes: player (engineer), dome (laser), iron ore, cobalt ore, water ore, enemy (all monsters). Reference: internal project decision (no external doc).
+- Use Ultralytics YOLO dataset YAML format (`data.yaml`) for train/val paths and class names. Reference: https://docs.ultralytics.com/datasets/detect/
 
 ## Modding Notes (Brief)
 - Dome Keeper mods use the GDScript Mod Loader and require decompiling/importing the game into Godot, then placing mods under `res://mods-unpacked/Author-ModName` with `manifest.json` and `mod_main.gd`. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
@@ -32,6 +34,9 @@
 ## Mod Dev Workflow (Decision)
 - Keep mod source in this repo under `mods/domekeeper/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
 - Prefer script extensions for TitleStage UI tweaks (more reliable than hooks during editor runs). Extension scripts should `extends "res://stages/title/TitleStage.gd"` and call `super(...)` in overridden methods. Reference: https://wiki.godotmodding.com/guides/modding/script_extensions/
+- Add a pause-menu toggle that starts/stops data capture; each run creates `user://yolo_data/session_<timestamp>/` with `images/` and `labels/`, saving screenshots + YOLO labels at a fixed interval using object-tree queries. Reference: internal project decision (no external doc).
+- On session start, create a `data.yaml` alongside `images/` and `labels/` with YOLO dataset fields (`path`, `train`, `val`, `names`) for the captured classes. Reference: https://docs.ultralytics.com/datasets/detect/
+- On session stop, open the capture folder in the OS file manager using Godot's `OS.shell_open`. Reference: https://docs.godotengine.org/en/stable/classes/class_os.html#class-os-method-shell-open
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
