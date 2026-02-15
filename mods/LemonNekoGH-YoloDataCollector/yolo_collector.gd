@@ -87,10 +87,27 @@ func _capture_frame() -> void:
 		return
 
 	var view_size = viewport.get_visible_rect().size
+	var original_image_size = image.get_size()
+	var view_to_image_scale = Vector2(
+		original_image_size.x / max(view_size.x, 1.0),
+		original_image_size.y / max(view_size.y, 1.0)
+	)
 	var letterbox = _letterbox_image(image, TARGET_SIZE)
 	var output_image: Image = letterbox.image
 	var scale: float = letterbox.scale
 	var offset: Vector2 = letterbox.offset
+	if capture_index == 0:
+		var texture_size = viewport.get_texture().get_size() if viewport.get_texture() != null else Vector2.ZERO
+		ModLoaderLog.debug(
+			"Capture sizes view=" + str(view_size)
+			+ " texture=" + str(texture_size)
+			+ " image=" + str(original_image_size)
+			+ " view_to_image_scale=" + str(view_to_image_scale)
+			+ " target=" + str(TARGET_SIZE)
+			+ " scale=" + str(scale)
+			+ " offset=" + str(offset),
+			"YOLO Data Collector"
+		)
 
 	var basename = "frame_%06d" % capture_index
 	capture_index += 1
@@ -100,7 +117,7 @@ func _capture_frame() -> void:
 	var image_path = images_dir.path_join(basename + ".png")
 	var label_path = labels_dir.path_join(basename + ".txt")
 
-	var labels := _collect_labels(view_size, scale, offset, Vector2(TARGET_SIZE))
+	var labels := _collect_labels(view_size, view_to_image_scale, scale, offset, Vector2(TARGET_SIZE))
 
 	output_image.save_png(image_path)
 	_save_labels(label_path, labels)
@@ -139,31 +156,37 @@ func _is_pause_menu_visible() -> bool:
 	return false
 
 
-func _collect_labels(view_size: Vector2, scale: float, offset: Vector2, target_size: Vector2) -> Array:
+func _collect_labels(
+	view_size: Vector2,
+	view_to_image_scale: Vector2,
+	scale: float,
+	offset: Vector2,
+	target_size: Vector2
+) -> Array:
 	var labels := []
 
 	for keeper in Keepers.getAll():
 		var rect = _rect_for_sprite(keeper)
-		_append_label(labels, CLASS_PLAYER, rect, view_size, scale, offset, target_size)
+		_append_label(labels, CLASS_PLAYER, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	if Level.dome:
 		var rect = _rect_for_sprite(Level.dome)
-		_append_label(labels, CLASS_DOME, rect, view_size, scale, offset, target_size)
+		_append_label(labels, CLASS_DOME, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	for monster in get_tree().get_nodes_in_group("monster"):
 		var rect = _rect_for_sprite(monster)
-		_append_label(labels, CLASS_ENEMY, rect, view_size, scale, offset, target_size)
+		_append_label(labels, CLASS_ENEMY, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	if Level.map and Level.map.tilesByType:
 		for tile in Level.map.tilesByType.get(CONST.IRON, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_IRON, rect, view_size, scale, offset, target_size)
+			_append_label(labels, CLASS_IRON, rect, view_size, view_to_image_scale, scale, offset, target_size)
 		for tile in Level.map.tilesByType.get(CONST.SAND, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_COBALT, rect, view_size, scale, offset, target_size)
+			_append_label(labels, CLASS_COBALT, rect, view_size, view_to_image_scale, scale, offset, target_size)
 		for tile in Level.map.tilesByType.get(CONST.WATER, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_WATER, rect, view_size, scale, offset, target_size)
+			_append_label(labels, CLASS_WATER, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	return labels
 
@@ -173,6 +196,7 @@ func _append_label(
 	class_id: int,
 	rect: Rect2,
 	view_size: Vector2,
+	view_to_image_scale: Vector2,
 	scale: float,
 	offset: Vector2,
 	target_size: Vector2
@@ -184,6 +208,12 @@ func _append_label(
 	var y_min = clamp(rect.position.y, 0.0, view_size.y)
 	var x_max = clamp(rect.position.x + rect.size.x, 0.0, view_size.x)
 	var y_max = clamp(rect.position.y + rect.size.y, 0.0, view_size.y)
+
+	# Convert from view (logical) coordinates to image pixel coordinates.
+	x_min *= view_to_image_scale.x
+	x_max *= view_to_image_scale.x
+	y_min *= view_to_image_scale.y
+	y_max *= view_to_image_scale.y
 
 	if x_max <= x_min or y_max <= y_min:
 		return
