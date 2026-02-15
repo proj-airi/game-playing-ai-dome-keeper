@@ -84,8 +84,6 @@ func _capture_frame() -> void:
 	if image == null:
 		return
 
-	image.flip_y()
-
 	var basename = "frame_%06d" % capture_index
 	capture_index += 1
 
