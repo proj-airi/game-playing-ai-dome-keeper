@@ -4,6 +4,10 @@ const CAPTURE_INTERVAL := 0.5
 const OUTPUT_DIR := "user://yolo_data"
 const TARGET_SIZE := Vector2i(640, 640)
 const PAD_COLOR := Color(0.447, 0.447, 0.447, 1.0)
+const SEGMENT_LENGTH_SEC := 30.0
+const SEGMENT_CYCLE := 6
+const TRAIN_SEGMENTS := 4
+const TARGETS_PER_NO_TARGET := 5
 
 const CLASS_PLAYER := 0
 const CLASS_DOME := 1
@@ -24,6 +28,8 @@ var yolo_collecting := false
 var yolo_timer: Timer
 var capture_index := 0
 var session_dir := ""
+var session_start_ms := 0
+var targets_since_no_target := 0
 
 func _init() -> void:
 	ModLoaderLog.debug("YOLO Data Collector Node Initiated!", "YOLO Data Collector")
@@ -66,12 +72,12 @@ func stop_collection() -> void:
 
 func _start_new_session() -> void:
 	capture_index = 0
+	session_start_ms = Time.get_ticks_msec()
+	targets_since_no_target = 0
 	var timestamp = Time.get_datetime_string_from_system().replace(":", "-")
 	session_dir = OUTPUT_DIR.path_join("session_" + timestamp)
-	var images_dir = session_dir.path_join("images")
-	var labels_dir = session_dir.path_join("labels")
-	DirAccess.make_dir_recursive_absolute(images_dir)
-	DirAccess.make_dir_recursive_absolute(labels_dir)
+	_ensure_split_dirs("images")
+	_ensure_split_dirs("labels")
 	_write_data_yaml()
 
 
@@ -92,10 +98,9 @@ func _capture_frame() -> void:
 		original_image_size.x / max(view_size.x, 1.0),
 		original_image_size.y / max(view_size.y, 1.0)
 	)
-	var letterbox = _letterbox_image(image, TARGET_SIZE)
-	var output_image: Image = letterbox.image
-	var scale: float = letterbox.scale
-	var offset: Vector2 = letterbox.offset
+	var letterbox_params = _letterbox_params(original_image_size, TARGET_SIZE)
+	var scale: float = letterbox_params.scale
+	var offset: Vector2 = letterbox_params.offset
 	if capture_index == 0:
 		var texture_size = viewport.get_texture().get_size() if viewport.get_texture() != null else Vector2.ZERO
 		ModLoaderLog.debug(
@@ -109,16 +114,26 @@ func _capture_frame() -> void:
 			"YOLO Data Collector"
 		)
 
+	var labels := _collect_labels(view_size, view_to_image_scale, scale, offset, Vector2(TARGET_SIZE))
+	var has_target = _has_target_labels(labels)
+	if has_target:
+		targets_since_no_target += 1
+	else:
+		if targets_since_no_target < TARGETS_PER_NO_TARGET:
+			return
+		targets_since_no_target = 0
+
 	var basename = "frame_%06d" % capture_index
 	capture_index += 1
 
-	var images_dir = session_dir.path_join("images")
-	var labels_dir = session_dir.path_join("labels")
+	var split = _current_split()
+	var images_dir = session_dir.path_join("images").path_join(split)
+	var labels_dir = session_dir.path_join("labels").path_join(split)
 	var image_path = images_dir.path_join(basename + ".png")
 	var label_path = labels_dir.path_join(basename + ".txt")
 
-	var labels := _collect_labels(view_size, view_to_image_scale, scale, offset, Vector2(TARGET_SIZE))
-
+	var letterbox = _letterbox_image(image, TARGET_SIZE)
+	var output_image: Image = letterbox.image
 	output_image.save_png(image_path)
 	_save_labels(label_path, labels)
 
@@ -148,8 +163,41 @@ func _letterbox_image(image: Image, target_size: Vector2i) -> Dictionary:
 	return {"image": output, "scale": scale, "offset": offset}
 
 
+func _letterbox_params(src_size: Vector2i, target_size: Vector2i) -> Dictionary:
+	if src_size.x <= 0 or src_size.y <= 0:
+		return {"scale": 1.0, "offset": Vector2.ZERO}
+
+	var scale = min(
+		float(target_size.x) / float(src_size.x),
+		float(target_size.y) / float(src_size.y)
+	)
+	var resized_w = int(round(float(src_size.x) * scale))
+	var resized_h = int(round(float(src_size.y) * scale))
+	var offset_x = int((target_size.x - resized_w) / 2)
+	var offset_y = int((target_size.y - resized_h) / 2)
+	return {"scale": scale, "offset": Vector2(float(offset_x), float(offset_y))}
+
+
+func _current_split() -> String:
+	var elapsed_ms = max(Time.get_ticks_msec() - session_start_ms, 0)
+	var segment_index = int(floor(float(elapsed_ms) / (SEGMENT_LENGTH_SEC * 1000.0)))
+	var cycle_index = segment_index % SEGMENT_CYCLE
+	if cycle_index < TRAIN_SEGMENTS:
+		return "train"
+	if cycle_index == TRAIN_SEGMENTS:
+		return "val"
+	return "test"
+
+
+func _ensure_split_dirs(root_name: String) -> void:
+	var root_dir = session_dir.path_join(root_name)
+	DirAccess.make_dir_recursive_absolute(root_dir.path_join("train"))
+	DirAccess.make_dir_recursive_absolute(root_dir.path_join("val"))
+	DirAccess.make_dir_recursive_absolute(root_dir.path_join("test"))
+
+
 func _is_pause_menu_visible() -> bool:
-	# PauseMenu path is unstable across versions, so we use a group marker instead.
+	# UI overlay paths are unstable across versions, so we use a group marker instead.
 	for node in get_tree().get_nodes_in_group("yolo_pause_menu"):
 		if node is CanvasItem and node.is_visible_in_tree():
 			return true
@@ -189,6 +237,14 @@ func _collect_labels(
 			_append_label(labels, CLASS_WATER, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	return labels
+
+
+func _has_target_labels(labels: Array) -> bool:
+	for item in labels:
+		var class_id = item[0]
+		if class_id == CLASS_ENEMY or class_id == CLASS_IRON or class_id == CLASS_COBALT or class_id == CLASS_WATER:
+			return true
+	return false
 
 
 func _append_label(
@@ -252,8 +308,9 @@ func _write_data_yaml() -> void:
 
 	var lines: Array[String] = []
 	lines.append("path: .")
-	lines.append("train: images")
-	lines.append("val: images")
+	lines.append("train: images/train")
+	lines.append("val: images/val")
+	lines.append("test: images/test")
 	lines.append("nc: %d" % DATASET_NAMES.size())
 	lines.append("names:")
 	for name in DATASET_NAMES:

@@ -39,7 +39,10 @@
 - On session start, create a `data.yaml` alongside `images/` and `labels/` with YOLO dataset fields (`path`, `train`, `val`, `names`) for the captured classes. Reference: https://docs.ultralytics.com/datasets/detect/
 - On session stop, open the capture folder in the OS file manager using Godot's `OS.shell_open`. Reference: https://docs.godotengine.org/en/stable/classes/class_os.html#class-os-method-shell-open
 - Pause capture while the pause menu is visible by tagging the PauseMenu node with a group and checking `CanvasItem.is_visible_in_tree()` from the collector. References: https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
+- Pause capture while the upgrade popup (TechTree) is visible by tagging `TechTreePopup` with the same group and checking visibility from the collector. References: https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
 - Capture frames are letterboxed to `640x640` with gray padding, and labels are transformed to match the padded image. Reference: https://docs.godotengine.org/en/4.2/classes/class_image.html
+- Split each capture session into `train/val/test` by fixed 30-second segments, cycling `4/1/1` over time; write to `images/{split}` and `labels/{split}` and set `data.yaml` accordingly. References: https://docs.godotengine.org/en/4.2/classes/class_time.html#class-time-method-get-ticks-msec , https://docs.ultralytics.com/datasets/detect/
+- Treat frames as having a target only when `enemy` or `ore_*` classes are present; allow one no-target frame only after 5 target frames have been captured. Reference: internal project decision (no external doc).
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
