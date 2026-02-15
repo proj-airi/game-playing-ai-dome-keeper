@@ -74,6 +74,8 @@ func _start_new_session() -> void:
 
 
 func _capture_frame() -> void:
+	if _is_pause_menu_visible():
+		return
 	var viewport := get_viewport()
 	if viewport == null:
 		return
@@ -92,11 +94,19 @@ func _capture_frame() -> void:
 	var image_path = images_dir.path_join(basename + ".png")
 	var label_path = labels_dir.path_join(basename + ".txt")
 
-	image.save_png(image_path)
-
 	var size = viewport.get_visible_rect().size
 	var labels := _collect_labels(size)
+
+	image.save_png(image_path)
 	_save_labels(label_path, labels)
+
+
+func _is_pause_menu_visible() -> bool:
+	# PauseMenu path is unstable across versions, so we use a group marker instead.
+	for node in get_tree().get_nodes_in_group("yolo_pause_menu"):
+		if node is CanvasItem and node.is_visible_in_tree():
+			return true
+	return false
 
 
 func _collect_labels(view_size: Vector2) -> Array:

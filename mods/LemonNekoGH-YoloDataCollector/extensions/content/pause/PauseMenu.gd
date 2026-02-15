@@ -5,7 +5,17 @@ var yolo_button: Button
 
 func _ready() -> void:
 	super()
+	# Use a group marker on the visible panel so the collector can detect it without relying on paths.
+	var menu_panel := get_node_or_null("MenuPanel")
+	if menu_panel != null:
+		menu_panel.add_to_group("yolo_pause_menu")
 	_setup_yolo_button()
+
+
+func _exit_tree() -> void:
+	var menu_panel := get_node_or_null("MenuPanel")
+	if menu_panel != null:
+		menu_panel.remove_from_group("yolo_pause_menu")
 
 
 func _setup_yolo_button() -> void:
