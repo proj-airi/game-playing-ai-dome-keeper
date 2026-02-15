@@ -2,6 +2,8 @@ extends Node
 
 const CAPTURE_INTERVAL := 0.5
 const OUTPUT_DIR := "user://yolo_data"
+const TARGET_SIZE := Vector2i(640, 640)
+const PAD_COLOR := Color(0.447, 0.447, 0.447, 1.0)
 
 const CLASS_PLAYER := 0
 const CLASS_DOME := 1
@@ -84,6 +86,12 @@ func _capture_frame() -> void:
 	if image == null:
 		return
 
+	var view_size = viewport.get_visible_rect().size
+	var letterbox = _letterbox_image(image, TARGET_SIZE)
+	var output_image: Image = letterbox.image
+	var scale: float = letterbox.scale
+	var offset: Vector2 = letterbox.offset
+
 	var basename = "frame_%06d" % capture_index
 	capture_index += 1
 
@@ -92,11 +100,35 @@ func _capture_frame() -> void:
 	var image_path = images_dir.path_join(basename + ".png")
 	var label_path = labels_dir.path_join(basename + ".txt")
 
-	var size = viewport.get_visible_rect().size
-	var labels := _collect_labels(size)
+	var labels := _collect_labels(view_size, scale, offset, Vector2(TARGET_SIZE))
 
-	image.save_png(image_path)
+	output_image.save_png(image_path)
 	_save_labels(label_path, labels)
+
+func _letterbox_image(image: Image, target_size: Vector2i) -> Dictionary:
+	var src_size = image.get_size()
+	if src_size.x <= 0 or src_size.y <= 0:
+		return {"image": image, "scale": 1.0, "offset": Vector2.ZERO}
+
+	var scale = min(
+		float(target_size.x) / float(src_size.x),
+		float(target_size.y) / float(src_size.y)
+	)
+	var resized_w = int(round(float(src_size.x) * scale))
+	var resized_h = int(round(float(src_size.y) * scale))
+	var resized_size = Vector2i(resized_w, resized_h)
+
+	image.resize(resized_size.x, resized_size.y, Image.INTERPOLATE_BILINEAR)
+
+	var output = Image.create(target_size.x, target_size.y, false, image.get_format())
+	output.fill(PAD_COLOR)
+
+	var offset_x = int((target_size.x - resized_size.x) / 2)
+	var offset_y = int((target_size.y - resized_size.y) / 2)
+	var offset = Vector2(float(offset_x), float(offset_y))
+
+	output.blit_rect(image, Rect2i(Vector2i.ZERO, resized_size), Vector2i(offset_x, offset_y))
+	return {"image": output, "scale": scale, "offset": offset}
 
 
 func _is_pause_menu_visible() -> bool:
@@ -107,36 +139,44 @@ func _is_pause_menu_visible() -> bool:
 	return false
 
 
-func _collect_labels(view_size: Vector2) -> Array:
+func _collect_labels(view_size: Vector2, scale: float, offset: Vector2, target_size: Vector2) -> Array:
 	var labels := []
 
 	for keeper in Keepers.getAll():
 		var rect = _rect_for_sprite(keeper)
-		_append_label(labels, CLASS_PLAYER, rect, view_size)
+		_append_label(labels, CLASS_PLAYER, rect, view_size, scale, offset, target_size)
 
 	if Level.dome:
 		var rect = _rect_for_sprite(Level.dome)
-		_append_label(labels, CLASS_DOME, rect, view_size)
+		_append_label(labels, CLASS_DOME, rect, view_size, scale, offset, target_size)
 
 	for monster in get_tree().get_nodes_in_group("monster"):
 		var rect = _rect_for_sprite(monster)
-		_append_label(labels, CLASS_ENEMY, rect, view_size)
+		_append_label(labels, CLASS_ENEMY, rect, view_size, scale, offset, target_size)
 
 	if Level.map and Level.map.tilesByType:
 		for tile in Level.map.tilesByType.get(CONST.IRON, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_IRON, rect, view_size)
+			_append_label(labels, CLASS_IRON, rect, view_size, scale, offset, target_size)
 		for tile in Level.map.tilesByType.get(CONST.SAND, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_COBALT, rect, view_size)
+			_append_label(labels, CLASS_COBALT, rect, view_size, scale, offset, target_size)
 		for tile in Level.map.tilesByType.get(CONST.WATER, []):
 			var rect = _rect_for_tile(tile)
-			_append_label(labels, CLASS_WATER, rect, view_size)
+			_append_label(labels, CLASS_WATER, rect, view_size, scale, offset, target_size)
 
 	return labels
 
 
-func _append_label(labels: Array, class_id: int, rect: Rect2, view_size: Vector2) -> void:
+func _append_label(
+	labels: Array,
+	class_id: int,
+	rect: Rect2,
+	view_size: Vector2,
+	scale: float,
+	offset: Vector2,
+	target_size: Vector2
+) -> void:
 	if rect.size.x <= 1 or rect.size.y <= 1:
 		return
 
@@ -148,10 +188,15 @@ func _append_label(labels: Array, class_id: int, rect: Rect2, view_size: Vector2
 	if x_max <= x_min or y_max <= y_min:
 		return
 
-	var x_center = ((x_min + x_max) * 0.5) / view_size.x
-	var y_center = ((y_min + y_max) * 0.5) / view_size.y
-	var width = (x_max - x_min) / view_size.x
-	var height = (y_max - y_min) / view_size.y
+	var x_min_s = x_min * scale + offset.x
+	var y_min_s = y_min * scale + offset.y
+	var x_max_s = x_max * scale + offset.x
+	var y_max_s = y_max * scale + offset.y
+
+	var x_center = ((x_min_s + x_max_s) * 0.5) / target_size.x
+	var y_center = ((y_min_s + y_max_s) * 0.5) / target_size.y
+	var width = (x_max_s - x_min_s) / target_size.x
+	var height = (y_max_s - y_min_s) / target_size.y
 
 	labels.append([class_id, x_center, y_center, width, height])
 

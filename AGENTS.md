@@ -39,6 +39,7 @@
 - On session start, create a `data.yaml` alongside `images/` and `labels/` with YOLO dataset fields (`path`, `train`, `val`, `names`) for the captured classes. Reference: https://docs.ultralytics.com/datasets/detect/
 - On session stop, open the capture folder in the OS file manager using Godot's `OS.shell_open`. Reference: https://docs.godotengine.org/en/stable/classes/class_os.html#class-os-method-shell-open
 - Pause capture while the pause menu is visible by tagging the PauseMenu node with a group and checking `CanvasItem.is_visible_in_tree()` from the collector. References: https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
+- Capture frames are letterboxed to `640x640` with gray padding, and labels are transformed to match the padded image. Reference: https://docs.godotengine.org/en/4.2/classes/class_image.html
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
