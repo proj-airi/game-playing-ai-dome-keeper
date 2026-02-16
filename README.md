@@ -22,8 +22,8 @@ AI plays the game **Dome Keeper** with CV & LLM combined. Powered by YOLO.
 1. Clone and install dependencies.
 
 ```bash
-git clone https://github.com/AIRI-Dome-Keeper/airi-dome-keeper.git
-cd airi-dome-keeper
+git clone https://github.com/project-airi/game-playing-ai-dome-keeper.git
+cd game-playing-ai-dome-keeper
 bun install
 ```
 
@@ -112,7 +112,7 @@ If you find our works useful for your research, please consider citing:
 @misc{airi_dome_keeper_2026,
   title        = {Game AI - Dome Keeper},
   author       = {Project AIRI Team},
-  howpublished = {\url{https://github.com/AIRI-Dome-Keeper/airi-dome-keeper}},
+  howpublished = {\url{https://github.com/project-airi/game-playing-ai-dome-keeper}},
   year         = {2026}
 }
 ```
