@@ -19,6 +19,12 @@
 - Build an AIRI plugin that can autonomously play Dome Keeper using game frames as input and keyboard/mouse mappings as output.
 - Support a two-layer agent structure: high-level LLM planning and low-level real-time control.
 
+## Gameplay Mechanics (Reference)
+- The Engineer mines by moving into a tile with the drill; tiles have health/hardness and take multiple hits to break. Reference: https://domekeeper.wiki.gg/wiki/Engineer
+- Resources must be picked up and carried; carrying slows movement, and carry-strength upgrades reduce the slowdown (so you can carry more). Reference: https://domekeeper.wiki.gg/wiki/Engineer
+- The Engineer has dedicated pickup and drop keybinds for carrying resources (pickup: Space by default, drop: Q by default). Reference: https://domekeeper.wiki.gg/wiki/Engineer
+- Drill-strength upgrades make the drill stronger (mine harder rock). Reference: https://domekeeper.wiki.gg/wiki/Engineer
+
 ## Vision (YOLO) Plan (Brief)
 - Use YOLO26n for MVP detection. Reference: https://docs.ultralytics.com/models/yolo26/
 - Collect data via a gameplay capture tool that records frames while playing. Reference: https://docs.ultralytics.com/guides/data-collection-and-annotation/
