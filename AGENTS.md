@@ -36,19 +36,20 @@
 ## Modding Notes (Brief)
 - Dome Keeper mods use the GDScript Mod Loader and require decompiling/importing the game into Godot, then placing mods under `res://mods-unpacked/Author-ModName` with `manifest.json` and `mod_main.gd`. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
 - The modding wiki recommends reviewing Mod Loader docs and proceeding to "Game Investigation" after the first mod setup. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
-- YOLO data collection mod targets Dome Keeper game version 4.2.2 and Godot 4.2.2. References: internal project decision (no external doc), https://docs.godotengine.org/en/4.2/about/introduction.html
+- YOLO data collection mod targets Dome Keeper game version 5.0.5.19, Godot 4.3.1, and the official Dome Keeper Editor 5.1 custom build. References: internal project decision, https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started , https://github.com/DomeKeeperMods/Docs/releases/tag/5.1 , https://docs.godotengine.org/en/4.3/about/introduction.html
 
 ## Mod Dev Workflow (Decision)
 - Keep mod source in this repo under `mods/domekeeper/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Your-first-Mod
-- Prefer script extensions for TitleStage UI tweaks (more reliable than hooks during editor runs). Extension scripts should `extends "res://stages/title/TitleStage.gd"` and call `super(...)` in overridden methods. Reference: https://wiki.godotmodding.com/guides/modding/script_extensions/
-- Add a pause-menu toggle that starts/stops data capture; each run creates `user://yolo_data/session_<timestamp>/` with `images/` and `labels/`, saving screenshots + YOLO labels at a fixed interval using object-tree queries. Reference: internal project decision (no external doc).
+- Do not use Mod Loader script extensions for base scripts that declare `class_name`; Godot 4 global classes are unsupported by that mechanism. Remove nonessential extensions instead of retaining a known parse failure, and use a script hook only when the behavior is required. Reference: https://wiki.godotmodding.com/guides/modding/script_extensions/
+- Add a pause-menu toggle that starts/stops data capture; the collector owns this integration and injects the button when `SceneTree.node_added` reports a PauseMenu instance, avoiding a script extension of the game's preloaded PauseMenu. Each run creates `user://yolo_data/session_<timestamp>/` with `images/` and `labels/`, saving screenshots + YOLO labels at a fixed interval using object-tree queries. References: https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#signal-scenetree-node-added , https://docs.godotengine.org/en/4.3/classes/class_basebutton.html#signal-basebutton-pressed , https://wiki.godotmodding.com/guides/modding/script_extensions/
 - On session start, create a `data.yaml` alongside `images/` and `labels/` with YOLO dataset fields (`path`, `train`, `val`, `names`) for the captured classes. Reference: https://docs.ultralytics.com/datasets/detect/
 - On session stop, open the capture folder in the OS file manager using Godot's `OS.shell_open`. Reference: https://docs.godotengine.org/en/stable/classes/class_os.html#class-os-method-shell-open
-- Pause capture while the pause menu is visible by tagging the PauseMenu node with a group and checking `CanvasItem.is_visible_in_tree()` from the collector. References: https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
+- Pause capture while the pause menu is visible by having the collector tag the dynamically observed menu panel with a group and check `CanvasItem.is_visible_in_tree()`. References: https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#signal-scenetree-node-added , https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
 - Pause capture while the upgrade popup (TechTree) is visible by tagging `TechTreePopup` with the same group and checking visibility from the collector. References: https://docs.godotengine.org/en/stable/classes/class_node.html#class-node-method-add-to-group , https://docs.godotengine.org/en/stable/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree
 - Capture frames are letterboxed to `640x640` with gray padding, and labels are transformed to match the padded image. Reference: https://docs.godotengine.org/en/4.2/classes/class_image.html
 - Split each capture session into `train/val/test` by fixed 30-second segments, cycling `4/1/1` over time; write to `images/{split}` and `labels/{split}` and set `data.yaml` accordingly. References: https://docs.godotengine.org/en/4.2/classes/class_time.html#class-time-method-get-ticks-msec , https://docs.ultralytics.com/datasets/detect/
 - Treat frames as having a target only when `enemy` or `ore_*` classes are present; allow one no-target frame only after 5 target frames have been captured. Reference: internal project decision (no external doc).
+- Collect every active dome returned by the current game's `Level.getDomes()` API rather than the removed single-dome `Level.dome` property, so labels also cover multiplayer and versus runs. Verify game-facing APIs against the recovered target version during each version migration. References: internal project decision, https://github.com/DomeKeeperMods/Docs/wiki/Game-Investigation
 
 ## Decompiled Project Layout (Decision)
 - Store decompiled Godot projects under `external/domekeeper-decompiled/<game-version>/` (version-isolated).
@@ -56,12 +57,13 @@
 
 ## Modding EULA & Repo Hygiene (Brief)
 - Modding rules explicitly forbid distributing the decompiled project (including the `.pck`) and require that shared mod source contains only modded files, not original game files; they also recommend using a `.gitignore` to enforce this. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
+- Keep `tmp/` ignored because it may contain a machine-local link to the owned game PCK; never commit the link target or game contents. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
 
 ## Decompile Script (Decision)
 - It is acceptable to commit a local decompilation script as long as it does not include or distribute any game assets or decompiled outputs, and only operates on the user's local installation. Reference: https://github-wiki-see.page/m/DomeKeeperMods/Docs/wiki/Getting-Started
-- GodotSteam is required for modding per the Dome Keeper modding docs; the project should document how to obtain it, but avoid auto-downloading by default. Reference: https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started
+- Manage the required official Dome Keeper Editor with mise's GitHub backend. For the repository's Dome Keeper 5.0.5.19 target, pin editor release 5.1, a custom Godot 4.3.1 build containing the multiplayer modules used by the 5.0 update. Select exact editor assets and published SHA-256 digests for macOS arm64/x64, Linux x64, and Windows x64; unsupported architectures must fail instead of falling back to a mismatched artifact. Do not substitute a regular Godot or generic GodotSteam build, and keep the complete extracted bundle so its native Steam and multiplayer libraries remain beside the editor. References: https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started , https://github.com/DomeKeeperMods/Docs/releases/tag/5.1 , https://mise.jdx.dev/dev-tools/backends/github.html
 - The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links all repo mods under `mods/` into the decompiled `mods-unpacked/` directory. Reference: https://github.com/GDRETools/gdsdecomp
-- Decompile script configuration is provided via environment variables only (`DOMEKEEPER_GAME_DIR`, `GODOT_BIN`, `GDRETOOLS_BIN`, `DOMEKEEPER_VERSION`, optional `DOMEKEEPER_OUT_ROOT`), read via `import.meta.env`. Reference: https://bun.com/reference/globals/ImportMeta
+- Decompile script machine-local inputs are provided through `DOMEKEEPER_GAME_DIR`, `GDRETOOLS_BIN`, and optional `DOMEKEEPER_OUT_ROOT`, read via `import.meta.env`; mise provides the repository-owned `DOMEKEEPER_VERSION`. Godot tasks use the mise-managed editor and must not require a user-supplied `GODOT_BIN`. References: https://bun.com/reference/globals/ImportMeta , https://mise.jdx.dev/environments/
 - For macOS stability, set the project rendering method to `forward_plus` in `project.godot` (rendering/renderer/rendering_method). Reference: https://docs.godotengine.org/en/stable/classes/class_projectsettings.html
 
 ## Repo Structure (Decision)
@@ -71,10 +73,13 @@
 - For Hugging Face datasets, use `main` for ongoing work and use git tags for released dataset versions; create branches only for long-lived variants. References: https://huggingface.co/docs/huggingface_hub/guides/repository , https://huggingface.tw/docs/huggingface_hub/guides/repository
 
 ## Tooling (Decision)
-- Use Bun as the main task runner/entry point for repo scripts. Reference: https://bun.sh/docs/cli/run
+- Use mise as the repository-level development-tool manager and task entry point. Pin tool versions in `mise.toml`; mise tasks delegate dependency-specific work to the owning package manager. Pin an LTS Node.js runtime because npm package executables such as ESLint and TypeScript use Node shebangs even when Bun launches their package scripts. Keep mise tool paths ahead of ambient package-manager paths so child-process shebangs resolve the pinned tools. References: https://mise.jdx.dev/dev-tools/ , https://mise.jdx.dev/tasks/ , https://mise.jdx.dev/configuration/settings.html#activate-aggressive , https://nodejs.org/en/about/previous-releases
+- Enable mise lockfiles, commit `mise.lock`, and run `mise lock` whenever tool configuration changes so tool URLs and supported checksums remain reproducible. Commit `mise.toml` and `mise.lock` together. Reference: https://mise.jdx.dev/dev-tools/mise-lock.html
+- Use Bun for JavaScript dependency installation and lockfile management. Keep `package.json` and `bun.lock`, and run TypeScript scripts with Bun. References: https://bun.sh/docs/pm/cli/install , https://bun.sh/docs/runtime/typescript
 
 ## Linting (Decision)
 - Use ESLint with `@antfu/eslint-config` and the flat config (`eslint.config.mjs`). References: https://github.com/antfu/eslint-config , https://eslint.org/docs/latest/use/configure/configuration-files-new
+- Treat `mise.toml` as mise-owned configuration: format and validate it with `mise fmt`, and exclude it from ESLint's conflicting TOML formatting rules. Reference: https://mise.jdx.dev/cli/fmt.html
 
 ## Exec Utilities (Decision)
 - Prefer minimal, actively maintained process-exec libraries when available. For this repo, use `tinyexec` as the lightweight command runner. Reference: https://www.npmjs.com/package/tinyexec
@@ -84,14 +89,15 @@
 - Runtime inference can be Python-free by exporting models to formats like ONNX/NCNN/OpenVINO/TensorRT and running them in a non-Python runtime. Reference: https://docs.ultralytics.com/modes/export/
 
 ## Python Environment (Decision)
-- Use Pixi to manage Python environments and tasks for training/export tooling. References: https://pixi.prefix.dev/latest/reference/pixi_manifest/ , https://pixi.prefix.dev/latest/reference/pixi_configuration/
+- Use mise to pin the Python and uv executables. Use the explicit `aqua:astral-sh/uv` backend so local legacy plugins cannot change uv resolution or weaken `mise.lock` metadata. Use uv as the sole owner of Python dependencies, `uv.lock`, and `.venv`; do not also create a mise-managed virtual environment or add Pixi for the same environment. Bind uv to mise's Python and disable uv-managed Python downloads so the interpreter has one owner. References: https://mise.jdx.dev/lang/python.html , https://mise.jdx.dev/dev-tools/backends/aqua.html , https://mise.jdx.dev/dev-tools/backend_architecture , https://docs.astral.sh/uv/guides/projects/ , https://docs.astral.sh/uv/reference/settings/#python-downloads
+- Reconsider Pixi only if a confirmed requirement needs Conda-native system packages or independently solved accelerator environments; if adopted, Pixi must own Python and the complete environment rather than overlap with mise Python or uv. References: https://pixi.prefix.dev/latest/concepts/conda_pypi/ , https://pixi.prefix.dev/latest/python/pytorch/
 
 ## Inference Runtime (Decision)
 - Run inference in the browser/Electron worker using `onnxruntime-web` with WebGPU where supported. References: https://onnxruntime.ai/docs/tutorials/web/ , https://onnxruntime.ai/docs/get-started/with-javascript/web.html
 - WebGPU is available from Web Workers (via `WorkerNavigator.gpu`), enabling worker-based inference. Reference: https://developer.mozilla.org/en-US/docs/Web/API/WorkerNavigator/gpu
 
 ## Scripts Convention (Decision)
-- `scripts/` should contain TypeScript scripts executable directly via Bun (no extra task runner). Reference: https://bun.sh/docs/runtime/typescript
+- `scripts/` should contain TypeScript scripts executable directly via Bun. Expose shared workflow entry points through mise tasks when repository-level orchestration is useful. References: https://bun.sh/docs/runtime/typescript , https://mise.jdx.dev/tasks/
 
 ## Monorepo Structure (Decision)
 - `apps/airi-plugin/` for the AIRI plugin (TypeScript + Bun).

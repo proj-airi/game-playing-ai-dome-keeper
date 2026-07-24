@@ -34,16 +34,66 @@ var targets_since_no_target := 0
 func _init() -> void:
 	ModLoaderLog.debug("YOLO Data Collector Node Initiated!", "YOLO Data Collector")
 
-func is_collecting() -> bool:
-	return yolo_collecting
-
-
 func _enter_tree() -> void:
 	ModLoaderLog.debug("Collector entered tree. Inside: " + str(is_inside_tree()), "YOLO Data Collector")
+	get_tree().node_added.connect(_on_tree_node_added)
 
 
 func _exit_tree() -> void:
+	if get_tree().node_added.is_connected(_on_tree_node_added):
+		get_tree().node_added.disconnect(_on_tree_node_added)
 	ModLoaderLog.debug("Collector exited tree.", "YOLO Data Collector")
+
+
+func _on_tree_node_added(node: Node) -> void:
+	if node.name != &"PauseMenu":
+		return
+
+	var menu_panel := node.get_node_or_null("MenuPanel")
+	var menu := node.get_node_or_null("MenuPanel/VBoxContainer")
+	if menu_panel == null or menu == null:
+		return
+
+	menu_panel.add_to_group("yolo_pause_menu")
+	call_deferred("_add_pause_menu_button", node)
+
+
+func _add_pause_menu_button(pause_menu: Node) -> void:
+	if not is_instance_valid(pause_menu):
+		return
+
+	var menu_panel := pause_menu.get_node_or_null("MenuPanel")
+	var menu := pause_menu.get_node_or_null("MenuPanel/VBoxContainer")
+	if menu_panel == null or menu == null:
+		return
+	if menu.get_node_or_null("ButtonYoloCollect") != null:
+		return
+
+	var button := Button.new()
+	button.name = "ButtonYoloCollect"
+	button.text = _collection_button_text()
+	button.theme = menu_panel.theme
+	button.focus_neighbor_right = NodePath(
+		"../../../BippinbitsBox/VBoxContainer/ButtonDiscord"
+	)
+	menu.add_child(button)
+	button.pressed.connect(_on_collection_button_pressed.bind(button))
+
+
+func _on_collection_button_pressed(button: Button) -> void:
+	if yolo_collecting:
+		stop_collection()
+	else:
+		start_collection()
+
+	if is_instance_valid(button):
+		button.text = _collection_button_text()
+
+
+func _collection_button_text() -> String:
+	if yolo_collecting:
+		return "Stop YOLO Data Collection"
+	return "Start YOLO Data Collection"
 
 
 func start_collection() -> void:
@@ -217,8 +267,8 @@ func _collect_labels(
 		var rect = _rect_for_sprite(keeper)
 		_append_label(labels, CLASS_PLAYER, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
-	if Level.dome:
-		var rect = _rect_for_sprite(Level.dome)
+	for dome in Level.getDomes():
+		var rect = _rect_for_sprite(dome)
 		_append_label(labels, CLASS_DOME, rect, view_size, view_to_image_scale, scale, offset, target_size)
 
 	for monster in get_tree().get_nodes_in_group("monster"):
@@ -318,7 +368,7 @@ func _write_data_yaml() -> void:
 
 	var file = FileAccess.open(yaml_path, FileAccess.WRITE)
 	if file:
-		file.store_string("\n".join(lines))
+		file.store_string("\n".join(lines) + "\n")
 		file.close()
 
 

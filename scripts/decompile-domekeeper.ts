@@ -6,7 +6,6 @@ import { x } from 'tinyexec'
 
 const env = import.meta.env
 const gameDir = env.DOMEKEEPER_GAME_DIR
-const godotBin = env.GODOT_BIN
 const gdreToolsBin = env.GDRETOOLS_BIN
 const version = env.DOMEKEEPER_VERSION
 const repoRoot = path.resolve(import.meta.dir, '..')
@@ -22,14 +21,6 @@ if (!version) {
 }
 if (!existsSync(gameDir)) {
   console.error(`Game directory does not exist: ${gameDir}`)
-  process.exit(1)
-}
-if (!godotBin) {
-  console.error('Missing GODOT_BIN. Provide the path to the Godot binary used for decompilation.')
-  process.exit(1)
-}
-if (!existsSync(godotBin)) {
-  console.error(`Godot binary not found: ${godotBin}`)
   process.exit(1)
 }
 if (!gdreToolsBin) {
