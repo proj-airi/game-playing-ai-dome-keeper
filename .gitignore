@@ -1,5 +1,6 @@
 # Data and recordings (local-only)
 data/
+tmp/
 
 # Decompiled game projects (never commit)
 external/domekeeper-decompiled/
@@ -9,5 +10,7 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+.venv/
+runs/
 
 *.local.code-workspace
