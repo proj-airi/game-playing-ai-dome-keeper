@@ -30,6 +30,8 @@ var capture_index := 0
 var session_dir := ""
 var session_start_ms := 0
 var targets_since_no_target := 0
+var capture_size_logged := false
+var teacher: Node
 
 func _init() -> void:
 	ModLoaderLog.debug("YOLO Data Collector Node Initiated!", "YOLO Data Collector")
@@ -40,6 +42,8 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if teacher != null:
+		teacher.call(&"stop")
 	if get_tree().node_added.is_connected(_on_tree_node_added):
 		get_tree().node_added.disconnect(_on_tree_node_added)
 	ModLoaderLog.debug("Collector exited tree.", "YOLO Data Collector")
@@ -71,6 +75,7 @@ func _add_pause_menu_button(pause_menu: Node) -> void:
 
 	var button := Button.new()
 	button.name = "ButtonYoloCollect"
+	button.add_to_group("yolo_collection_button")
 	button.text = _collection_button_text()
 	button.theme = menu_panel.theme
 	button.focus_neighbor_right = NodePath(
@@ -92,12 +97,19 @@ func _on_collection_button_pressed(button: Button) -> void:
 
 func _collection_button_text() -> String:
 	if yolo_collecting:
-		return "Stop YOLO Data Collection"
-	return "Start YOLO Data Collection"
+		return "Stop Teacher Collection"
+	return "Start Teacher Collection"
+
+
+func set_teacher(value: Node) -> void:
+	teacher = value
+	teacher.connect(&"failed", _on_teacher_failed)
 
 
 func start_collection() -> void:
 	if yolo_collecting:
+		return
+	if teacher != null and not bool(teacher.call(&"start")):
 		return
 	yolo_collecting = true
 	_start_new_session()
@@ -112,6 +124,8 @@ func start_collection() -> void:
 
 
 func stop_collection() -> void:
+	if teacher != null:
+		teacher.call(&"stop")
 	if not yolo_collecting:
 		return
 	yolo_collecting = false
@@ -120,19 +134,25 @@ func stop_collection() -> void:
 	_open_session_dir()
 
 
+func _on_teacher_failed(_reason: String) -> void:
+	stop_collection()
+	for button in get_tree().get_nodes_in_group("yolo_collection_button"):
+		button.text = _collection_button_text()
+
+
 func _start_new_session() -> void:
 	capture_index = 0
 	session_start_ms = Time.get_ticks_msec()
 	targets_since_no_target = 0
+	capture_size_logged = false
 	var timestamp = Time.get_datetime_string_from_system().replace(":", "-")
 	session_dir = OUTPUT_DIR.path_join("session_" + timestamp)
 	_ensure_split_dirs("images")
 	_ensure_split_dirs("labels")
 	_write_data_yaml()
 
-
 func _capture_frame() -> void:
-	if _is_pause_menu_visible():
+	if GameWorld.paused or _is_pause_menu_visible():
 		return
 	var viewport := get_viewport()
 	if viewport == null:
@@ -151,7 +171,7 @@ func _capture_frame() -> void:
 	var letterbox_params = _letterbox_params(original_image_size, TARGET_SIZE)
 	var scale: float = letterbox_params.scale
 	var offset: Vector2 = letterbox_params.offset
-	if capture_index == 0:
+	if not capture_size_logged:
 		var texture_size = viewport.get_texture().get_size() if viewport.get_texture() != null else Vector2.ZERO
 		ModLoaderLog.debug(
 			"Capture sizes view=" + str(view_size)
@@ -163,6 +183,7 @@ func _capture_frame() -> void:
 			+ " offset=" + str(offset),
 			"YOLO Data Collector"
 		)
+		capture_size_logged = true
 
 	var labels := _collect_labels(view_size, view_to_image_scale, scale, offset, Vector2(TARGET_SIZE))
 	var has_target = _has_target_labels(labels)
@@ -391,6 +412,8 @@ func _rect_for_sprite(node: Node) -> Rect2:
 		sprite = node.find_child("Sprite2D", true, false)
 
 	if sprite == null:
+		return Rect2()
+	if sprite is CanvasItem and not sprite.is_visible_in_tree():
 		return Rect2()
 
 	if not sprite.has_method("get_rect"):
