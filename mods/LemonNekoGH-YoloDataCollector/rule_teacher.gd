@@ -20,7 +20,9 @@ const WAVE_LEAD_SECONDS := 8.0
 const AIM_START_RADIANS := 0.06
 const STALL_SECONDS := 4.0
 const MAX_WAYPOINTS := 512
-const VERTICAL_MINE_ROWS := 2
+const BRANCH_ROW_STEP := 3
+const ORE_SCAN_RADIUS := 2
+const NO_ORE_COORD := Vector2i(1 << 30, 1 << 30)
 const PATH_RECOVERY_ACTIONS: Array[StringName] = [
 	&"ui_right",
 	&"ui_down",
@@ -56,6 +58,7 @@ var mine_resume_state: State = State.MINE
 var shaft_descent_target_row := 0
 var has_mine_resume := false
 var finish_branch_after_cleanup := false
+var ore_target_coord := NO_ORE_COORD
 var last_position := Vector2.ZERO
 var waypoints := PackedVector2Array()
 var waypoint_index := 0
@@ -87,6 +90,7 @@ func start() -> bool:
 	shaft_descent_target_row = 0
 	has_mine_resume = false
 	finish_branch_after_cleanup = false
+	ore_target_coord = NO_ORE_COORD
 	shaft_x = dome.global_position.x
 	waypoints.clear()
 	waypoint_index = 0
@@ -243,6 +247,7 @@ func _tick_descend_shaft() -> void:
 		)
 		branch_origin = Vector2i(shaft_coord.x, current_coord.y)
 		mine_side = 1.0
+		ore_target_coord = NO_ORE_COORD
 		_change_state(State.MINE, 0.1)
 		return
 	var actions: Array[StringName] = [&"ui_down"]
@@ -252,10 +257,73 @@ func _tick_descend_shaft() -> void:
 func _tick_mine() -> void:
 	if _handle_mining_priority():
 		return
+	if _tick_nearby_ore():
+		return
 	var actions: Array[StringName] = [
 		&"ui_right" if mine_side > 0.0 else &"ui_left"
 	]
 	_set_actions(actions)
+
+
+func _tick_nearby_ore() -> bool:
+	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if ore_target_coord != NO_ORE_COORD:
+		if _ore_target_is_visible():
+			_set_actions(_ore_target_actions(current_coord))
+			return true
+		if current_coord.y != branch_origin.y:
+			var return_coord: Vector2 = Vector2(ore_target_coord.x, branch_origin.y)
+			_set_actions(_axis_actions(Level.map.getTilePos(return_coord)))
+			return true
+		ore_target_coord = NO_ORE_COORD
+
+	ore_target_coord = _nearest_visible_ore(current_coord)
+	if ore_target_coord == NO_ORE_COORD:
+		return false
+	_set_actions(_ore_target_actions(current_coord))
+	return true
+
+
+func _nearest_visible_ore(center: Vector2i) -> Vector2i:
+	var tile_data: MapData = Level.map.getTileData()
+	var best_coord: Vector2i = NO_ORE_COORD
+	var best_distance: int = ORE_SCAN_RADIUS + 1
+	var best_forward := false
+	for delta_x: int in range(-ORE_SCAN_RADIUS, ORE_SCAN_RADIUS + 1):
+		for delta_y: int in range(-ORE_SCAN_RADIUS, ORE_SCAN_RADIUS + 1):
+			var distance: int = absi(delta_x) + absi(delta_y)
+			if distance == 0 or distance > ORE_SCAN_RADIUS:
+				continue
+			var coord: Vector2i = center + Vector2i(delta_x, delta_y)
+			if not Level.map.isRevealed(Vector2(coord)):
+				continue
+			var resource_type: int = tile_data.get_resourcev(Vector2(coord))
+			if not Level.map.isResourceTile(resource_type):
+				continue
+			var is_forward: bool = delta_x * mine_side > 0.0
+			if distance > best_distance:
+				continue
+			if distance == best_distance and (best_forward or not is_forward):
+				continue
+			best_coord = coord
+			best_distance = distance
+			best_forward = is_forward
+	return best_coord
+
+
+func _ore_target_is_visible() -> bool:
+	if not Level.map.isRevealed(Vector2(ore_target_coord)):
+		return false
+	var tile_data: MapData = Level.map.getTileData()
+	var resource_type: int = tile_data.get_resourcev(Vector2(ore_target_coord))
+	return Level.map.isResourceTile(resource_type)
+
+
+func _ore_target_actions(current_coord: Vector2i) -> Array[StringName]:
+	var target: Vector2 = Level.map.getTilePos(Vector2(ore_target_coord))
+	if current_coord.y == branch_origin.y and current_coord.x != ore_target_coord.x:
+		target.y = keeper.global_position.y
+	return _axis_actions(target)
 
 
 func _tick_return_shaft() -> void:
@@ -277,7 +345,11 @@ func _handle_mining_priority() -> bool:
 		and keeper.focussedCarryable.carryableType == "resource"
 	)
 	if _wave_imminent():
-		if resource_focussed or (state == State.MINE and finish_branch_after_cleanup):
+		if (
+			resource_focussed
+			or ore_target_coord != NO_ORE_COORD
+			or (state == State.MINE and finish_branch_after_cleanup)
+		):
 			if state == State.MINE:
 				finish_branch_after_cleanup = true
 			_start_return_from_mine()
@@ -293,7 +365,11 @@ func _handle_mining_priority() -> bool:
 		_tap(&"keeper1_pickup")
 		action_delay = 0.4
 		return true
-	if state != State.MINE or not finish_branch_after_cleanup:
+	if (
+		state != State.MINE
+		or not finish_branch_after_cleanup
+		or ore_target_coord != NO_ORE_COORD
+	):
 		return false
 	finish_branch_after_cleanup = false
 	_finish_current_branch()
@@ -301,19 +377,21 @@ func _handle_mining_priority() -> bool:
 
 
 func _finish_current_branch() -> void:
+	ore_target_coord = NO_ORE_COORD
 	mine_side *= -1.0
 	_change_state(State.RETURN_SHAFT, 0.1)
 
 
 func _start_wave_return(interrupted_state: State) -> void:
 	if interrupted_state == State.MINE:
+		ore_target_coord = NO_ORE_COORD
 		mine_side *= -1.0
 	if interrupted_state == State.MINE or interrupted_state == State.RETURN_SHAFT:
 		mine_resume_position = _branch_entrance()
 		if mine_side < 0.0:
 			mine_resume_state = State.MINE
 		else:
-			shaft_descent_target_row = branch_origin.y + VERTICAL_MINE_ROWS
+			shaft_descent_target_row = branch_origin.y + BRANCH_ROW_STEP
 			mine_resume_state = State.DESCEND_SHAFT
 	else:
 		mine_resume_position = keeper.global_position
@@ -733,7 +811,7 @@ func _change_state(next_state: State, delay := 0.25) -> void:
 		previous_state == State.ALIGN_SHAFT or previous_state == State.RETURN_SHAFT
 	):
 		var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
-		shaft_descent_target_row = current_coord.y + VERTICAL_MINE_ROWS
+		shaft_descent_target_row = current_coord.y + BRANCH_ROW_STEP
 
 
 func _track_progress(delta: float) -> void:
