@@ -4,24 +4,23 @@ signal failed(reason: String)
 
 enum State {
 	ALIGN_SHAFT,
+	DESCEND_SHAFT,
 	MINE,
+	RETURN_SHAFT,
 	RETURN,
 	RESUME_MINE,
-	RECOVER_DOWN,
-	RECOVER_HORIZONTAL,
 	RECOVER_PATH,
 	DEFEND,
 }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const TICK_INTERVAL := 0.1
-const TILE_STEP := 24.0
 const RETURN_LOAD := 2
 const WAVE_LEAD_SECONDS := 8.0
 const AIM_START_RADIANS := 0.06
 const STALL_SECONDS := 4.0
 const MAX_WAYPOINTS := 512
-const HORIZONTAL_MINE_TILES := 5
+const VERTICAL_MINE_ROWS := 2
 const PATH_RECOVERY_ACTIONS: Array[StringName] = [
 	&"ui_right",
 	&"ui_down",
@@ -50,17 +49,19 @@ var tick_time := 0.0
 var action_delay := 0.0
 var stalled_time := 0.0
 var shaft_x := 0.0
-var mine_target := Vector2.ZERO
 var mine_side := 1.0
+var branch_origin := Vector2i.ZERO
 var mine_resume_position := Vector2.ZERO
+var mine_resume_state: State = State.MINE
+var shaft_descent_target_row := 0
 var has_mine_resume := false
+var finish_branch_after_cleanup := false
 var last_position := Vector2.ZERO
 var waypoints := PackedVector2Array()
 var waypoint_index := 0
 var station_wait_time := 0.0
 var recovery_elapsed := 0.0
 var recovery_origin := Vector2.ZERO
-var recovery_horizontal := &""
 var path_recovery_return_state: State = State.ALIGN_SHAFT
 var path_recovery_index := 0
 var path_recovery_attempts := 0
@@ -82,7 +83,10 @@ func start() -> bool:
 	state = State.ALIGN_SHAFT
 	action_delay = 0.0
 	mine_side = 1.0
+	mine_resume_state = State.MINE
+	shaft_descent_target_row = 0
 	has_mine_resume = false
+	finish_branch_after_cleanup = false
 	shaft_x = dome.global_position.x
 	waypoints.clear()
 	waypoint_index = 0
@@ -135,8 +139,6 @@ func _process(delta: float) -> void:
 	action_delay = maxf(action_delay - delta, 0.0)
 	if (
 		state != State.DEFEND
-		and state != State.RECOVER_DOWN
-		and state != State.RECOVER_HORIZONTAL
 		and state != State.RECOVER_PATH
 	):
 		_track_progress(delta)
@@ -150,16 +152,16 @@ func _process(delta: float) -> void:
 	match state:
 		State.ALIGN_SHAFT:
 			_tick_align_shaft()
+		State.DESCEND_SHAFT:
+			_tick_descend_shaft()
 		State.MINE:
 			_tick_mine()
+		State.RETURN_SHAFT:
+			_tick_return_shaft()
 		State.RETURN:
 			_tick_return()
 		State.RESUME_MINE:
 			_tick_resume_mine()
-		State.RECOVER_DOWN:
-			_tick_recover_down()
-		State.RECOVER_HORIZONTAL:
-			_tick_recover_horizontal()
 		State.RECOVER_PATH:
 			_tick_recover_path()
 		State.DEFEND:
@@ -219,31 +221,36 @@ func _tick_align_shaft() -> void:
 		target.y = keeper.global_position.y
 	if keeper.global_position.distance_squared_to(target) > 36.0:
 		var actions := _axis_actions(target)
-		if actions.has(&"ui_left") or actions.has(&"ui_right"):
-			mine_side = 1.0 if actions.has(&"ui_right") else -1.0
 		_set_actions(actions)
 		return
-	_change_state(State.MINE)
+	_change_state(State.DESCEND_SHAFT)
+
+
+func _tick_descend_shaft() -> void:
+	if _handle_mining_priority():
+		return
+	if absf(keeper.global_position.x - shaft_x) > 6.0:
+		var horizontal_action: StringName = (
+			&"ui_right" if keeper.global_position.x < shaft_x else &"ui_left"
+		)
+		var horizontal_actions: Array[StringName] = [horizontal_action]
+		_set_actions(horizontal_actions)
+		return
+	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if current_coord.y >= shaft_descent_target_row:
+		var shaft_coord: Vector2i = Level.map.getTileCoord(
+			Vector2(shaft_x, keeper.global_position.y)
+		)
+		branch_origin = Vector2i(shaft_coord.x, current_coord.y)
+		mine_side = 1.0
+		_change_state(State.MINE, 0.1)
+		return
+	var actions: Array[StringName] = [&"ui_down"]
+	_set_actions(actions)
 
 
 func _tick_mine() -> void:
-	if _wave_imminent() or keeper.carriedCarryables.size() >= RETURN_LOAD:
-		_start_return_from_mine()
-		return
-	if (
-		is_instance_valid(keeper.focussedCarryable)
-		and keeper.focussedCarryable.carryableType == "resource"
-	):
-		_release_all()
-		_tap(&"keeper1_pickup")
-		action_delay = 0.4
-		return
-
-	var horizontal_remaining: float = (
-		(mine_target.x - keeper.global_position.x) * mine_side
-	)
-	if horizontal_remaining <= 6.0:
-		_start_down_recovery()
+	if _handle_mining_priority():
 		return
 	var actions: Array[StringName] = [
 		&"ui_right" if mine_side > 0.0 else &"ui_left"
@@ -251,8 +258,73 @@ func _tick_mine() -> void:
 	_set_actions(actions)
 
 
+func _tick_return_shaft() -> void:
+	if _handle_mining_priority():
+		return
+	if _follow_path():
+		return
+	var target := _branch_entrance()
+	if keeper.global_position.distance_squared_to(target) <= 36.0:
+		var next_state := State.MINE if mine_side < 0.0 else State.DESCEND_SHAFT
+		_change_state(next_state, 0.1)
+		return
+	_set_actions(_axis_actions(target))
+
+
+func _handle_mining_priority() -> bool:
+	var resource_focussed: bool = (
+		is_instance_valid(keeper.focussedCarryable)
+		and keeper.focussedCarryable.carryableType == "resource"
+	)
+	if _wave_imminent():
+		if resource_focussed or (state == State.MINE and finish_branch_after_cleanup):
+			if state == State.MINE:
+				finish_branch_after_cleanup = true
+			_start_return_from_mine()
+		else:
+			finish_branch_after_cleanup = false
+			_start_wave_return(state)
+		return true
+	if keeper.carriedCarryables.size() >= RETURN_LOAD:
+		_start_return_from_mine()
+		return true
+	if resource_focussed:
+		_release_all()
+		_tap(&"keeper1_pickup")
+		action_delay = 0.4
+		return true
+	if state != State.MINE or not finish_branch_after_cleanup:
+		return false
+	finish_branch_after_cleanup = false
+	_finish_current_branch()
+	return true
+
+
+func _finish_current_branch() -> void:
+	mine_side *= -1.0
+	_change_state(State.RETURN_SHAFT, 0.1)
+
+
+func _start_wave_return(interrupted_state: State) -> void:
+	if interrupted_state == State.MINE:
+		mine_side *= -1.0
+	if interrupted_state == State.MINE or interrupted_state == State.RETURN_SHAFT:
+		mine_resume_position = _branch_entrance()
+		if mine_side < 0.0:
+			mine_resume_state = State.MINE
+		else:
+			shaft_descent_target_row = branch_origin.y + VERTICAL_MINE_ROWS
+			mine_resume_state = State.DESCEND_SHAFT
+	else:
+		mine_resume_position = keeper.global_position
+		mine_resume_state = interrupted_state
+	has_mine_resume = true
+	_change_state(State.RETURN)
+
+
 func _start_return_from_mine() -> void:
 	mine_resume_position = keeper.global_position
+	mine_resume_state = state
 	has_mine_resume = true
 	_change_state(State.RETURN)
 
@@ -361,58 +433,29 @@ func _tick_resume_mine() -> void:
 		return
 	if _follow_path():
 		return
+	var resume_state: State = mine_resume_state
 	has_mine_resume = false
-	_change_state(State.MINE, 0.1)
-
-
-func _tick_recover_down() -> void:
-	if _wave_imminent():
-		_start_return_from_mine()
-		return
-	recovery_elapsed += TICK_INTERVAL
-	if keeper.global_position.y - recovery_origin.y >= TILE_STEP:
-		_change_state(State.MINE, 0.1)
-		return
-	if keeper.global_position.distance_to(last_position) >= 2.0:
-		last_position = keeper.global_position
-		recovery_elapsed = 0.0
-	if recovery_elapsed >= STALL_SECONDS:
-		_start_horizontal_recovery()
-		return
-	var actions: Array[StringName] = [&"ui_down"]
-	_set_actions(actions)
-
-
-func _tick_recover_horizontal() -> void:
-	if _wave_imminent():
-		_start_return_from_mine()
-		return
-	recovery_elapsed += TICK_INTERVAL
-	var horizontal_distance := keeper.global_position.x - recovery_origin.x
-	var moved_one_tile := (
-		(recovery_horizontal == &"ui_right" and horizontal_distance >= TILE_STEP)
-		or (recovery_horizontal == &"ui_left" and horizontal_distance <= -TILE_STEP)
-	)
-	if moved_one_tile:
-		mine_side = 1.0 if recovery_horizontal == &"ui_right" else -1.0
-		_change_state(State.MINE, 0.1)
-		return
-	if keeper.global_position.distance_to(last_position) >= 2.0:
-		last_position = keeper.global_position
-		recovery_elapsed = 0.0
-	if recovery_elapsed >= STALL_SECONDS:
-		_fail("Teacher could not move down or horizontally from the mining boundary")
-		return
-	var actions: Array[StringName] = [recovery_horizontal]
-	_set_actions(actions)
+	_change_state(resume_state, 0.1)
 
 
 func _tick_recover_path() -> void:
 	if _wave_imminent() and path_recovery_return_state != State.RETURN:
+		if _is_mining_state(path_recovery_return_state):
+			_start_wave_return(path_recovery_return_state)
+		else:
+			_change_state(State.RETURN)
+		return
+	if (
+		_is_mining_state(path_recovery_return_state)
+		and keeper.carriedCarryables.size() >= RETURN_LOAD
+	):
+		mine_resume_position = keeper.global_position
+		mine_resume_state = path_recovery_return_state
+		has_mine_resume = true
 		_change_state(State.RETURN)
 		return
 	var action: StringName = PATH_RECOVERY_ACTIONS[path_recovery_index]
-	if _path_recovery_distance(action) >= TILE_STEP:
+	if _path_recovery_distance(action) >= GameWorld.TILE_SIZE:
 		_change_state(path_recovery_return_state, 0.1)
 		return
 	recovery_elapsed += TICK_INTERVAL
@@ -545,6 +588,12 @@ func _shaft_entrance() -> Vector2:
 	return Vector2(shaft_x, -GameWorld.TILE_SIZE) + CONST.TILE_OFFSET
 
 
+func _branch_entrance() -> Vector2:
+	var target: Vector2 = Level.map.getTilePos(Vector2(branch_origin))
+	target.x = shaft_x
+	return target
+
+
 func _axis_actions(target: Vector2) -> Array[StringName]:
 	var delta := target - keeper.global_position
 	if delta.length_squared() < 16.0:
@@ -645,7 +694,6 @@ func _change_state(next_state: State, delay := 0.25) -> void:
 		+ " -> " + str(State.keys()[next_state])
 		+ " held=" + str(held.keys())
 		+ " position=" + str(keeper.global_position)
-		+ " target=" + str(mine_target)
 		+ " side=" + ("right" if mine_side > 0.0 else "left")
 		+ " input_leaf=" + _input_leaf_name(),
 		LOG_NAME,
@@ -673,11 +721,19 @@ func _change_state(next_state: State, delay := 0.25) -> void:
 		if not resume_path_error.is_empty():
 			_fail(resume_path_error)
 		return
-	if state == State.MINE and is_instance_valid(keeper):
-		mine_target = (
-			keeper.global_position
-			+ Vector2.RIGHT * mine_side * TILE_STEP * HORIZONTAL_MINE_TILES
+	if state == State.RETURN_SHAFT:
+		var branch_path_error := _plan_path(
+			_branch_entrance(),
+			"Teacher could not find the mined branch path back to the shaft",
 		)
+		if not branch_path_error.is_empty():
+			_fail(branch_path_error)
+		return
+	if state == State.DESCEND_SHAFT and (
+		previous_state == State.ALIGN_SHAFT or previous_state == State.RETURN_SHAFT
+	):
+		var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+		shaft_descent_target_row = current_coord.y + VERTICAL_MINE_ROWS
 
 
 func _track_progress(delta: float) -> void:
@@ -692,25 +748,18 @@ func _track_progress(delta: float) -> void:
 	if stalled_time < STALL_SECONDS:
 		return
 	if state == State.MINE and (held.has(&"ui_left") or held.has(&"ui_right")):
-		_start_down_recovery()
+		_finish_current_branch()
 		return
-	if state == State.ALIGN_SHAFT or state == State.RETURN or state == State.RESUME_MINE:
+	if (
+		state == State.ALIGN_SHAFT
+		or state == State.DESCEND_SHAFT
+		or state == State.RETURN_SHAFT
+		or state == State.RETURN
+		or state == State.RESUME_MINE
+	):
 		_start_path_recovery()
 		return
 	_fail("Teacher stopped after four seconds without position or drilling progress")
-
-
-func _start_down_recovery() -> void:
-	recovery_elapsed = 0.0
-	recovery_origin = keeper.global_position
-	_change_state(State.RECOVER_DOWN, 0.0)
-
-
-func _start_horizontal_recovery() -> void:
-	recovery_horizontal = &"ui_left" if mine_side > 0.0 else &"ui_right"
-	recovery_elapsed = 0.0
-	recovery_origin = keeper.global_position
-	_change_state(State.RECOVER_HORIZONTAL, 0.0)
 
 
 func _start_path_recovery() -> void:
@@ -728,14 +777,18 @@ func _start_path_recovery() -> void:
 
 
 func _on_mined(_amount = 0.0) -> void:
-	if (
-		state == State.RECOVER_DOWN
-		or state == State.RECOVER_HORIZONTAL
-		or state == State.RECOVER_PATH
-	):
+	if state == State.RECOVER_PATH:
 		recovery_elapsed = 0.0
 		return
 	_reset_progress()
+
+
+func _is_mining_state(candidate: State) -> bool:
+	return (
+		candidate == State.DESCEND_SHAFT
+		or candidate == State.MINE
+		or candidate == State.RETURN_SHAFT
+	)
 
 
 func _reset_progress() -> void:
@@ -774,7 +827,6 @@ func _fail(reason: String) -> void:
 		+ " input_leaf=" + input_leaf
 		+ " position=" + str(position)
 		+ " last_position=" + str(last_position)
-		+ " mine_target=" + str(mine_target)
 		+ " recovery_origin=" + str(recovery_origin)
 		+ " waypoint=" + str(waypoint)
 		+ " waypoint_index=" + str(waypoint_index) + "/" + str(waypoints.size())
