@@ -8,7 +8,6 @@ const GAME_SCRIPT_PATH := "res://game/Game.gd"
 var mod_dir_path := ""
 var extensions_dir_path := ""
 var collector: Node
-var teacher: Node
 var launch_config: DomeEditorConf
 
 
@@ -62,17 +61,9 @@ func _ready() -> void:
 	ModLoaderLog.info("Ready", LOG_NAME)
 	if collector == null:
 		var collector_path = mod_dir_path.path_join("yolo_collector.gd")
-		var teacher_path = mod_dir_path.path_join("rule_teacher.gd")
 		var collector_script = load(collector_path)
-		var teacher_script = load(teacher_path)
 		if collector_script == null:
 			ModLoaderLog.error("Failed to load collector script: " + collector_path, LOG_NAME)
 			return
-		if teacher_script == null:
-			ModLoaderLog.error("Failed to load teacher script: " + teacher_path, LOG_NAME)
-			return
 		collector = collector_script.new()
-		teacher = teacher_script.new()
-		collector.call(&"set_teacher", teacher)
-		collector.add_child(teacher)
 		get_tree().get_root().call_deferred("add_child", collector)

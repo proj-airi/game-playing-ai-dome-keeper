@@ -31,7 +31,6 @@ var session_dir := ""
 var session_start_ms := 0
 var targets_since_no_target := 0
 var capture_size_logged := false
-var teacher: Node
 
 func _init() -> void:
 	ModLoaderLog.debug("YOLO Data Collector Node Initiated!", "YOLO Data Collector")
@@ -42,8 +41,6 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
-	if teacher != null:
-		teacher.call(&"stop")
 	if get_tree().node_added.is_connected(_on_tree_node_added):
 		get_tree().node_added.disconnect(_on_tree_node_added)
 	ModLoaderLog.debug("Collector exited tree.", "YOLO Data Collector")
@@ -75,7 +72,6 @@ func _add_pause_menu_button(pause_menu: Node) -> void:
 
 	var button := Button.new()
 	button.name = "ButtonYoloCollect"
-	button.add_to_group("yolo_collection_button")
 	button.text = _collection_button_text()
 	button.theme = menu_panel.theme
 	button.focus_neighbor_right = NodePath(
@@ -97,19 +93,12 @@ func _on_collection_button_pressed(button: Button) -> void:
 
 func _collection_button_text() -> String:
 	if yolo_collecting:
-		return "Stop Teacher Collection"
-	return "Start Teacher Collection"
-
-
-func set_teacher(value: Node) -> void:
-	teacher = value
-	teacher.connect(&"failed", _on_teacher_failed)
+		return "Stop YOLO Collection"
+	return "Start YOLO Collection"
 
 
 func start_collection() -> void:
 	if yolo_collecting:
-		return
-	if teacher != null and not bool(teacher.call(&"start")):
 		return
 	yolo_collecting = true
 	_start_new_session()
@@ -124,20 +113,12 @@ func start_collection() -> void:
 
 
 func stop_collection() -> void:
-	if teacher != null:
-		teacher.call(&"stop")
 	if not yolo_collecting:
 		return
 	yolo_collecting = false
 	if yolo_timer:
 		yolo_timer.stop()
 	_open_session_dir()
-
-
-func _on_teacher_failed(_reason: String) -> void:
-	stop_collection()
-	for button in get_tree().get_nodes_in_group("yolo_collection_button"):
-		button.text = _collection_button_text()
 
 
 func _start_new_session() -> void:
