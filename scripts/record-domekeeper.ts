@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { x } from 'tinyexec'
@@ -20,7 +19,7 @@ if (!existsSync(godot))
   fail(`Godot binary does not exist: ${godot}`)
 if (!existsSync(path.join(project, 'project.godot')))
   fail(`Decompiled project does not exist: ${project}`)
-const sessionDir = path.join(tmpdir(), 'airi-dome-keeper-replays', `session_${crypto.randomUUID()}`)
+const sessionDir = path.join(process.cwd(), 'recordings', `session_${crypto.randomUUID()}`)
 const avi = path.join(sessionDir, 'recording.avi')
 const mp4 = path.join(sessionDir, 'recording.mp4')
 const replay = path.join(sessionDir, 'recording.json')

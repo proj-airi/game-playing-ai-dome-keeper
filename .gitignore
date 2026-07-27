@@ -1,5 +1,6 @@
 # Data and recordings (local-only)
 data/
+recordings/
 tmp/
 
 # Decompiled game projects (never commit)
