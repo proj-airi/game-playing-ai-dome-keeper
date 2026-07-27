@@ -4,6 +4,7 @@ signal failed(reason: String)
 
 enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
 enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
+enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const TICK := 0.1
@@ -13,9 +14,20 @@ const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
 const REVEAL_TILES := 1
 const BRANCH_ROW_STEP := 1 + REVEAL_TILES * 2
+const DRILL_HIT_INTENT_THRESHOLD := 5
+const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
+const RETURN_MOBILITY_SECONDS_THRESHOLD := 20.0
+const REPAIR_HEALTH_RATIO_THRESHOLD := 0.2
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
-const UPGRADES: Array[StringName] = [&"drill1", &"drill2", &"drill3"]
+const INTENT_PRIORITY: Array[int] = [UpgradeIntent.COMBAT, UpgradeIntent.REPAIR, UpgradeIntent.DRILL, UpgradeIntent.MOBILITY]
+const ATTACK_UPGRADES: Array[StringName] = [&"laserStrength1", &"laserStrength2", &"laserStrength3", &"laserStrength4"]
+const HEALTH_UPGRADES: Array[StringName] = [&"dome1health1", &"dome1health2"]
+const HEALTH_PATH: Array[StringName] = [&"domeHealthMeter", &"domesandrepair", &"dome1health1", &"dome1health2"]
+const REPAIR_UPGRADES: Array[StringName] = [&"domeHealthMeter", &"domesandrepair"]
+const DRILL_UPGRADES: Array[StringName] = [&"drill1", &"drill2", &"drill3", &"drill4"]
+const SPEED_UPGRADES: Array[StringName] = [&"jetpackSpeed1", &"jetpackSpeed2", &"jetpackSpeed3", &"jetpackSpeed4"]
+const CARRY_UPGRADES: Array[StringName] = [&"jetpackStrength1", &"jetpackStrength2", &"jetpackStrength3", &"jetpackStrength4"]
 const DIRECTIONS: Array[StringName] = [&"ui_up", &"ui_right", &"ui_down", &"ui_left"]
 const ACTIONS: Array[StringName] = [
 	&"ui_left", &"ui_right", &"ui_up", &"ui_down", &"ui_select", &"ui_cancel",
@@ -29,7 +41,19 @@ var keeper: Keeper
 var dome: Dome
 var bindings := {}
 var held := {}
-var pending: Array[StringName] = []
+var pending_intents := {}
+var active_upgrade_intent := -1
+var active_upgrade_id := ""
+var active_upgrade_fulfills := false
+var active_upgrade_arm := -1
+var combat_attack_next := true
+var mobility_speed_next := true
+var drill_hits_by_tile := {}
+var wave_start_health := 0.0
+var wave_start_max_health := 0.0
+var wave_health_tracking := false
+var return_started_at := -1.0
+var observed_properties: Array[String] = []
 var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
 var ore := NO_COORD
@@ -65,9 +89,21 @@ func start() -> bool:
 		ModLoaderLog.error(error, LOG_NAME)
 		return false
 
-	pending.assign(UPGRADES)
-	while not pending.is_empty() and GameWorld.boughtUpgrades.has(_upgrade_id(pending.front())):
-		pending.pop_front()
+	pending_intents.clear()
+	pending_intents[UpgradeIntent.DRILL] = true
+	active_upgrade_intent = -1; active_upgrade_id = ""
+	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
+	mobility_speed_next = _bought_count(SPEED_UPGRADES) <= _bought_count(CARRY_UPGRADES)
+	drill_hits_by_tile.clear(); return_started_at = -1.0
+	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
+	wave_start_health = _dome_health(); wave_start_max_health = _dome_max_health()
+	_sync_repair_intent()
+	observed_properties.assign([
+		keeper.teamId + ".monsters.wavepresent", keeper.teamId + ".monsters.wavebattle",
+		keeper.teamId + ".event.keepers.insidedome",
+	])
+	for property in observed_properties:
+		Data.listen(self, property)
 	running = true; state = State.NAVIGATE; nav_mode = NavMode.ALIGN
 	branch_row = -1000000; branch_side = 1
 	align_x = dome.global_position.x; branch_entry_x = align_x
@@ -75,15 +111,21 @@ func start() -> bool:
 	_reset_progress()
 	keeper.mined.connect(_on_mined)
 	GameWorld.upgradeBought.connect(_on_upgrade_bought)
+	GameWorld.upgradeError.connect(_on_upgrade_error)
 	ModLoaderLog.info("Started rule teacher", LOG_NAME)
 	return true
 
 func stop() -> void:
 	_release_all()
+	for property in observed_properties:
+		Data.unlisten(self, property)
+	observed_properties.clear()
 	if is_instance_valid(keeper) and keeper.mined.is_connected(_on_mined):
 		keeper.mined.disconnect(_on_mined)
 	if GameWorld.upgradeBought.is_connected(_on_upgrade_bought):
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
+	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
+		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null
 
 func _process(delta: float) -> void:
@@ -92,6 +134,7 @@ func _process(delta: float) -> void:
 	if not StageManager.isInLevel() or not Level.initialized or not is_instance_valid(keeper):
 		_fail("Teacher lost its supported game state")
 		return
+	_sync_repair_intent()
 	if _blocked():
 		_release_all(); _reset_progress()
 		return
@@ -248,9 +291,12 @@ func _carry() -> void:
 func _return() -> void:
 	if keeper.isInsideStation:
 		_release_all(); var leaf := _leaf()
-		if _head_affordable() and leaf == "StationInputProcessor":
-			_change(State.UPGRADE)
-			return
+		if leaf == "StationInputProcessor":
+			var target := _next_upgrade_target()
+			var id: String = target.get("id", "")
+			if not id.is_empty() and _upgrade_ready(id):
+				_change(State.UPGRADE)
+				return
 		if _wave_needed():
 			_change(State.DEFEND)
 			return
@@ -284,33 +330,50 @@ func _upgrade() -> void:
 	var leaf := _leaf()
 	if leaf == "StationInputProcessor":
 		if closing_upgrade:
+			_clear_active_upgrade()
 			_change(State.DEFEND if _wave_needed() else State.RETURN)
+			return
+		if not _freeze_upgrade_target():
+			closing_upgrade = true
 			return
 		_tap(&"dome_upgrades")
 		delay = 0.6
 		return
 	if leaf != "UpgradesInputProcessor":
 		return
-	if closing_upgrade or pending.is_empty():
+	if closing_upgrade or active_upgrade_id.is_empty():
 		_tap(&"ui_cancel"); delay = 0.5
 		return
 
 	var processor = InputSystem.getLastChild(keeper.deviceId)
+	if not is_instance_valid(processor) or not is_instance_valid(processor.popup):
+		_consume_upgrade_step("Upgrade popup did not become available")
+		return
 	var tree = processor.popup.find_child("TechTree")
+	if not is_instance_valid(tree):
+		_consume_upgrade_step("Upgrade tree did not become available")
+		return
 	var current = tree.focussedTechPanel
 	var target = null
 	for panel in get_tree().get_nodes_in_group(keeper.playerId + "-techpanel"):
-		if panel.techId == _upgrade_id(pending.front()):
+		if panel.techId == active_upgrade_id:
 			target = panel
 			break
 	if not is_instance_valid(current) or not is_instance_valid(target):
+		_consume_upgrade_step("Could not find intended upgrade panel")
 		return
 	if current == target:
+		if not _active_upgrade_ready():
+			closing_upgrade = true
+			return
+		if int(target.state) != 1:
+			_consume_upgrade_step("Intended upgrade panel never became buyable")
+			return
+		if not _consume_upgrade_step("Game did not confirm intended upgrade purchase"):
+			return
 		_tap(&"ui_select"); delay = 0.5
 		return
-	ui_steps += 1
-	if ui_steps > 30:
-		_fail("Could not focus queued upgrade through normal UI actions")
+	if not _consume_upgrade_step("Could not focus intended upgrade through normal UI actions"):
 		return
 	var delta: Vector2 = target.global_position - current.global_position
 	if absf(delta.x) >= absf(delta.y):
@@ -318,6 +381,16 @@ func _upgrade() -> void:
 	else:
 		_tap(&"ui_down" if delta.y > 0.0 else &"ui_up")
 	delay = 0.15
+
+func _consume_upgrade_step(reason: String) -> bool:
+	ui_steps += 1
+	if ui_steps <= 30:
+		return true
+	_release_all()
+	if _leaf() == "UpgradesInputProcessor":
+		_tap(&"ui_cancel")
+	_fail(reason)
+	return false
 
 func _defend() -> void:
 	var leaf := _leaf()
@@ -400,7 +473,7 @@ func _loose_resources() -> Array:
 	return result
 
 func _choose_carry(commit := true) -> bool:
-	var deficit := _reserved_iron_deficit()
+	var deficits := _reserved_resource_deficits()
 	var best: Drop
 	var best_score := INF
 	var home := Vector2(dome.global_position.x, -GameWorld.TILE_SIZE) + CONST.TILE_OFFSET
@@ -416,7 +489,7 @@ func _choose_carry(commit := true) -> bool:
 		if distance / maxf(keeper.currentSpeed() * ratio, 1.0) + 4.0 >= _wave_time():
 			continue
 		var score: float = float(outward.size()) * float(GameWorld.TILE_SIZE) / ratio
-		if drop.type != CONST.IRON or deficit <= 0:
+		if int(deficits.get(drop.type, 0)) <= 0:
 			score += 100000.0
 		if score < best_score:
 			best = drop
@@ -427,17 +500,33 @@ func _choose_carry(commit := true) -> bool:
 		carry = best
 	return true
 
-func _reserved_iron_deficit() -> int:
-	var available := int(Data.getInventory(CONST.IRON, keeper.teamId))
+func _reserved_resource_deficits() -> Dictionary:
+	var available := {}
+	for resource in ORE_TYPES:
+		available[resource] = int(Data.getInventory(resource, keeper.teamId))
 	for drop in keeper.carriedCarryables:
-		if drop is Drop and drop.type == CONST.IRON:
-			available += 1
-	for raw_id in pending:
-		var cost := int(GameWorld.upgrades.get(_upgrade_id(raw_id), {}).get("cost", {}).get(CONST.IRON, 0))
-		if available < cost:
-			return cost - available
-		available -= cost
-	return 0
+		if drop is Drop and available.has(drop.type):
+			available[drop.type] += 1
+	var seen := {}
+	for intent in INTENT_PRIORITY:
+		if not pending_intents.has(intent):
+			continue
+		var target := _resolve_intent(intent)
+		var id: String = target.get("id", "")
+		if id.is_empty() or seen.has(id):
+			continue
+		seen[id] = true
+		var cost: Dictionary = GameWorld.upgrades[id].get("cost", {})
+		var deficits := {}
+		for resource in cost:
+			var missing := int(cost[resource]) - int(available.get(resource, 0))
+			if missing > 0:
+				deficits[resource] = missing
+		if not deficits.is_empty():
+			return deficits
+		for resource in cost:
+			available[resource] = int(available.get(resource, 0)) - int(cost[resource])
+	return {}
 
 func _speed_ratio(extra: int) -> float:
 	var count := keeper.carriedCarryables.size() + extra
@@ -489,19 +578,135 @@ func _laser():
 				found = weapon
 	return found
 
-func _head_affordable() -> bool:
-	return not pending.is_empty() and GameWorld.canAfford(GameWorld.upgrades[_upgrade_id(pending.front())].get("cost", {}), keeper.teamId)
-
 func _upgrade_id(raw_id: StringName) -> String:
-	var candidate := keeper.playerId + "." + str(raw_id)
-	return candidate if GameWorld.upgrades.has(candidate) else str(raw_id)
+	var base_id := str(raw_id).to_lower()
+	for candidate in [keeper.teamId + "." + base_id, keeper.playerId + "." + base_id, base_id]:
+		if GameWorld.upgrades.has(candidate):
+			return candidate
+	return ""
+
+func _bought_count(chain: Array[StringName]) -> int:
+	var count := 0
+	for raw_id in chain:
+		count += int(GameWorld.boughtUpgrades.has(_upgrade_id(raw_id)))
+	return count
+
+func _resolve_chain(chain: Array[StringName], repeat_last := false) -> Dictionary:
+	for index in chain.size():
+		var raw_id := chain[index]
+		var id := _upgrade_id(raw_id)
+		if id.is_empty():
+			return {"exhausted": false}
+		var upgrade: Dictionary = GameWorld.upgrades[id]
+		var repeat_target := repeat_last and index == chain.size() - 1 and upgrade.has("repeatable")
+		if GameWorld.boughtUpgrades.has(id) and not repeat_target:
+			continue
+		if raw_id == &"domesandrepair" and _dome_health() >= _dome_max_health():
+			return {"exhausted": false}
+		if GameWorld.isUpgradeAddable(id):
+			return {"id": id, "raw_id": raw_id, "exhausted": false}
+		return {"exhausted": false}
+	return {"exhausted": true}
+
+func _resolve_alternating(primary: Array[StringName], secondary: Array[StringName], primary_next: bool) -> Dictionary:
+	var first_arm := 0 if primary_next else 1
+	var first := _resolve_chain(primary if first_arm == 0 else secondary)
+	if not str(first.get("id", "")).is_empty():
+		first["arm"] = first_arm
+		return first
+	var second := _resolve_chain(secondary if first_arm == 0 else primary)
+	if not str(second.get("id", "")).is_empty():
+		second["arm"] = 1 - first_arm
+		return second
+	return {"exhausted": bool(first.get("exhausted", false)) and bool(second.get("exhausted", false))}
+
+func _resolve_intent(intent: int) -> Dictionary:
+	var target := {}
+	match intent:
+		UpgradeIntent.COMBAT:
+			target = _resolve_alternating(ATTACK_UPGRADES, HEALTH_PATH, combat_attack_next)
+			var raw_id: StringName = target.get("raw_id", &"")
+			target["fulfills"] = target.get("arm", -1) == 0 or raw_id == &"dome1health1" or raw_id == &"dome1health2"
+		UpgradeIntent.REPAIR:
+			target = _resolve_chain(REPAIR_UPGRADES, true)
+			target["fulfills"] = target.get("raw_id", &"") == &"domesandrepair"
+		UpgradeIntent.DRILL:
+			target = _resolve_chain(DRILL_UPGRADES, true)
+			target["fulfills"] = true
+		UpgradeIntent.MOBILITY:
+			target = _resolve_alternating(SPEED_UPGRADES, CARRY_UPGRADES, mobility_speed_next)
+			target["fulfills"] = true
+	target["intent"] = intent
+	return target
+
+func _next_upgrade_target() -> Dictionary:
+	for intent in INTENT_PRIORITY:
+		if not pending_intents.has(intent):
+			continue
+		var target := _resolve_intent(intent)
+		if bool(target.get("exhausted", false)):
+			pending_intents.erase(intent)
+			continue
+		if not str(target.get("id", "")).is_empty():
+			return target
+	return {}
+
+func _freeze_upgrade_target() -> bool:
+	if not active_upgrade_id.is_empty():
+		return true
+	var target := _next_upgrade_target()
+	active_upgrade_id = target.get("id", "")
+	if active_upgrade_id.is_empty():
+		return false
+	active_upgrade_intent = int(target["intent"])
+	active_upgrade_arm = int(target.get("arm", -1))
+	active_upgrade_fulfills = bool(target.get("fulfills", true))
+	return true
+
+func _upgrade_ready(id: String) -> bool:
+	if not GameWorld.upgrades.has(id) or not GameWorld.isUpgradeAddable(id):
+		return false
+	if id.ends_with(".domesandrepair") or id == "domesandrepair":
+		if _dome_health() >= _dome_max_health():
+			return false
+	return GameWorld.canAfford(GameWorld.upgrades[id].get("cost", {}), keeper.teamId)
+
+func _active_upgrade_ready() -> bool:
+	if active_upgrade_intent == UpgradeIntent.REPAIR and _dome_health() / _dome_max_health() >= REPAIR_HEALTH_RATIO_THRESHOLD:
+		return false
+	return not active_upgrade_id.is_empty() and _upgrade_ready(active_upgrade_id)
+
+func _clear_active_upgrade() -> void:
+	active_upgrade_intent = -1
+	active_upgrade_id = ""
+	active_upgrade_arm = -1
+	active_upgrade_fulfills = false
 
 func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
-	if not running or team_id != keeper.teamId or player_id != keeper.playerId or pending.is_empty():
+	if not running or team_id != keeper.teamId or player_id != keeper.playerId:
 		return
-	if id != _upgrade_id(pending.front()):
+	if id != active_upgrade_id:
 		return
-	pending.pop_front(); ui_steps = 0; closing_upgrade = not _head_affordable()
+	if active_upgrade_fulfills:
+		pending_intents.erase(active_upgrade_intent)
+		if active_upgrade_intent == UpgradeIntent.COMBAT:
+			combat_attack_next = active_upgrade_arm != 0
+		elif active_upgrade_intent == UpgradeIntent.MOBILITY:
+			mobility_speed_next = active_upgrade_arm != 0
+		elif active_upgrade_intent == UpgradeIntent.DRILL:
+			drill_hits_by_tile.clear()
+	_clear_active_upgrade()
+	_sync_repair_intent()
+	ui_steps = 0
+	closing_upgrade = not _freeze_upgrade_target() or not _active_upgrade_ready()
+
+func _on_upgrade_error(id: String, team_id: String, player_id: String) -> void:
+	if not running or id != active_upgrade_id or team_id != keeper.teamId or player_id != keeper.playerId:
+		return
+	_release_all()
+	if _leaf() == "UpgradesInputProcessor":
+		_tap(&"ui_cancel")
+	_fail("Game rejected intended upgrade: " + id)
 
 func _path(from: Vector2, to: Vector2) -> PackedVector2Array:
 	for offset in CONST.PATHFINDING_OFFSETS:
@@ -519,6 +724,8 @@ func _move_open(target: Vector2) -> bool:
 
 func _change(next: State) -> void:
 	_release_all()
+	if next == State.RETURN and return_started_at < 0.0 and not keeper.isInsideDome:
+		return_started_at = GameWorld.runTime
 	state = next; delay = 0.2; pickup_failures = 0
 	_reset_progress()
 	if state == State.RETURN:
@@ -547,6 +754,16 @@ func _track_progress(delta: float) -> void:
 	_change(State.RECOVER)
 
 func _on_mined(_amount = 0.0) -> void:
+	var tile := keeper.drill_hit_test_ray.get_collider() as Tile
+	if is_instance_valid(tile):
+		var tile_id := tile.get_instance_id()
+		var hits := int(drill_hits_by_tile.get(tile_id, 0)) + 1
+		if hits >= DRILL_HIT_INTENT_THRESHOLD:
+			pending_intents[UpgradeIntent.DRILL] = true
+		if tile.health <= 0.0:
+			drill_hits_by_tile.erase(tile_id)
+		else:
+			drill_hits_by_tile[tile_id] = hits
 	if state == State.RECOVER:
 		probe_time = 0.0
 	else:
@@ -578,6 +795,35 @@ func _wave_time() -> float:
 
 func _wave_needed() -> bool:
 	return _wave("wavebattle") or _wave("wavepresent") or _wave_time() <= WAVE_LEAD
+
+func propertyChanged(property: String, old_value, new_value) -> void:
+	if not running:
+		return
+	if property.ends_with(".monsters.wavepresent") and bool(new_value) and not bool(old_value):
+		wave_start_health = _dome_health(); wave_start_max_health = _dome_max_health()
+		wave_health_tracking = true
+	elif property.ends_with(".monsters.wavebattle") and bool(old_value) and not bool(new_value):
+		if wave_health_tracking and wave_start_max_health > 0.0:
+			var loss_ratio := maxf(wave_start_health - _dome_health(), 0.0) / wave_start_max_health
+			if loss_ratio > WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD:
+				pending_intents[UpgradeIntent.COMBAT] = true
+		wave_health_tracking = false
+	elif property.ends_with(".event.keepers.insidedome") and not bool(old_value) and bool(new_value):
+		if return_started_at >= 0.0 and GameWorld.runTime - return_started_at > RETURN_MOBILITY_SECONDS_THRESHOLD:
+			pending_intents[UpgradeIntent.MOBILITY] = true
+		return_started_at = -1.0
+
+func _sync_repair_intent() -> void:
+	if _dome_max_health() > 0.0 and _dome_health() / _dome_max_health() < REPAIR_HEALTH_RATIO_THRESHOLD:
+		pending_intents[UpgradeIntent.REPAIR] = true
+	else:
+		pending_intents.erase(UpgradeIntent.REPAIR)
+
+func _dome_health() -> float:
+	return float(Data.of(keeper.teamId + ".dome.health"))
+
+func _dome_max_health() -> float:
+	return float(Data.of(keeper.teamId + ".dome.maxhealth"))
 
 func _blocked() -> bool:
 	if InputSystem.game_not_in_focus or InputSystem.processors_changing:
