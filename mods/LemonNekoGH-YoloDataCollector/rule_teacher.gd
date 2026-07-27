@@ -489,7 +489,17 @@ func _carry() -> void:
 		if not _choose_carry():
 			_change(State.RETURN, "No reachable cached resource remains")
 			return
-	if keeper.focussedCarryable == carry:
+	var focused = keeper.focussedCarryable
+	if (
+		is_instance_valid(focused)
+		and focused is Drop
+		and focused.carryableType == "resource"
+		and not focused.absorbed
+		and not focused.independent
+		and not focused.isCarried()
+		and focused.type == carry.type
+	):
+		carry = focused
 		_release_all(); _tap(&"keeper1_pickup"); delay = 0.35
 		return
 	if _move_open(carry.global_position):
