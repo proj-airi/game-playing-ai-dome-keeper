@@ -4,7 +4,7 @@ const CAPTURE_INTERVAL := 0.5
 const OUTPUT_DIR := "user://yolo_data"
 const TARGET_SIZE := Vector2i(640, 640)
 const PAD_COLOR := Color(0.447, 0.447, 0.447, 1.0)
-const SEGMENT_LENGTH_SEC := 30.0
+const IMAGES_PER_SEGMENT := 60
 const SEGMENT_CYCLE := 6
 const TRAIN_SEGMENTS := 4
 const TARGETS_PER_NO_TARGET := 5
@@ -28,7 +28,6 @@ var yolo_collecting := false
 var yolo_timer: Timer
 var capture_index := 0
 var session_dir := ""
-var session_start_ms := 0
 var targets_since_no_target := 0
 var capture_size_logged := false
 var teacher: Node
@@ -142,7 +141,6 @@ func _on_teacher_failed(_reason: String) -> void:
 
 func _start_new_session() -> void:
 	capture_index = 0
-	session_start_ms = Time.get_ticks_msec()
 	targets_since_no_target = 0
 	capture_size_logged = false
 	var timestamp = Time.get_datetime_string_from_system().replace(":", "-")
@@ -187,16 +185,10 @@ func _capture_frame() -> void:
 
 	var labels := _collect_labels(view_size, view_to_image_scale, scale, offset, Vector2(TARGET_SIZE))
 	var has_target = _has_target_labels(labels)
-	if has_target:
-		targets_since_no_target += 1
-	else:
-		if targets_since_no_target < TARGETS_PER_NO_TARGET:
-			return
-		targets_since_no_target = 0
+	if not has_target and targets_since_no_target < TARGETS_PER_NO_TARGET:
+		return
 
 	var basename = "frame_%06d" % capture_index
-	capture_index += 1
-
 	var split = _current_split()
 	var images_dir = session_dir.path_join("images").path_join(split)
 	var labels_dir = session_dir.path_join("labels").path_join(split)
@@ -205,8 +197,13 @@ func _capture_frame() -> void:
 
 	var letterbox = _letterbox_image(image, TARGET_SIZE)
 	var output_image: Image = letterbox.image
-	output_image.save_png(image_path)
-	_save_labels(label_path, labels)
+	if output_image.save_png(image_path) != OK:
+		return
+	if not _save_labels(label_path, labels):
+		DirAccess.remove_absolute(image_path)
+		return
+	targets_since_no_target = targets_since_no_target + 1 if has_target else 0
+	capture_index += 1
 
 func _letterbox_image(image: Image, target_size: Vector2i) -> Dictionary:
 	var src_size = image.get_size()
@@ -250,8 +247,7 @@ func _letterbox_params(src_size: Vector2i, target_size: Vector2i) -> Dictionary:
 
 
 func _current_split() -> String:
-	var elapsed_ms = max(Time.get_ticks_msec() - session_start_ms, 0)
-	var segment_index = int(floor(float(elapsed_ms) / (SEGMENT_LENGTH_SEC * 1000.0)))
+	var segment_index := capture_index / IMAGES_PER_SEGMENT
 	var cycle_index = segment_index % SEGMENT_CYCLE
 	if cycle_index < TRAIN_SEGMENTS:
 		return "train"
@@ -358,15 +354,17 @@ func _append_label(
 	labels.append([class_id, x_center, y_center, width, height])
 
 
-func _save_labels(path: String, labels: Array) -> void:
+func _save_labels(path: String, labels: Array) -> bool:
 	var lines: Array[String] = []
 	for item in labels:
 		lines.append("%d %.6f %.6f %.6f %.6f" % [item[0], item[1], item[2], item[3], item[4]])
 
 	var file = FileAccess.open(path, FileAccess.WRITE)
-	if file:
-		file.store_string("\n".join(lines))
-		file.close()
+	if file == null:
+		return false
+	file.store_string("\n".join(lines))
+	file.close()
+	return true
 
 
 func _write_data_yaml() -> void:

@@ -56,6 +56,10 @@ run = "\"{{ env.GODOT_BIN }}\" ./external/domekeeper-decompiled/$DOMEKEEPER_VERS
 description = "Run the decompiled project in Godot"
 run = "\"{{ env.GODOT_BIN }}\" --path ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION"
 
+[tasks."godot:record"]
+description = "Record a frame-synchronized Dome Keeper replay"
+run = "bun run record"
+
 [tasks.train]
 description = "Train an Ultralytics detection model"
 run = "uv run --locked yolo detect train"

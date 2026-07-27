@@ -10,6 +10,7 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+packages/status-dashboard/dist/
 .venv/
 runs/
 

@@ -72,7 +72,7 @@ mise run godot:open
 - Each session is stored under `user://yolo_data/session_<timestamp>/`.
 - Outputs include `images/`, `labels/`, and `data.yaml`.
 - Frames are letterboxed to `640×640` with gray padding.
-- Session data is split into `train/val/test` by time segments (30s each, cycling 4/1/1).
+- Accepted captures are split into `train/val/test` every 60 images, cycling `4/1/1`.
 
 ### 2. Train a Baseline (Ultralytics)
 

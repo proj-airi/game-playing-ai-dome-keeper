@@ -14,5 +14,8 @@
     "scripts/**/*.ts",
     "apps/**/*.ts",
     "packages/**/*.ts"
+  ],
+  "exclude": [
+    "packages/status-dashboard"
   ]
 }

@@ -7,6 +7,10 @@ enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
+const STATUS_FILE := "airi-dome-keeper-status.json"
+const RECORDING_ARG := "--airi-recording-dir="
+const RECORDING_FPS_ARG := "--airi-recording-fps="
+const RECORDING_MOVIE := "recording.avi"
 const TICK := 0.1
 const WAVE_LEAD := 12.0
 const CARRY_LEAD := 24.0
@@ -35,6 +39,14 @@ const ACTIONS: Array[StringName] = [
 ]
 
 var running := false
+var status_elapsed := 1.0
+var status_path := ""
+var recording_path := ""
+var recording_fps := 0
+var recording := {}
+var record_pending := false
+var record_reason := ""
+var previous_pause_when_out_of_focus := true
 var state := State.NAVIGATE
 var nav_mode := NavMode.ALIGN
 var keeper: Keeper
@@ -81,6 +93,11 @@ var probe_origin := Vector2.ZERO
 func _init() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
+func _ready() -> void:
+	status_path = _temp_dir().path_join(STATUS_FILE)
+	_configure_recording()
+	_write_status()
+
 func start() -> bool:
 	var error := _preflight()
 	if error.is_empty():
@@ -89,6 +106,10 @@ func start() -> bool:
 		ModLoaderLog.error(error, LOG_NAME)
 		return false
 
+	previous_pause_when_out_of_focus = Options.pauseWhenOutOfFocus
+	Options.pauseWhenOutOfFocus = false
+	InputSystem.game_not_in_focus = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	pending_intents.clear()
 	pending_intents[UpgradeIntent.DRILL] = true
 	active_upgrade_intent = -1; active_upgrade_id = ""
@@ -100,7 +121,9 @@ func start() -> bool:
 	_sync_repair_intent()
 	observed_properties.assign([
 		keeper.teamId + ".monsters.wavepresent", keeper.teamId + ".monsters.wavebattle",
-		keeper.teamId + ".event.keepers.insidedome",
+		keeper.teamId + ".event.keepers.insidedome", keeper.teamId + ".dome.health",
+		keeper.teamId + ".dome.maxhealth", keeper.teamId + ".inventory.iron",
+		keeper.teamId + ".inventory.sand", keeper.teamId + ".inventory.water",
 	])
 	for property in observed_properties:
 		Data.listen(self, property)
@@ -110,27 +133,53 @@ func start() -> bool:
 	caches.clear()
 	_reset_progress()
 	keeper.mined.connect(_on_mined)
+	Level.drops.synchronizer.drop_picked_up.connect(_on_drop_picked_up)
+	Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.connect(_on_monster_spawned)
 	GameWorld.upgradeBought.connect(_on_upgrade_bought)
 	GameWorld.upgradeError.connect(_on_upgrade_error)
 	ModLoaderLog.info("Started rule teacher", LOG_NAME)
+	if not recording_path.is_empty():
+		record_pending = false
+		recording = {"fixed_fps": recording_fps, "events": []}
+		_record("session_started", "Teacher collection started", null)
 	return true
 
 func stop() -> void:
+	var was_running := running
+	if was_running:
+		InputSystem.game_not_in_focus = false
 	_release_all()
 	for property in observed_properties:
 		Data.unlisten(self, property)
 	observed_properties.clear()
 	if is_instance_valid(keeper) and keeper.mined.is_connected(_on_mined):
 		keeper.mined.disconnect(_on_mined)
+	if Level.drops.synchronizer.drop_picked_up.is_connected(_on_drop_picked_up):
+		Level.drops.synchronizer.drop_picked_up.disconnect(_on_drop_picked_up)
+	if Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.is_connected(_on_monster_spawned):
+		Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.disconnect(_on_monster_spawned)
 	if GameWorld.upgradeBought.is_connected(_on_upgrade_bought):
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null
+	if was_running:
+		Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
+		InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
+		recording.clear()
 
 func _process(delta: float) -> void:
+	status_elapsed += delta
+	if status_elapsed >= 1.0:
+		status_elapsed = 0.0
+		_write_status()
 	if not running:
 		return
+	var focus_was_lost: bool = bool(InputSystem.game_not_in_focus)
+	InputSystem.game_not_in_focus = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if focus_was_lost:
+		held.clear()
 	if not StageManager.isInLevel() or not Level.initialized or not is_instance_valid(keeper):
 		_fail("Teacher lost its supported game state")
 		return
@@ -157,6 +206,160 @@ func _process(delta: float) -> void:
 		State.UPGRADE: _upgrade()
 		State.DEFEND: _defend()
 		State.RECOVER: _recover()
+
+func _configure_recording() -> void:
+	var directory := ""
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with(RECORDING_ARG):
+			directory = argument.trim_prefix(RECORDING_ARG).simplify_path()
+		elif argument.begins_with(RECORDING_FPS_ARG):
+			recording_fps = int(argument.trim_prefix(RECORDING_FPS_ARG))
+	if directory.is_empty() and recording_fps == 0:
+		return
+	var movie := ProjectSettings.globalize_path(Engine.get_write_movie_path()).simplify_path()
+	if not directory.is_absolute_path() or not DirAccess.dir_exists_absolute(directory) or recording_fps <= 0:
+		push_error("Recording directory and FPS are invalid")
+		get_tree().quit(1)
+	elif not OS.has_feature("movie") or movie != directory.path_join(RECORDING_MOVIE):
+		push_error("Movie Maker output does not match the recording session")
+		get_tree().quit(1)
+	else:
+		recording_path = directory.path_join("recording.json")
+
+func _temp_dir() -> String:
+	for variable in ["TMPDIR", "TEMP", "TMP"]:
+		var path := OS.get_environment(variable)
+		if not path.is_empty():
+			return path
+	return "/tmp"
+
+func _write_status() -> void:
+	var file := FileAccess.open(status_path, FileAccess.WRITE)
+	if file == null:
+		push_error("Failed to write status: " + error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(JSON.stringify(get_status_snapshot()))
+
+func _queue_record(reason: String) -> void:
+	if recording.is_empty() or record_pending:
+		return
+	record_pending = true
+	record_reason = reason
+	await get_tree().process_frame
+	record_pending = false
+	_record("observation", record_reason, null)
+
+func _record(type: String, reason: String, transition) -> void:
+	if recording.is_empty():
+		return
+	recording["events"].append({
+		"movie_frame": Engine.get_process_frames(), "type": type, "reason": reason,
+		"transition": transition, "state": get_status_snapshot(),
+	})
+	var file := FileAccess.open(recording_path, FileAccess.WRITE)
+	if file == null:
+		push_error("Failed to write replay: " + error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(JSON.stringify(recording))
+
+func get_status_snapshot() -> Dictionary:
+	if not running or not StageManager.isInLevel() or not Level.initialized or not is_instance_valid(keeper) or not is_instance_valid(dome):
+		return {"available": false, "run_time_seconds": 0.0}
+
+	var wave_time := _wave_time()
+	var next_wave: Variant = maxf(wave_time, 0.0) if is_finite(wave_time) else null
+	var next_upgrade := _next_upgrade_target(false)
+	var next_upgrade_id: String = next_upgrade.get("id", "")
+	var resolved_next: Variant = null if next_upgrade_id.is_empty() else {"id": next_upgrade_id, "cost": _status_upgrade_cost(next_upgrade_id)}
+	return {
+		"available": true,
+		"run_time_seconds": maxf(float(GameWorld.runTime), 0.0),
+		"teacher": {
+			"state": State.keys()[state],
+			"nav_mode": NavMode.keys()[nav_mode] if state == State.NAVIGATE else null,
+		},
+		"keeper": {
+			"carried_resources": _status_carried_resources(),
+			"stats": _status_keeper_stats(),
+		},
+		"dome": {
+			"health": _dome_health(),
+			"max_health": _dome_max_health(),
+			"stored_resources": _status_stored_resources(),
+		},
+		"wave": {
+			"seconds_until_next": next_wave,
+			"active_monsters": _status_active_monsters(),
+		},
+		"upgrades": {
+			"pending_intents": _status_pending_intents(),
+			"resolved_next": resolved_next,
+		},
+	}
+
+func _status_carried_resources() -> Dictionary:
+	var resources := {"iron": 0, "cobalt": 0, "water": 0}
+	for drop in keeper.carriedCarryables:
+		if not is_instance_valid(drop) or not drop is Drop or drop.carryableType != "resource":
+			continue
+		match drop.type:
+			CONST.IRON: resources["iron"] += 1
+			CONST.SAND: resources["cobalt"] += 1
+			CONST.WATER: resources["water"] += 1
+	return resources
+
+func _status_stored_resources() -> Dictionary:
+	return _status_resources(
+		Data.getInventory(CONST.IRON, keeper.teamId), Data.getInventory(CONST.SAND, keeper.teamId), Data.getInventory(CONST.WATER, keeper.teamId))
+
+func _status_upgrade_cost(id: String) -> Dictionary:
+	var cost: Dictionary = GameWorld.upgrades[id].get("cost", {})
+	return _status_resources(cost.get(CONST.IRON, 0), cost.get(CONST.SAND, 0), cost.get(CONST.WATER, 0))
+
+func _status_resources(iron, cobalt, water) -> Dictionary:
+	return {"iron": int(iron), "cobalt": int(cobalt), "water": int(water)}
+
+func _status_keeper_stats() -> Dictionary:
+	var attack_strength := (
+		float(Data.ofOr(keeper.teamId + ".laser.dps", 0.0))
+		* float(Data.ofOr(keeper.teamId + ".laser.dpsmod", 1.0))
+	)
+	return {
+		"base_movement_speed": float(Data.of(keeper.playerId + ".keeper1.maxSpeed")),
+		"attack_strength": attack_strength,
+		"carry_slowdown_percent": float(keeper.get("carrySlowdown")) * 100.0,
+		"current_movement_speed": keeper.currentSpeed() * _speed_ratio(0),
+		"drill_strength": float(Data.of(keeper.playerId + ".keeper1.drillStrength")),
+	}
+
+func _status_active_monsters() -> Array[Dictionary]:
+	var wave_manager = Level.monstersByTeamId.get(keeper.teamId)
+	if not is_instance_valid(wave_manager):
+		return []
+	var grouped := {}
+	for monster in wave_manager.monstersInWave:
+		if not is_instance_valid(monster) or monster.dead:
+			continue
+		var kind := Utils.decode_monster_type(monster.type)
+		if not grouped.has(kind):
+			grouped[kind] = {"kind": kind, "count": 0, "health": 0.0, "max_health": 0.0}
+		grouped[kind]["count"] += 1
+		grouped[kind]["health"] += maxf(float(monster.currentHealth), 0.0)
+		grouped[kind]["max_health"] += maxf(float(monster.maxHealth), 0.0)
+	var kinds := grouped.keys()
+	kinds.sort()
+	var result: Array[Dictionary] = []
+	for kind in kinds:
+		var group: Dictionary = grouped[kind]
+		result.append(group)
+	return result
+
+func _status_pending_intents() -> Array[String]:
+	var intents: Array[String] = []
+	for intent in INTENT_PRIORITY:
+		if pending_intents.has(intent):
+			intents.append(str(UpgradeIntent.keys()[intent]).to_lower())
+	return intents
 
 func _preflight() -> String:
 	if not StageManager.isInLevel() or not Level.initialized or Level.map == null:
@@ -186,15 +389,15 @@ func _navigate() -> void:
 	var wave_time := _wave_time()
 	if wave_time <= CARRY_LEAD:
 		if _choose_carry(false):
-			_change(State.CARRY)
+			_change(State.CARRY, "Wave is approaching; collect a reachable cached resource")
 		elif wave_time <= WAVE_LEAD or not keeper.isInsideDome:
-			_change(State.RETURN)
+			_change(State.RETURN, "Wave is approaching; return to the dome")
 		else:
 			_release_all()
 		return
 	ore = _nearest_ore()
 	if ore != NO_COORD:
-		vein = [ore]; _change(State.MINE)
+		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
 		return
 
 	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
@@ -204,13 +407,13 @@ func _navigate() -> void:
 			return
 		if branch_row < -1000:
 			branch_row = maxi(cell.y + BRANCH_ROW_STEP, 1)
-		nav_mode = NavMode.DESCEND
+		_change_navigation(NavMode.DESCEND, "The keeper is aligned with the shaft")
 	if nav_mode == NavMode.DESCEND:
 		if cell.y < branch_row:
 			var below = Level.map.getTile(cell + Vector2i.DOWN)
 			if below is Tile and below.type == CONST.BORDER:
 				_release_all()
-				nav_mode = NavMode.BYPASS
+				_change_navigation(NavMode.BYPASS, "Revealed border blocks the shaft below")
 				bypass_side = 1
 				bypass_reversed = false
 				_reset_progress()
@@ -219,13 +422,13 @@ func _navigate() -> void:
 			_hold([&"ui_down"])
 			return
 		branch_entry_x = Level.map.getTilePos(cell).x
-		nav_mode = NavMode.BRANCH
+		_change_navigation(NavMode.BRANCH, "The target fishbone branch row was reached")
 	if nav_mode == NavMode.BYPASS:
 		var bypass_below = Level.map.getTile(cell + Vector2i.DOWN)
 		if not (bypass_below is Tile and bypass_below.type == CONST.BORDER):
 			_release_all()
 			align_x = Level.map.getTilePos(cell).x
-			nav_mode = NavMode.ALIGN
+			_change_navigation(NavMode.ALIGN, "A deeper column was found beyond the border")
 			bypass_reversed = false
 			_reset_progress()
 			delay = 0.2
@@ -248,7 +451,7 @@ func _navigate() -> void:
 		_release_all()
 		branch_side *= -1
 		align_x = branch_entry_x
-		nav_mode = NavMode.ALIGN
+		_change_navigation(NavMode.ALIGN, "The revealed branch endpoint was reached")
 		if branch_side > 0:
 			branch_row += BRANCH_ROW_STEP
 		_reset_progress()
@@ -258,7 +461,11 @@ func _navigate() -> void:
 
 func _mine() -> void:
 	if _wave_time() <= CARRY_LEAD:
-		_record_cache(); _change(State.CARRY if _choose_carry(false) else State.RETURN)
+		_record_cache()
+		if _choose_carry(false):
+			_change(State.CARRY, "Wave is approaching; collect a reachable cached resource")
+		else:
+			_change(State.RETURN, "Wave is approaching; no reachable cached resource remains")
 		return
 	if ore != NO_COORD and Level.map.getTile(ore) is Tile:
 		_hold(_axis(Level.map.getTilePos(ore)))
@@ -268,16 +475,19 @@ func _mine() -> void:
 		vein.append(ore)
 		_hold(_axis(Level.map.getTilePos(ore)))
 		return
-	_record_cache(); _change(State.NAVIGATE)
+	_record_cache(); _change(State.NAVIGATE, "The revealed ore vein has been cleared")
 
 func _carry() -> void:
-	if _wave("wavepresent") or _speed_ratio(1) < MIN_SPEED_RATIO:
-		_change(State.RETURN)
+	if _wave("wavepresent"):
+		_change(State.RETURN, "The monster wave has started")
+		return
+	if _speed_ratio(1) < MIN_SPEED_RATIO:
+		_change(State.RETURN, "Another pickup would exceed the accepted carry slowdown")
 		return
 	if not is_instance_valid(carry) or carry.isCarried():
 		carry = null
 		if not _choose_carry():
-			_change(State.RETURN)
+			_change(State.RETURN, "No reachable cached resource remains")
 			return
 	if keeper.focussedCarryable == carry:
 		_release_all(); _tap(&"keeper1_pickup"); delay = 0.35
@@ -286,7 +496,7 @@ func _carry() -> void:
 		return
 	pickup_failures += 1; carry = null
 	if pickup_failures >= 3:
-		_change(State.RETURN)
+		_change(State.RETURN, "Repeated resource pickup or path attempts failed")
 
 func _return() -> void:
 	if keeper.isInsideStation:
@@ -295,17 +505,17 @@ func _return() -> void:
 			var target := _next_upgrade_target()
 			var id: String = target.get("id", "")
 			if not id.is_empty() and _upgrade_ready(id):
-				_change(State.UPGRADE)
+				_change(State.UPGRADE, "A pending upgrade is affordable")
 				return
 		if _wave_needed():
-			_change(State.DEFEND)
+			_change(State.DEFEND, "A monster wave is active or imminent")
 			return
 		if leaf == "StationInputProcessor":
 			_tap(&"ui_cancel")
-			_change(State.NAVIGATE)
+			_change(State.NAVIGATE, "No upgrade or defense task requires the station")
 			delay = 0.5
 		elif leaf == "Keeper1InputProcessor":
-			_change(State.NAVIGATE)
+			_change(State.NAVIGATE, "No upgrade or defense task requires the station")
 		return
 
 	var main_station: DomeStation = dome.stations.front()
@@ -331,7 +541,10 @@ func _upgrade() -> void:
 	if leaf == "StationInputProcessor":
 		if closing_upgrade:
 			_clear_active_upgrade()
-			_change(State.DEFEND if _wave_needed() else State.RETURN)
+			if _wave_needed():
+				_change(State.DEFEND, "The upgrade menu closed and the wave requires defense")
+			else:
+				_change(State.RETURN, "The upgrade menu closed; resume station task selection")
 			return
 		if not _freeze_upgrade_target():
 			closing_upgrade = true
@@ -395,7 +608,7 @@ func _consume_upgrade_step(reason: String) -> bool:
 func _defend() -> void:
 	var leaf := _leaf()
 	if not keeper.isInsideStation:
-		_change(State.RETURN)
+		_change(State.RETURN, "The keeper left the battle station")
 		return
 	if _wave_needed() and leaf != "BattleInputProcessor":
 		_release_all()
@@ -412,15 +625,15 @@ func _defend() -> void:
 		_tap(&"ui_cancel"); delay = 0.5
 	elif leaf == "StationInputProcessor":
 		_tap(&"ui_cancel")
-		_change(State.NAVIGATE)
+		_change(State.NAVIGATE, "The monster wave has settled")
 		delay = 0.5
 	elif leaf == "Keeper1InputProcessor":
-		_change(State.NAVIGATE)
+		_change(State.NAVIGATE, "The monster wave has settled")
 
 func _recover() -> void:
 	var action := DIRECTIONS[probe_index]
 	if _directed_distance(action, probe_origin) >= GameWorld.TILE_SIZE:
-		_change(interrupted)
+		_change(interrupted, "A recovery probe moved the keeper one tile")
 		return
 	probe_time += TICK
 	if probe_time >= STALL_SECONDS:
@@ -549,6 +762,7 @@ func _aim() -> void:
 		_hold([&"ui_right" if error > 0.0 else &"ui_left"])
 	else:
 		_hold([StringName(dome.techId + "_fire")])
+		_queue_record("Laser attacked an active monster")
 
 func _visible_monster():
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
@@ -639,13 +853,15 @@ func _resolve_intent(intent: int) -> Dictionary:
 	target["intent"] = intent
 	return target
 
-func _next_upgrade_target() -> Dictionary:
+func _next_upgrade_target(prune_exhausted := true) -> Dictionary:
 	for intent in INTENT_PRIORITY:
 		if not pending_intents.has(intent):
 			continue
 		var target := _resolve_intent(intent)
 		if bool(target.get("exhausted", false)):
-			pending_intents.erase(intent)
+			if prune_exhausted:
+				pending_intents.erase(intent)
+				_queue_record("Upgrade plan changed")
 			continue
 		if not str(target.get("id", "")).is_empty():
 			return target
@@ -699,6 +915,7 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 	_sync_repair_intent()
 	ui_steps = 0
 	closing_upgrade = not _freeze_upgrade_target() or not _active_upgrade_ready()
+	_queue_record("Upgrade purchased: " + id)
 
 func _on_upgrade_error(id: String, team_id: String, player_id: String) -> void:
 	if not running or id != active_upgrade_id or team_id != keeper.teamId or player_id != keeper.playerId:
@@ -722,8 +939,9 @@ func _move_open(target: Vector2) -> bool:
 	_hold(_axis(points[mini(1, points.size() - 1)]))
 	return true
 
-func _change(next: State) -> void:
+func _change(next: State, reason: String) -> void:
 	_release_all()
+	var previous := state
 	if next == State.RETURN and return_started_at < 0.0 and not keeper.isInsideDome:
 		return_started_at = GameWorld.runTime
 	state = next; delay = 0.2; pickup_failures = 0
@@ -734,6 +952,22 @@ func _change(next: State) -> void:
 		bypass_side = 1; bypass_reversed = false
 	elif state == State.UPGRADE:
 		closing_upgrade = false; ui_steps = 0
+	if next == previous:
+		return
+	var previous_name := str(State.keys()[previous])
+	var current_name := str(State.keys()[next])
+	ModLoaderLog.info(previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
+	_record("teacher_state", reason, {"from": previous_name, "to": current_name})
+
+func _change_navigation(next: NavMode, reason: String) -> void:
+	if next == nav_mode:
+		return
+	var previous := nav_mode
+	nav_mode = next
+	var previous_name := str(NavMode.keys()[previous])
+	var current_name := str(NavMode.keys()[next])
+	ModLoaderLog.info("NAVIGATE " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
+	_record("navigation_state", reason, {"from": previous_name, "to": current_name})
 
 func _track_progress(delta: float) -> void:
 	var action := StringName(held.keys().front()) if not held.is_empty() else StringName()
@@ -751,7 +985,7 @@ func _track_progress(delta: float) -> void:
 	interrupted = state; probe_index = (DIRECTIONS.find(action) + 1) % DIRECTIONS.size()
 	probe_count = 0; probe_time = 0.0
 	probe_origin = keeper.global_position
-	_change(State.RECOVER)
+	_change(State.RECOVER, "No directed movement or drill progress for four seconds")
 
 func _on_mined(_amount = 0.0) -> void:
 	var tile := keeper.drill_hit_test_ray.get_collider() as Tile
@@ -759,7 +993,10 @@ func _on_mined(_amount = 0.0) -> void:
 		var tile_id := tile.get_instance_id()
 		var hits := int(drill_hits_by_tile.get(tile_id, 0)) + 1
 		if hits >= DRILL_HIT_INTENT_THRESHOLD:
+			var was_pending := pending_intents.has(UpgradeIntent.DRILL)
 			pending_intents[UpgradeIntent.DRILL] = true
+			if not was_pending:
+				_queue_record("Drill upgrade requested after repeated hits")
 		if tile.health <= 0.0:
 			drill_hits_by_tile.erase(tile_id)
 		else:
@@ -796,6 +1033,14 @@ func _wave_time() -> float:
 func _wave_needed() -> bool:
 	return _wave("wavebattle") or _wave("wavepresent") or _wave_time() <= WAVE_LEAD
 
+func _on_drop_picked_up(_drop, carrier) -> void:
+	if carrier == keeper:
+		_queue_record("Keeper picked up a resource")
+
+func _on_monster_spawned(monster: Monster) -> void:
+	monster.died.connect(_queue_record.bind("Monster died"), CONNECT_ONE_SHOT)
+	_queue_record("Monster spawned")
+
 func propertyChanged(property: String, old_value, new_value) -> void:
 	if not running:
 		return
@@ -812,6 +1057,9 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 		if return_started_at >= 0.0 and GameWorld.runTime - return_started_at > RETURN_MOBILITY_SECONDS_THRESHOLD:
 			pending_intents[UpgradeIntent.MOBILITY] = true
 		return_started_at = -1.0
+	if property.ends_with(".dome.health") or property.ends_with(".dome.maxhealth"):
+		_sync_repair_intent()
+	_queue_record("Game data changed: " + property.get_slice(".", property.get_slice_count(".") - 1))
 
 func _sync_repair_intent() -> void:
 	if _dome_max_health() > 0.0 and _dome_health() / _dome_max_health() < REPAIR_HEALTH_RATIO_THRESHOLD:
@@ -859,7 +1107,9 @@ func _tap(action: StringName) -> void:
 func _emit(action: StringName, pressed: bool) -> void:
 	var event := bindings[action].duplicate() as InputEventKey
 	event.device = 0; event.pressed = pressed; event.echo = false
+	InputSystem.game_not_in_focus = false
 	Input.parse_input_event(event)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _release_all() -> void:
 	for action in held.keys():
