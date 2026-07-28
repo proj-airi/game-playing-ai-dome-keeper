@@ -15,8 +15,6 @@ const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
 const RECORDING_MOVIE := "recording.avi"
 const TICK := 0.1
-const LASER_FIRE_BRAKE_ANGLE := 10.0 * PI / 180.0
-const LASER_STEERING_CUTOFF_ANGLE := 0.06
 const WAVE_LEAD := 12.0
 const CARRY_RETURN_TARGET_SECONDS := 15.0
 const CARRY_SAFETY_SECONDS := 2.0
@@ -1485,18 +1483,27 @@ func _aim() -> void:
 		error -= TAU
 	elif aim.x > 0.0 and error < -CONST.PI_HALF:
 		error += TAU
+	var collider = null
+	for raycast in weapon.raycasts:
+		if not raycast.enabled:
+			continue
+		collider = raycast.get_collider()
+		if collider != null:
+			break
 	var fire_action := StringName(dome.techId + "_fire")
 	var actions: Array[StringName] = []
-	if absf(error) > LASER_STEERING_CUTOFF_ANGLE:
-		actions.append(&"ui_right" if error > 0.0 else &"ui_left")
-	if damageable and absf(error) <= LASER_FIRE_BRAKE_ANGLE:
-		var started_firing := not held.has(fire_action)
+	var started_firing := false
+	if collider == target and damageable:
+		started_firing = not held.has(fire_action)
 		actions.append(fire_action)
-		_hold(actions)
-		if started_firing:
-			_queue_record("Laser attacked an active monster")
-		return
+	elif collider != target:
+		if error > 0.0:
+			actions.append(&"ui_right")
+		elif error < 0.0:
+			actions.append(&"ui_left")
 	_hold(actions)
+	if started_firing:
+		_queue_record("Laser began firing at an acquired monster")
 
 func _visible_monster():
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
