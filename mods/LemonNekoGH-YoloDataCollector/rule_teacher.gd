@@ -657,9 +657,7 @@ func _defend() -> void:
 	if leaf == "BattleInputProcessor":
 		_tap(&"ui_cancel"); delay = 0.5
 	elif leaf == "StationInputProcessor":
-		_tap(&"ui_cancel")
-		_change(State.NAVIGATE, "The monster wave has settled")
-		delay = 0.5
+		_change(State.RETURN, "The monster wave has settled; resume station task selection")
 	elif leaf == "Keeper1InputProcessor":
 		_change(State.NAVIGATE, "The monster wave has settled")
 
