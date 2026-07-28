@@ -12,6 +12,8 @@ const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
 const RECORDING_MOVIE := "recording.avi"
 const TICK := 0.1
+const LASER_FIRE_BRAKE_ANGLE := 10.0 * PI / 180.0
+const LASER_STEERING_CUTOFF_ANGLE := 0.06
 const WAVE_LEAD := 12.0
 const CARRY_LEAD := 24.0
 const MIN_SPEED_RATIO := 0.55
@@ -206,6 +208,28 @@ func _process(delta: float) -> void:
 		State.UPGRADE: _upgrade()
 		State.DEFEND: _defend()
 		State.RECOVER: _recover()
+
+func _physics_process(_delta: float) -> void:
+	if not running or state != State.DEFEND:
+		return
+	if (
+		delay > 0.0
+		or not StageManager.isInLevel()
+		or not Level.initialized
+		or not is_instance_valid(keeper)
+		or not is_instance_valid(dome)
+	):
+		_release_all()
+		return
+	if (
+		_blocked()
+		or not keeper.isInsideStation
+		or not _wave("wavepresent")
+		or _leaf() != "BattleInputProcessor"
+	):
+		_release_all()
+		return
+	_aim()
 
 func _configure_recording() -> void:
 	var directory := ""
@@ -626,7 +650,6 @@ func _defend() -> void:
 			_tap(&"dome_battle"); delay = 0.5
 		return
 	if _wave("wavepresent") and leaf == "BattleInputProcessor":
-		_aim()
 		return
 	_release_all()
 	if _wave("wavebattle"):
@@ -768,11 +791,18 @@ func _aim() -> void:
 		error -= TAU
 	elif aim.x > 0.0 and error < -CONST.PI_HALF:
 		error += TAU
-	if absf(error) > 0.06:
-		_hold([&"ui_right" if error > 0.0 else &"ui_left"])
-	else:
-		_hold([StringName(dome.techId + "_fire")])
-		_queue_record("Laser attacked an active monster")
+	var fire_action := StringName(dome.techId + "_fire")
+	var actions: Array[StringName] = []
+	if absf(error) > LASER_STEERING_CUTOFF_ANGLE:
+		actions.append(&"ui_right" if error > 0.0 else &"ui_left")
+	if absf(error) <= LASER_FIRE_BRAKE_ANGLE:
+		var started_firing := not held.has(fire_action)
+		actions.append(fire_action)
+		_hold(actions)
+		if started_firing:
+			_queue_record("Laser attacked an active monster")
+		return
+	_hold(actions)
 
 func _visible_monster():
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
