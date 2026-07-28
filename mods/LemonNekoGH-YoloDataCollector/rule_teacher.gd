@@ -2,6 +2,8 @@ extends Node
 
 signal failed(reason: String)
 
+const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
+
 enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
 enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
@@ -20,6 +22,8 @@ const CARRY_RETURN_TARGET_SECONDS := 15.0
 const CARRY_SAFETY_SECONDS := 2.0
 const CARRY_PICKUP_SECONDS := 0.35
 const CARRY_PREVIEW_INTERVAL := 1.0
+const GADGET_UI_STEP_LIMIT := 40
+const GADGET_TASK_WAIT_LIMIT := 100
 const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
@@ -40,9 +44,10 @@ const DRILL_UPGRADES: Array[StringName] = [&"drill1", &"drill2", &"drill3", &"dr
 const SPEED_UPGRADES: Array[StringName] = [&"jetpackSpeed1", &"jetpackSpeed2", &"jetpackSpeed3", &"jetpackSpeed4"]
 const CARRY_UPGRADES: Array[StringName] = [&"jetpackStrength1", &"jetpackStrength2", &"jetpackStrength3", &"jetpackStrength4"]
 const DIRECTIONS: Array[StringName] = [&"ui_up", &"ui_right", &"ui_down", &"ui_left"]
+const CARDINAL_OFFSETS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 const ACTIONS: Array[StringName] = [
 	&"ui_left", &"ui_right", &"ui_up", &"ui_down", &"ui_select", &"ui_cancel",
-	&"keeper1_pickup", &"dome_battle", &"dome_upgrades",
+	&"keeper1_pickup", &"keeper1_drop", &"dome_battle", &"dome_upgrades",
 ]
 
 var running := false
@@ -81,6 +86,12 @@ var carry_plan := {}
 var carry_preview_cache := {}
 var carry_preview_refresh_at := 0.0
 var carry_preview_extra_site = null
+var gadget_chamber: Chamber
+var gadget_activation_pending := false
+var gadget_delivery_pending := false
+var gadget_drop_instance_id := 0
+var gadget_prior_drop_ids := {}
+var gadget_task_wait_steps := 0
 var branch_row := -1000000
 var branch_side := 1
 var align_x := 0.0
@@ -93,6 +104,10 @@ var delay := 0.0
 var pickup_failures := 0
 var ui_steps := 0
 var closing_upgrade := false
+var gadget_offer_id := StringName()
+var gadget_ui_steps := 0
+var gadget_ui_delay := 0.0
+var gadget_confirming := false
 var progress_action := StringName()
 var progress_origin := Vector2.ZERO
 var stalled := 0.0
@@ -133,6 +148,8 @@ func start() -> bool:
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
 	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
+	_reset_gadget_choice()
+	_reset_gadget_retrieval()
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
 	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
@@ -191,6 +208,8 @@ func stop() -> void:
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
+	_reset_gadget_choice()
+	_reset_gadget_retrieval()
 	carry_preview_extra_site = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
@@ -213,6 +232,22 @@ func _process(delta: float) -> void:
 		_fail("Teacher lost its supported game state")
 		return
 	_sync_repair_intent()
+	if _handle_gadget_choice(delta):
+		_release_all(); _reset_progress()
+		return
+	if not running:
+		return
+	var carried_gadget := _carried_gadget()
+	if is_instance_valid(carried_gadget):
+		if keeper.carriedCarryables.size() != 1:
+			_fail("A chamber gadget attached to a non-exclusive load")
+			return
+		if not gadget_activation_pending or not is_instance_valid(gadget_chamber) or gadget_chamber.currentState == Chamber.State.EMPTY:
+			gadget_drop_instance_id = carried_gadget.get_instance_id()
+			gadget_delivery_pending = true
+			if state != State.RETURN:
+				_change(State.RETURN, "The chamber gadget requires an exclusive direct return")
+				return
 	if _blocked():
 		_release_all(); _reset_progress()
 		return
@@ -472,6 +507,15 @@ func _load_bindings() -> String:
 	return ""
 
 func _navigate() -> void:
+	if _claim_gadget_chamber():
+		if _wave("wavepresent"):
+			_change(State.RETURN, "The active monster wave interrupted gadget retrieval")
+		else:
+			_handle_gadget_chamber()
+		return
+	if _wave("wavepresent"):
+		_change(State.RETURN, "The monster wave has started")
+		return
 	if shaft_exhausted:
 		if not keeper.isInsideDome:
 			if _begin_carry("The exhausted fishbone shaft begins its pending cache cleanup"):
@@ -572,6 +616,11 @@ func _navigate() -> void:
 	_hold([&"ui_right" if branch_side > 0 else &"ui_left"])
 
 func _mine() -> void:
+	if _claim_gadget_chamber():
+		if not vein.is_empty():
+			_record_cache()
+		_change(State.NAVIGATE, "A revealed gadget chamber takes priority over the ore vein")
+		return
 	var active_cache_site = Level.map.getTilePos(vein.front()) if not vein.is_empty() else null
 	var carry_preview := _carry_window_plan(active_cache_site)
 	if not carry_preview.is_empty():
@@ -599,6 +648,9 @@ func _mine() -> void:
 func _carry() -> void:
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
+		return
+	if _claim_gadget_chamber():
+		_change(State.NAVIGATE, "A revealed gadget chamber interrupted the resource carry plan")
 		return
 	if not is_instance_valid(carry) or carry.isCarried():
 		carry = null
@@ -628,9 +680,26 @@ func _carry() -> void:
 		_change(State.RETURN, "Repeated resource pickup or path attempts failed")
 
 func _return() -> void:
+	if gadget_delivery_pending and not is_instance_valid(_carried_gadget()):
+		_wait_for_gadget_task("Delivered chamber gadget did not open its mandatory choice popup")
+		return
+	if _claim_gadget_chamber() and not gadget_delivery_pending:
+		if not _wave("wavepresent") and not _wave("wavebattle") and keeper.isInsideStation:
+			_release_all()
+			if _leaf() == "StationInputProcessor":
+				_tap(&"ui_cancel")
+			_change(State.NAVIGATE, "The settled interruption resumes the saved gadget chamber")
+			delay = 0.5
+			return
+		if not _wave("wavepresent") and not _wave("wavebattle"):
+			_change(State.NAVIGATE, "The revealed gadget chamber cancels the ordinary return")
+			return
 	if keeper.isInsideStation:
 		_release_all(); var leaf := _leaf()
 		if leaf == "StationInputProcessor":
+			if is_instance_valid(gadget_chamber) and (_wave("wavepresent") or _wave("wavebattle")):
+				_change(State.DEFEND, "Finish the active wave before resuming gadget retrieval")
+				return
 			var target := _next_upgrade_target()
 			var id: String = target.get("id", "")
 			if not id.is_empty() and _upgrade_ready(id):
@@ -724,6 +793,343 @@ func _upgrade() -> void:
 		_tap(&"ui_down" if delta.y > 0.0 else &"ui_up")
 	delay = 0.15
 
+func _handle_gadget_choice(delta: float) -> bool:
+	var processor = InputSystem.getLastChild(keeper.deviceId)
+	var is_gadget_processor := is_instance_valid(processor) and str(processor.name) == "GadgetChoiceInputProcessor"
+	if InputSystem.processors_changing:
+		return is_gadget_processor or not gadget_offer_id.is_empty() or gadget_confirming
+	if not is_gadget_processor:
+		if not gadget_offer_id.is_empty() or gadget_confirming:
+			_finish_gadget_choice()
+		return false
+
+	gadget_ui_delay = maxf(gadget_ui_delay - delta, 0.0)
+	if gadget_ui_delay > 0.0:
+		return true
+	if not is_instance_valid(processor.popup):
+		_wait_for_gadget_choice("Gadget choice popup did not become available")
+		return true
+	var popup = processor.popup
+	if str(popup.droptype) != CONST.GADGET:
+		_fail("Unsupported artifact choice type: " + str(popup.droptype))
+		return true
+	if not bool(popup.animationDone) or popup.offersById.is_empty():
+		_wait_for_gadget_choice("Gadget offers did not become available")
+		return true
+
+	if gadget_offer_id.is_empty():
+		gadget_offer_id = _choose_gadget_offer(popup)
+		gadget_ui_steps = 0
+		if gadget_offer_id.is_empty():
+			_fail("Gadget popup has neither a supported offer nor the shred fallback")
+			return true
+
+	var target = popup.offersById.get(String(gadget_offer_id))
+	if not is_instance_valid(target) or bool(target.disabled):
+		_fail("Chosen gadget offer is no longer selectable: " + String(gadget_offer_id))
+		return true
+	if gadget_confirming:
+		_wait_for_gadget_choice("Game did not confirm gadget selection")
+		return true
+
+	var current = popup.get_viewport().gui_get_focus_owner()
+	if not is_instance_valid(current) or not current is Control:
+		_wait_for_gadget_choice("Gadget popup did not expose a focused option")
+		return true
+	if current == target:
+		var selected: Variant = popup.selectedGadget
+		if not selected is Dictionary or StringName(str(selected.get("id", ""))) != gadget_offer_id:
+			_wait_for_gadget_choice("Focused gadget offer did not become selected")
+			return true
+		_tap(&"ui_select")
+		gadget_confirming = true
+		gadget_ui_steps = 0
+		gadget_ui_delay = TICK
+		return true
+
+	if not _consume_gadget_ui_step("Could not focus the chosen gadget through normal UI actions"):
+		return true
+	var options = popup.find_child("Gadgets")
+	if not is_instance_valid(options):
+		_fail("Gadget popup has no options container")
+		return true
+	if current.get_parent() != options:
+		_tap(&"ui_down")
+		gadget_ui_delay = 0.15
+		return true
+	var focus_delta: Vector2 = target.global_position - current.global_position
+	if absf(focus_delta.x) >= absf(focus_delta.y):
+		_tap(&"ui_right" if focus_delta.x > 0.0 else &"ui_left")
+	else:
+		_tap(&"ui_down" if focus_delta.y > 0.0 else &"ui_up")
+	gadget_ui_delay = 0.15
+	return true
+
+func _choose_gadget_offer(popup) -> StringName:
+	var supported: Array[StringName] = []
+	for offered_value in popup.offersById.keys():
+		var offered_id := StringName(str(offered_value))
+		var panel = popup.offersById[offered_value]
+		if is_instance_valid(panel) and not bool(panel.disabled) and GADGET_CATALOG.is_supported(offered_id):
+			supported.append(offered_id)
+	supported.sort_custom(_gadget_offer_less)
+	for intent in INTENT_PRIORITY:
+		if not pending_intents.has(intent):
+			continue
+		var benefit := _gadget_benefit_for_intent(intent)
+		for offered_id in supported:
+			if GADGET_CATALOG.benefit_mask(offered_id) & benefit != 0:
+				return offered_id
+	if not supported.is_empty():
+		return supported.front()
+	if popup.offersById.has(String(GADGET_CATALOG.SHRED_ID)):
+		return GADGET_CATALOG.SHRED_ID
+	return StringName()
+
+func _gadget_benefit_for_intent(intent: int) -> int:
+	match intent:
+		UpgradeIntent.COMBAT:
+			return GADGET_CATALOG.Benefit.COMBAT
+		UpgradeIntent.REPAIR:
+			return GADGET_CATALOG.Benefit.SURVIVAL_REPAIR
+		UpgradeIntent.DRILL:
+			return GADGET_CATALOG.Benefit.DRILLING
+		UpgradeIntent.MOBILITY:
+			if mobility_arm == MobilityArm.SPEED:
+				return GADGET_CATALOG.Benefit.MOVEMENT
+			return GADGET_CATALOG.Benefit.CARRYING_LOGISTICS
+	return GADGET_CATALOG.Benefit.NONE
+
+func _gadget_offer_less(left: StringName, right: StringName) -> bool:
+	var left_base := String(GADGET_CATALOG.base_id(left))
+	var right_base := String(GADGET_CATALOG.base_id(right))
+	if left_base == right_base:
+		return String(left) < String(right)
+	return left_base < right_base
+
+func _consume_gadget_ui_step(reason: String) -> bool:
+	gadget_ui_steps += 1
+	if gadget_ui_steps <= GADGET_UI_STEP_LIMIT:
+		return true
+	_fail(reason)
+	return false
+
+func _wait_for_gadget_choice(reason: String) -> void:
+	if _consume_gadget_ui_step(reason):
+		gadget_ui_delay = TICK
+
+func _finish_gadget_choice() -> void:
+	var selected_id := gadget_offer_id
+	var was_confirming := gadget_confirming
+	_reset_gadget_choice()
+	if not was_confirming:
+		_fail("Gadget choice closed before the teacher submitted a selection")
+		return
+	if not GADGET_CATALOG.is_shred(selected_id) and not GameWorld.boughtUpgrades.has(String(selected_id)):
+		_fail("Selected gadget was not installed: " + String(selected_id))
+		return
+	var base_id := String(GADGET_CATALOG.base_id(selected_id))
+	var reason := "Gadget offer shredded" if GADGET_CATALOG.is_shred(selected_id) else "Gadget selected: " + base_id
+	_record("gadget_choice", reason, null)
+	_reset_gadget_retrieval()
+
+func _reset_gadget_choice() -> void:
+	gadget_offer_id = StringName()
+	gadget_ui_steps = 0
+	gadget_ui_delay = 0.0
+	gadget_confirming = false
+
+func _claim_gadget_chamber() -> bool:
+	if gadget_activation_pending:
+		return true
+	if is_instance_valid(gadget_chamber):
+		if gadget_chamber.currentState != Chamber.State.HIDDEN and gadget_chamber.currentState != Chamber.State.EMPTY:
+			return true
+		gadget_chamber = null
+		gadget_activation_pending = false
+		gadget_task_wait_steps = 0
+
+	var best: Chamber
+	var best_distance := INF
+	for candidate in get_tree().get_nodes_in_group("chamber"):
+		if not candidate is Chamber:
+			continue
+		if candidate.type != CONST.GADGET or candidate.drop_type != CONST.GADGET:
+			continue
+		if candidate.currentState == Chamber.State.HIDDEN or candidate.currentState == Chamber.State.EMPTY:
+			continue
+		if not candidate.is_visible_in_tree():
+			continue
+		var distance := keeper.global_position.distance_squared_to(candidate.global_position)
+		var candidate_coord := Vector2i(candidate.coord)
+		var best_coord := Vector2i(best.coord) if is_instance_valid(best) else NO_COORD
+		var earlier_coord := (
+			candidate_coord.y < best_coord.y
+			or (candidate_coord.y == best_coord.y and candidate_coord.x < best_coord.x)
+		)
+		if distance < best_distance or (is_equal_approx(distance, best_distance) and earlier_coord):
+			best = candidate
+			best_distance = distance
+	gadget_chamber = best
+	return is_instance_valid(gadget_chamber)
+
+func _handle_gadget_chamber() -> void:
+	if not is_instance_valid(gadget_chamber):
+		_fail("The active gadget chamber disappeared")
+		return
+	if _wave("wavepresent"):
+		_change(State.RETURN, "The monster wave interrupted gadget chamber retrieval")
+		return
+	var carried := _carried_gadget()
+	if is_instance_valid(carried):
+		if keeper.carriedCarryables.size() != 1:
+			_fail("A chamber gadget attached before its load became exclusive")
+			return
+		if gadget_chamber.currentState != Chamber.State.EMPTY:
+			_wait_for_gadget_task("The chamber did not confirm the gadget release")
+			return
+		gadget_drop_instance_id = carried.get_instance_id()
+		gadget_delivery_pending = true
+		_change(State.RETURN, "The chamber gadget attached and must return alone")
+		return
+	if gadget_activation_pending:
+		_wait_for_gadget_attachment()
+		return
+	if not keeper.carriedCarryables.is_empty():
+		_drop_cargo_for_gadget()
+		return
+
+	match gadget_chamber.currentState:
+		Chamber.State.REVEALED:
+			var cover_plan := _gadget_cover_plan()
+			if cover_plan.is_empty():
+				_wait_for_gadget_task("No revealed gadget cover has a reachable open approach")
+				return
+			gadget_task_wait_steps = 0
+			var approach: Vector2i = cover_plan["approach"]
+			var target: Vector2i = cover_plan["target"]
+			if Level.map.getTileCoord(keeper.global_position) != approach:
+				if not _move_open(Level.map.getTilePos(approach)):
+					_fail("The revealed gadget cover approach became unreachable")
+				return
+			_hold(_axis(Level.map.getTilePos(target)))
+		Chamber.State.OPENING:
+			_release_all()
+			_wait_for_gadget_task("Gadget chamber did not finish opening")
+		Chamber.State.OPEN:
+			_activate_gadget_chamber()
+		Chamber.State.EMPTY:
+			_fail("Gadget chamber became empty without attaching its artifact")
+		_:
+			_fail("Gadget chamber returned to an unsupported state")
+
+func _gadget_cover_plan() -> Dictionary:
+	if not is_instance_valid(gadget_chamber.tileCover):
+		return {}
+	var best := {}
+	var best_distance := INF
+	for local_cell in gadget_chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER):
+		var target := Vector2i(gadget_chamber.coord + Vector2(local_cell))
+		if not Level.map.isRevealed(target):
+			continue
+		var tile = Level.map.getTile(target)
+		if not tile is Tile or tile.type != CONST.GADGET:
+			continue
+		for direction in CARDINAL_OFFSETS:
+			var approach: Vector2i = target + direction
+			var distance := _path_distance(keeper.global_position, Level.map.getTilePos(approach))
+			if not is_finite(distance):
+				continue
+			if distance < best_distance:
+				best = {"target": target, "approach": approach}
+				best_distance = distance
+	return best
+
+func _activate_gadget_chamber() -> void:
+	if not keeper.carriedCarryables.is_empty():
+		_drop_cargo_for_gadget()
+		return
+	var usable := gadget_chamber.get_node_or_null("Usable") as Node2D
+	if not is_instance_valid(usable) or not gadget_chamber.canFocusUse(keeper):
+		_wait_for_gadget_task("Open gadget chamber did not expose its usable target")
+		return
+	if keeper.focussedUsable == usable and _leaf() == "Keeper1InputProcessor":
+		_release_all()
+		gadget_prior_drop_ids.clear()
+		for candidate in Level.drops.get_all_drops().values():
+			if candidate is Drop and candidate.type == CONST.GADGET:
+				gadget_prior_drop_ids[candidate.get_instance_id()] = true
+		_tap(&"ui_select")
+		gadget_activation_pending = true
+		gadget_task_wait_steps = 0
+		delay = 0.2
+		return
+	if Level.map.getTileCoord(keeper.global_position) == Level.map.getTileCoord(usable.global_position):
+		var actions := _axis(usable.global_position)
+		if not actions.is_empty():
+			gadget_task_wait_steps = 0
+			_hold(actions)
+			return
+		_wait_for_gadget_task("The open gadget chamber did not receive exact usable focus")
+		return
+	if not _move_open(usable.global_position):
+		_fail("No open path reaches the gadget chamber usable")
+	else:
+		gadget_task_wait_steps = 0
+
+func _wait_for_gadget_attachment() -> void:
+	var carried := _carried_gadget()
+	if is_instance_valid(carried) and gadget_chamber.currentState == Chamber.State.EMPTY:
+		if keeper.carriedCarryables.size() != 1:
+			_fail("The chamber gadget did not attach as an exclusive load")
+			return
+		gadget_drop_instance_id = carried.get_instance_id()
+		gadget_delivery_pending = true
+		_change(State.RETURN, "The chamber gadget attached and must return alone")
+		return
+	_wait_for_gadget_task("Activated gadget chamber did not attach its artifact")
+
+func _drop_cargo_for_gadget() -> void:
+	if _leaf() != "Keeper1InputProcessor":
+		_fail("Cannot unload cargo without keeper input control")
+		return
+	if keeper.carriedCarryables.any(func(item): return item is Drop and item.type == CONST.GADGET):
+		_fail("Cannot unload mixed cargo without dropping the chamber gadget")
+		return
+	if keeper.carriedCarryables.any(func(item): return item is Drop and item.carryableType == "resource"):
+		_record_cache_site(keeper.global_position)
+	_release_all()
+	_tap(&"keeper1_drop")
+	_wait_for_gadget_task("Existing cargo could not be unloaded for exclusive gadget transport")
+	delay = 0.2
+
+func _wait_for_gadget_task(reason: String) -> void:
+	_release_all()
+	gadget_task_wait_steps += 1
+	if gadget_task_wait_steps <= GADGET_TASK_WAIT_LIMIT:
+		return
+	_fail(reason)
+
+func _carried_gadget() -> Drop:
+	for carried in keeper.carriedCarryables:
+		if not carried is Drop or carried.type != CONST.GADGET or carried.carryableType != "gadget":
+			continue
+		var instance_id: int = carried.get_instance_id()
+		if gadget_drop_instance_id != 0 and instance_id != gadget_drop_instance_id:
+			continue
+		if gadget_activation_pending and gadget_prior_drop_ids.has(instance_id):
+			continue
+		return carried
+	return null
+
+func _reset_gadget_retrieval() -> void:
+	gadget_chamber = null
+	gadget_activation_pending = false
+	gadget_delivery_pending = false
+	gadget_drop_instance_id = 0
+	gadget_prior_drop_ids.clear()
+	gadget_task_wait_steps = 0
+
 func _consume_upgrade_step(reason: String) -> bool:
 	ui_steps += 1
 	if ui_steps <= 30:
@@ -738,6 +1144,16 @@ func _defend() -> void:
 	var leaf := _leaf()
 	if not keeper.isInsideStation:
 		_change(State.RETURN, "The keeper left the battle station")
+		return
+	if is_instance_valid(gadget_chamber) and not gadget_delivery_pending and not _wave("wavepresent") and not _wave("wavebattle"):
+		_release_all()
+		if leaf == "BattleInputProcessor":
+			_tap(&"ui_cancel")
+			delay = 0.5
+		elif leaf == "StationInputProcessor":
+			_change(State.RETURN, "The settled wave releases the saved gadget task")
+		elif leaf == "Keeper1InputProcessor":
+			_change(State.NAVIGATE, "The settled wave releases the saved gadget task")
 		return
 	if _wave_needed() and leaf != "BattleInputProcessor":
 		_release_all()
@@ -757,6 +1173,9 @@ func _defend() -> void:
 		_change(State.NAVIGATE, "The monster wave has settled")
 
 func _recover() -> void:
+	if _wave("wavepresent"):
+		_change(State.RETURN, "The monster wave interrupted stuck recovery")
+		return
 	var action := DIRECTIONS[probe_index]
 	if _directed_distance(action, probe_origin) >= GameWorld.TILE_SIZE:
 		_change(interrupted, "A recovery probe moved the keeper one tile")
@@ -799,10 +1218,13 @@ func _adjacent_ore() -> Vector2i:
 
 func _record_cache() -> void:
 	var site: Vector2 = Level.map.getTilePos(vein.front())
-	if caches.all(func(existing): return existing.distance_to(site) > GameWorld.TILE_SIZE):
-		caches.append(site)
+	_record_cache_site(site)
 	vein.clear()
 	ore = NO_COORD
+
+func _record_cache_site(site: Vector2) -> void:
+	if caches.all(func(existing): return existing.distance_to(site) > GameWorld.TILE_SIZE):
+		caches.append(site)
 	_invalidate_carry_preview()
 
 func _loose_resources() -> Array:
@@ -888,7 +1310,7 @@ func _build_carry_plan(wave_time: float, extra_cache_site = null) -> Dictionary:
 			if not is_instance_valid(drop) or drop.absorbed or drop.independent or drop.isCarried():
 				continue
 			var outward_distance := _path_distance(position, drop.global_position)
-			var instance_id := drop.get_instance_id()
+			var instance_id: int = drop.get_instance_id()
 			var inward_distance := float(inward_distances.get(instance_id, -1.0))
 			if inward_distance < 0.0:
 				inward_distance = _path_distance(drop.global_position, _home_position())
@@ -1438,6 +1860,12 @@ func _wave_needed() -> bool:
 func _on_drop_picked_up(drop, carrier) -> void:
 	if carrier == keeper:
 		_invalidate_carry_preview()
+		if drop is Drop and drop.type == CONST.GADGET and drop.carryableType == "gadget":
+			var instance_id: int = drop.get_instance_id()
+			if not gadget_activation_pending or not gadget_prior_drop_ids.has(instance_id):
+				gadget_drop_instance_id = instance_id
+				_queue_record("Keeper picked up a chamber gadget")
+			return
 		if state == State.CARRY and drop is Drop:
 			var counts: Dictionary = carry_plan.get("counts", {})
 			if int(counts.get(drop.type, 0)) > 0:
