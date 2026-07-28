@@ -5,6 +5,7 @@ signal failed(reason: String)
 enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
 enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
+enum MobilityArm { SPEED, STRENGTH }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const STATUS_FILE := "airi-dome-keeper-status.json"
@@ -15,19 +16,23 @@ const TICK := 0.1
 const LASER_FIRE_BRAKE_ANGLE := 10.0 * PI / 180.0
 const LASER_STEERING_CUTOFF_ANGLE := 0.06
 const WAVE_LEAD := 12.0
-const CARRY_LEAD := 24.0
+const CARRY_RETURN_TARGET_SECONDS := 15.0
+const CARRY_SAFETY_SECONDS := 2.0
+const CARRY_PICKUP_SECONDS := 0.35
+const CARRY_PREVIEW_INTERVAL := 1.0
+const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
 const REVEAL_TILES := 1
 const BRANCH_ROW_STEP := 1 + REVEAL_TILES * 2
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
-const RETURN_MOBILITY_SECONDS_THRESHOLD := 20.0
 const REPAIR_HEALTH_RATIO_THRESHOLD := 0.2
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
 const INTENT_PRIORITY: Array[int] = [UpgradeIntent.COMBAT, UpgradeIntent.REPAIR, UpgradeIntent.DRILL, UpgradeIntent.MOBILITY]
 const ATTACK_UPGRADES: Array[StringName] = [&"laserStrength1", &"laserStrength2", &"laserStrength3", &"laserStrength4"]
+const LASER_MOVE_UPGRADES: Array[StringName] = [&"laserMove1", &"laserMove2", &"laserMove3"]
 const HEALTH_UPGRADES: Array[StringName] = [&"dome1health1", &"dome1health2"]
 const HEALTH_PATH: Array[StringName] = [&"domeHealthMeter", &"domesandrepair", &"dome1health1", &"dome1health2"]
 const REPAIR_UPGRADES: Array[StringName] = [&"domeHealthMeter", &"domesandrepair"]
@@ -62,17 +67,20 @@ var active_upgrade_id := ""
 var active_upgrade_fulfills := false
 var active_upgrade_arm := -1
 var combat_attack_next := true
-var mobility_speed_next := true
+var mobility_arm := MobilityArm.SPEED
 var drill_hits_by_tile := {}
 var wave_start_health := 0.0
 var wave_start_max_health := 0.0
 var wave_health_tracking := false
-var return_started_at := -1.0
 var observed_properties: Array[String] = []
 var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
 var ore := NO_COORD
 var carry: Drop
+var carry_plan := {}
+var carry_preview_cache := {}
+var carry_preview_refresh_at := 0.0
+var carry_preview_extra_site = null
 var branch_row := -1000000
 var branch_side := 1
 var align_x := 0.0
@@ -123,16 +131,24 @@ func start() -> bool:
 	pending_intents[UpgradeIntent.DRILL] = true
 	active_upgrade_intent = -1; active_upgrade_id = ""
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
-	mobility_speed_next = _bought_count(SPEED_UPGRADES) <= _bought_count(CARRY_UPGRADES)
-	drill_hits_by_tile.clear(); return_started_at = -1.0
+	mobility_arm = MobilityArm.SPEED
+	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
+	carry_preview_refresh_at = 0.0
+	carry_preview_extra_site = null
 	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
 	wave_start_health = _dome_health(); wave_start_max_health = _dome_max_health()
 	_sync_repair_intent()
 	observed_properties.assign([
-		keeper.teamId + ".monsters.wavepresent", keeper.teamId + ".monsters.wavebattle",
+		keeper.teamId + ".monsters.cycle", keeper.teamId + ".monsters.wavepresent",
+		keeper.teamId + ".monsters.wavebattle",
 		keeper.teamId + ".event.keepers.insidedome", keeper.teamId + ".dome.health",
 		keeper.teamId + ".dome.maxhealth", keeper.teamId + ".inventory.iron",
 		keeper.teamId + ".inventory.sand", keeper.teamId + ".inventory.water",
+		keeper.teamId + ".laser.dps", keeper.teamId + ".laser.dpsmod",
+		keeper.teamId + ".laser.movespeed", keeper.teamId + ".laser.movespeedmod",
+		keeper.teamId + ".laser.movespeedwhilefiring",
+		keeper.playerId + ".keeper1.maxSpeed", keeper.playerId + ".keeper1.speedLossPerCarry",
+		keeper.playerId + ".keeper1.drillStrength",
 	])
 	for property in observed_properties:
 		Data.listen(self, property)
@@ -174,7 +190,8 @@ func stop() -> void:
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
-	running = false; keeper = null; carry = null
+	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
+	carry_preview_extra_site = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
 	InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
@@ -317,11 +334,16 @@ func get_status_snapshot() -> Dictionary:
 			"stats": _status_keeper_stats(),
 		},
 		"dome": {
-			"health": _dome_health(),
-			"max_health": _dome_max_health(),
+			"health": {
+				"current": _dome_health(),
+				"maximum": _dome_max_health(),
+				"level": _bought_count(HEALTH_UPGRADES),
+			},
+			"laser": _status_laser_stats(),
 			"stored_resources": _status_stored_resources(),
 		},
 		"wave": {
+			"number": int(Data.ofOr(keeper.teamId + ".monsters.cycle", 0)) + 1,
 			"seconds_until_next": next_wave,
 			"active_monsters": _status_active_monsters(),
 		},
@@ -354,16 +376,41 @@ func _status_resources(iron, cobalt, water) -> Dictionary:
 	return {"iron": int(iron), "cobalt": int(cobalt), "water": int(water)}
 
 func _status_keeper_stats() -> Dictionary:
-	var attack_strength := (
-		float(Data.ofOr(keeper.teamId + ".laser.dps", 0.0))
-		* float(Data.ofOr(keeper.teamId + ".laser.dpsmod", 1.0))
+	return {
+		"movement_speed": {
+			"base": float(Data.of(keeper.playerId + ".keeper1.maxSpeed")),
+			"current": keeper.currentSpeed() * _speed_ratio_for_count(keeper.carriedCarryables.size(), _carry_loss()),
+			"level": _bought_count(SPEED_UPGRADES),
+		},
+		"carry_strength": {
+			"speed_loss_per_carry": _carry_loss(),
+			"current_slowdown_percent": float(keeper.get("carrySlowdown")) * 100.0,
+			"level": _bought_count(CARRY_UPGRADES),
+		},
+		"drill_strength": {
+			"value": float(Data.of(keeper.playerId + ".keeper1.drillStrength")),
+			"level": _bought_count(DRILL_UPGRADES),
+		},
+	}
+
+func _status_laser_stats() -> Dictionary:
+	var movement_speed := (
+		float(Data.ofOr(keeper.teamId + ".laser.movespeed", 0.0))
+		* float(Data.ofOr(keeper.teamId + ".laser.movespeedmod", 1.0))
 	)
 	return {
-		"base_movement_speed": float(Data.of(keeper.playerId + ".keeper1.maxSpeed")),
-		"attack_strength": attack_strength,
-		"carry_slowdown_percent": float(keeper.get("carrySlowdown")) * 100.0,
-		"current_movement_speed": keeper.currentSpeed() * _speed_ratio(0),
-		"drill_strength": float(Data.of(keeper.playerId + ".keeper1.drillStrength")),
+		"attack_strength": {
+			"value": (
+				float(Data.ofOr(keeper.teamId + ".laser.dps", 0.0))
+				* float(Data.ofOr(keeper.teamId + ".laser.dpsmod", 1.0))
+			),
+			"level": _bought_count(ATTACK_UPGRADES),
+		},
+		"movement_speed": {
+			"value": movement_speed,
+			"while_firing": movement_speed * float(Data.ofOr(keeper.teamId + ".laser.movespeedwhilefiring", 1.0)),
+			"level": _bought_count(LASER_MOVE_UPGRADES),
+		},
 	}
 
 func _status_active_monsters() -> Array[Dictionary]:
@@ -406,6 +453,11 @@ func _preflight() -> String:
 	dome = Level.getDome(keeper.teamId)
 	if not is_instance_valid(dome) or dome.techId != "dome1" or _laser() == null:
 		return "Teacher requires one normal Laser Dome weapon"
+	var full_load := _full_load_count(_carry_loss())
+	if full_load <= 0 or full_load >= 128:
+		return "Engineer carry slowdown does not produce a bounded supported load"
+	if not is_finite(_planning_base_speed()) or _planning_base_speed() <= 0.0:
+		return "Engineer movement speed must be positive and finite"
 	return ""
 
 func _load_bindings() -> String:
@@ -422,6 +474,10 @@ func _load_bindings() -> String:
 func _navigate() -> void:
 	if shaft_exhausted:
 		if not keeper.isInsideDome:
+			if _begin_carry("The exhausted fishbone shaft begins its pending cache cleanup"):
+				return
+			if not running:
+				return
 			_change(State.RETURN, "The exhausted fishbone shaft has no pending cache cleanup")
 			return
 		var target := _next_upgrade_target()
@@ -431,14 +487,25 @@ func _navigate() -> void:
 			return
 		_release_all()
 		return
-	var wave_time := _wave_time()
-	if wave_time <= CARRY_LEAD:
-		if _choose_carry(false):
-			_change(State.CARRY, "Wave is approaching; collect a reachable cached resource")
-		elif wave_time <= WAVE_LEAD or not keeper.isInsideDome:
-			_change(State.RETURN, "Wave is approaching; return to the dome")
-		else:
-			_release_all()
+	if keeper.isInsideDome and _must_return_now():
+		var waiting_target := _next_upgrade_target()
+		var waiting_id: String = waiting_target.get("id", "")
+		if not waiting_id.is_empty() and _upgrade_ready(waiting_id):
+			_change(State.RETURN, "A pending upgrade became affordable while waiting in the dome")
+			return
+		if _wave_needed():
+			_change(State.RETURN, "The wave became imminent while waiting in the dome")
+			return
+		_release_all()
+		return
+	var carry_preview := _carry_window_plan()
+	if not carry_preview.is_empty():
+		if _begin_carry("The planned carry window has opened", carry_preview):
+			return
+		if not running:
+			return
+	if _must_return_now():
+		_change(State.RETURN, "No cache trip remains safe; return to the dome")
 		return
 	ore = _nearest_ore()
 	if ore != NO_COORD:
@@ -505,12 +572,19 @@ func _navigate() -> void:
 	_hold([&"ui_right" if branch_side > 0 else &"ui_left"])
 
 func _mine() -> void:
-	if _wave_time() <= CARRY_LEAD:
+	var active_cache_site = Level.map.getTilePos(vein.front()) if not vein.is_empty() else null
+	var carry_preview := _carry_window_plan(active_cache_site)
+	if not carry_preview.is_empty():
 		_record_cache()
-		if _choose_carry(false):
-			_change(State.CARRY, "Wave is approaching; collect a reachable cached resource")
-		else:
-			_change(State.RETURN, "Wave is approaching; no reachable cached resource remains")
+		if _begin_carry("The planned carry window opened while mining", carry_preview):
+			return
+		if not running:
+			return
+		_change(State.RETURN, "The carry window opened, but no pickup remains safe")
+		return
+	if _must_return_now():
+		_record_cache()
+		_change(State.RETURN, "No cache trip remains safe; stop mining and return")
 		return
 	if ore != NO_COORD and Level.map.getTile(ore) is Tile:
 		_hold(_axis(Level.map.getTilePos(ore)))
@@ -526,14 +600,14 @@ func _carry() -> void:
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
 		return
-	if _speed_ratio(1) < MIN_SPEED_RATIO:
-		_change(State.RETURN, "Another pickup would exceed the accepted carry slowdown")
-		return
 	if not is_instance_valid(carry) or carry.isCarried():
 		carry = null
-		if not _choose_carry():
-			_change(State.RETURN, "No reachable cached resource remains")
+		if not _choose_planned_carry():
+			_change(State.RETURN, "The carry plan is complete or no planned resource remains")
 			return
+	if not _planned_pickup_is_safe(carry):
+		_change(State.RETURN, "The next planned pickup is no longer safe")
+		return
 	var focused = keeper.focussedCarryable
 	if (
 		is_instance_valid(focused)
@@ -729,6 +803,7 @@ func _record_cache() -> void:
 		caches.append(site)
 	vein.clear()
 	ore = NO_COORD
+	_invalidate_carry_preview()
 
 func _loose_resources() -> Array:
 	var result := []
@@ -737,41 +812,195 @@ func _loose_resources() -> Array:
 			result.append(drop)
 	return result
 
-func _choose_carry(commit := true) -> bool:
-	var deficits := _reserved_resource_deficits()
-	var best: Drop
-	var best_score := INF
-	var home := Vector2(dome.global_position.x, -GameWorld.TILE_SIZE) + CONST.TILE_OFFSET
-	for drop in _loose_resources():
-		if not caches.any(func(site): return site.distance_to(drop.global_position) <= GameWorld.TILE_SIZE * 3.0):
-			continue
-		var outward := _path(keeper.global_position, drop.global_position)
-		var inward := _path(drop.global_position, home)
-		if outward.is_empty() or inward.is_empty():
-			continue
-		var ratio := _speed_ratio(1)
-		var distance: float = float(outward.size() + inward.size()) * float(GameWorld.TILE_SIZE)
-		if distance / maxf(keeper.currentSpeed() * ratio, 1.0) + 4.0 >= _wave_time():
-			continue
-		var score: float = float(outward.size()) * float(GameWorld.TILE_SIZE) / ratio
-		if int(deficits.get(drop.type, 0)) <= 0:
-			score += 100000.0
-		if score < best_score:
-			best = drop
-			best_score = score
-	if not is_instance_valid(best):
+func _begin_carry(reason: String, preview := {}) -> bool:
+	var preliminary: Dictionary = preview if not preview.is_empty() else _build_carry_plan(INF)
+	var pickup_count := int(preliminary.get("pickup_count", 0))
+	if pickup_count <= 0:
 		return false
-	if commit:
-		carry = best
+	carry_plan = preliminary
+	carry = null
+	if not _update_mobility_from_plan():
+		carry_plan.clear()
+		return false
+	carry_plan = _build_carry_plan(_wave_time())
+	pickup_count = int(carry_plan.get("pickup_count", 0))
+	if pickup_count <= 0:
+		carry_plan.clear()
+		return false
+	_change(State.CARRY, reason + "; planned pickups: " + str(pickup_count))
 	return true
 
-func _reserved_resource_deficits() -> Dictionary:
+func _carry_window_plan(extra_cache_site = null) -> Dictionary:
+	var wave_time := _wave_time()
+	if not is_finite(wave_time):
+		return {}
+	if GameWorld.runTime >= carry_preview_refresh_at or extra_cache_site != carry_preview_extra_site:
+		carry_preview_cache = _build_carry_plan(INF, extra_cache_site)
+		carry_preview_refresh_at = GameWorld.runTime + CARRY_PREVIEW_INTERVAL
+		carry_preview_extra_site = extra_cache_site
+	var preview: Dictionary = carry_preview_cache
+	if int(preview.get("pickup_count", 0)) <= 0:
+		return {}
+	var planned_seconds := float(preview.get("collection_seconds", INF))
+	planned_seconds += float(preview.get("return_seconds", INF))
+	if wave_time > planned_seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS + TICK:
+		return {}
+	return preview
+
+func _must_return_now() -> bool:
+	var wave_time := _wave_time()
+	if not is_finite(wave_time):
+		return false
+	var distance := _path_distance(keeper.global_position, _home_position())
+	if not is_finite(distance):
+		return true
+	var current_load := keeper.carriedCarryables.size()
+	var return_seconds := _return_seconds(distance, current_load, _planning_base_speed(), _carry_loss())
+	return wave_time <= return_seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS
+
+func _build_carry_plan(wave_time: float, extra_cache_site = null) -> Dictionary:
+	var remaining: Array[Drop] = []
+	for candidate in _loose_resources():
+		if not (candidate is Drop):
+			continue
+		var near_cache := caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0)
+		if not near_cache and extra_cache_site is Vector2:
+			near_cache = extra_cache_site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0
+		if near_cache:
+			remaining.append(candidate)
+	var counts := {}
+	var pickup_count := 0
+	var collection_seconds := 0.0
+	var return_distance := INF
+	var return_seconds := INF
+	var position := keeper.global_position
+	var load := keeper.carriedCarryables.size()
+	var base_speed := _planning_base_speed()
+	var loss := _carry_loss()
+	var inward_distances := {}
+	while not remaining.is_empty() and _speed_ratio_for_count(load + 1, loss) >= MIN_SPEED_RATIO:
+		var deficits := _reserved_resource_deficits(counts)
+		var best: Drop
+		var best_needed := false
+		var best_outward_seconds := INF
+		var best_return_distance := INF
+		for drop in remaining:
+			if not is_instance_valid(drop) or drop.absorbed or drop.independent or drop.isCarried():
+				continue
+			var outward_distance := _path_distance(position, drop.global_position)
+			var instance_id := drop.get_instance_id()
+			var inward_distance := float(inward_distances.get(instance_id, -1.0))
+			if inward_distance < 0.0:
+				inward_distance = _path_distance(drop.global_position, _home_position())
+				inward_distances[instance_id] = inward_distance
+			if not is_finite(outward_distance) or not is_finite(inward_distance):
+				continue
+			var outward_seconds := _return_seconds(outward_distance, load, base_speed, loss)
+			var inward_seconds := _return_seconds(inward_distance, load + 1, base_speed, loss)
+			var planned_total := collection_seconds + outward_seconds + CARRY_PICKUP_SECONDS + inward_seconds
+			if is_finite(wave_time) and planned_total + WAVE_LEAD + CARRY_SAFETY_SECONDS >= wave_time:
+				continue
+			var needed := int(deficits.get(drop.type, 0)) > 0
+			if not _carry_candidate_is_better(drop, needed, outward_seconds, best, best_needed, best_outward_seconds):
+				continue
+			best = drop
+			best_needed = needed
+			best_outward_seconds = outward_seconds
+			best_return_distance = inward_distance
+		if not is_instance_valid(best):
+			break
+		remaining.erase(best)
+		counts[best.type] = int(counts.get(best.type, 0)) + 1
+		pickup_count += 1
+		collection_seconds += best_outward_seconds + CARRY_PICKUP_SECONDS
+		return_distance = best_return_distance
+		load += 1
+		return_seconds = _return_seconds(return_distance, load, base_speed, loss)
+		position = best.global_position
+	return {
+		"counts": counts,
+		"pickup_count": pickup_count,
+		"final_load": load,
+		"collection_seconds": collection_seconds,
+		"return_distance": return_distance,
+		"return_seconds": return_seconds,
+	}
+
+func _carry_candidate_is_better(
+	drop: Drop,
+	needed: bool,
+	outward_seconds: float,
+	best: Drop,
+	best_needed: bool,
+	best_outward_seconds: float,
+) -> bool:
+	if not is_instance_valid(best):
+		return true
+	if needed != best_needed:
+		return needed
+	if not is_equal_approx(outward_seconds, best_outward_seconds):
+		return outward_seconds < best_outward_seconds
+	if str(drop.type) != str(best.type):
+		return str(drop.type) < str(best.type)
+	if not is_equal_approx(drop.global_position.y, best.global_position.y):
+		return drop.global_position.y < best.global_position.y
+	if not is_equal_approx(drop.global_position.x, best.global_position.x):
+		return drop.global_position.x < best.global_position.x
+	return drop.get_instance_id() < best.get_instance_id()
+
+func _invalidate_carry_preview() -> void:
+	carry_preview_cache.clear()
+	carry_preview_refresh_at = 0.0
+	carry_preview_extra_site = null
+
+func _choose_planned_carry() -> bool:
+	var counts: Dictionary = carry_plan.get("counts", {})
+	var deficits := _reserved_resource_deficits()
+	var best: Drop
+	var best_needed := false
+	var best_distance := INF
+	for candidate in _loose_resources():
+		if not (candidate is Drop) or int(counts.get(candidate.type, 0)) <= 0:
+			continue
+		if not caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0):
+			continue
+		var distance := _path_distance(keeper.global_position, candidate.global_position)
+		if not is_finite(distance):
+			continue
+		var needed := int(deficits.get(candidate.type, 0)) > 0
+		if not _carry_candidate_is_better(candidate, needed, distance, best, best_needed, best_distance):
+			continue
+		best = candidate
+		best_needed = needed
+		best_distance = distance
+	if not is_instance_valid(best):
+		return false
+	carry = best
+	return true
+
+func _planned_pickup_is_safe(drop: Drop) -> bool:
+	var next_load := keeper.carriedCarryables.size() + 1
+	var loss := _carry_loss()
+	if _speed_ratio_for_count(next_load, loss) < MIN_SPEED_RATIO:
+		return false
+	var outward_distance := _path_distance(keeper.global_position, drop.global_position)
+	var inward_distance := _path_distance(drop.global_position, _home_position())
+	if not is_finite(outward_distance) or not is_finite(inward_distance):
+		return false
+	var base_speed := _planning_base_speed()
+	var seconds := _return_seconds(outward_distance, next_load - 1, base_speed, loss)
+	seconds += CARRY_PICKUP_SECONDS + _return_seconds(inward_distance, next_load, base_speed, loss)
+	return not is_finite(_wave_time()) or seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS < _wave_time()
+
+func _reserved_resource_deficits(extra_resources := {}) -> Dictionary:
 	var available := {}
 	for resource in ORE_TYPES:
 		available[resource] = int(Data.getInventory(resource, keeper.teamId))
 	for drop in keeper.carriedCarryables:
 		if drop is Drop and available.has(drop.type):
 			available[drop.type] += 1
+	for resource in extra_resources:
+		available[resource] = int(available.get(resource, 0)) + int(extra_resources[resource])
 	var seen := {}
 	for intent in INTENT_PRIORITY:
 		if not pending_intents.has(intent):
@@ -793,11 +1022,34 @@ func _reserved_resource_deficits() -> Dictionary:
 			available[resource] = int(available.get(resource, 0)) - int(cost[resource])
 	return {}
 
-func _speed_ratio(extra: int) -> float:
-	var count := keeper.carriedCarryables.size() + extra
-	var loss := float(Data.of(keeper.playerId + ".keeper1.speedLossPerCarry"))
+func _home_position() -> Vector2:
+	return Vector2(dome.global_position.x, -GameWorld.TILE_SIZE) + CONST.TILE_OFFSET
+
+func _planning_base_speed() -> float:
+	var speed := float(Data.of(keeper.playerId + ".keeper1.maxSpeed"))
+	return speed + float(Data.ofOr(keeper.playerId + ".keeper.speedBuff", 0.0))
+
+func _carry_loss() -> float:
+	return float(Data.of(keeper.playerId + ".keeper1.speedLossPerCarry"))
+
+func _speed_ratio_for_count(count: int, loss: float) -> float:
 	var ratio := 1.0 - 0.005 * loss * count * (count + 1)
 	return maxf(ratio, 0.0)
+
+func _effective_speed(count: int, base_speed: float, loss: float) -> float:
+	return base_speed * _speed_ratio_for_count(count, loss)
+
+func _return_seconds(distance: float, count: int, base_speed: float, loss: float) -> float:
+	var speed := _effective_speed(count, base_speed, loss)
+	if not is_finite(speed) or speed <= 0.0:
+		return INF
+	return distance / speed
+
+func _full_load_count(loss: float) -> int:
+	var count := 0
+	while count < 128 and _speed_ratio_for_count(count + 1, loss) >= MIN_SPEED_RATIO:
+		count += 1
+	return count
 
 func _aim() -> void:
 	var weapon = _laser(); var target = _visible_monster()
@@ -904,6 +1156,73 @@ func _resolve_alternating(primary: Array[StringName], secondary: Array[StringNam
 		return second
 	return {"exhausted": bool(first.get("exhausted", false)) and bool(second.get("exhausted", false))}
 
+func _update_mobility_from_plan() -> bool:
+	var distance := float(carry_plan.get("return_distance", INF))
+	var planned_load := int(carry_plan.get("final_load", 0))
+	if not is_finite(distance) or planned_load <= 0:
+		return true
+	var base_speed := _planning_base_speed()
+	var loss := _carry_loss()
+	var full_load := _full_load_count(loss)
+	if full_load <= 0:
+		_fail("The configured carry slowdown never permits one resource")
+		return false
+	var safe_load := 0
+	for count in range(1, full_load + 1):
+		if _return_seconds(distance, count, base_speed, loss) <= CARRY_RETURN_TARGET_SECONDS:
+			safe_load = count
+	var capacity_ratio := float(safe_load) / float(full_load)
+	if capacity_ratio >= MOBILITY_CAPACITY_RATIO_THRESHOLD:
+		return true
+
+	var speed_target := _resolve_chain(SPEED_UPGRADES)
+	var strength_target := _resolve_chain(CARRY_UPGRADES)
+	var speed_id: String = speed_target.get("id", "")
+	var strength_id: String = strength_target.get("id", "")
+	if speed_id.is_empty() and strength_id.is_empty():
+		return true
+	var current_seconds := _return_seconds(distance, planned_load, base_speed, loss)
+	var speed_gain := -INF
+	if not speed_id.is_empty():
+		var current_max_speed := float(Data.of(keeper.playerId + ".keeper1.maxSpeed"))
+		var upgraded_max_speed = _upgrade_property_value(speed_id, "maxspeed", current_max_speed)
+		if upgraded_max_speed == null:
+			_fail("Supported speed upgrade has no maxSpeed property change: " + speed_id)
+			return false
+		var speed_buff := float(Data.ofOr(keeper.playerId + ".keeper.speedBuff", 0.0))
+		speed_gain = current_seconds - _return_seconds(distance, planned_load, float(upgraded_max_speed) + speed_buff, loss)
+	var strength_gain := -INF
+	if not strength_id.is_empty():
+		var upgraded_loss = _upgrade_property_value(strength_id, "speedlosspercarry", loss)
+		if upgraded_loss == null:
+			_fail("Supported carry upgrade has no speedLossPerCarry property change: " + strength_id)
+			return false
+		strength_gain = current_seconds - _return_seconds(distance, planned_load, base_speed, float(upgraded_loss))
+
+	var previous_arm := mobility_arm
+	mobility_arm = MobilityArm.STRENGTH if strength_gain > speed_gain + 0.0001 else MobilityArm.SPEED
+	var was_pending := pending_intents.has(UpgradeIntent.MOBILITY)
+	pending_intents[UpgradeIntent.MOBILITY] = true
+	if not was_pending or previous_arm != mobility_arm:
+		var arm_name := "strength" if mobility_arm == MobilityArm.STRENGTH else "speed"
+		var reason := "Mobility upgrade requested from carry plan: %s; safe load %d/%d; gains %.2fs/%.2fs"
+		_queue_record(reason % [arm_name, safe_load, full_load, speed_gain, strength_gain])
+	return true
+
+func _upgrade_property_value(id: String, property_name: String, current_value: float):
+	if not GameWorld.upgrades.has(id):
+		return null
+	var changed_value := current_value
+	var found := false
+	for change in GameWorld.upgrades[id].get("propertychanges", []):
+		var key_name := str(change.keyName).to_lower()
+		var key := str(change.key).to_lower()
+		if key_name != property_name and not key.ends_with("." + property_name):
+			continue
+		changed_value = float(change.getChangedValue(changed_value))
+		found = true
+	return changed_value if found else null
+
 func _resolve_intent(intent: int) -> Dictionary:
 	var target := {}
 	match intent:
@@ -918,7 +1237,7 @@ func _resolve_intent(intent: int) -> Dictionary:
 			target = _resolve_chain(DRILL_UPGRADES, true)
 			target["fulfills"] = true
 		UpgradeIntent.MOBILITY:
-			target = _resolve_alternating(SPEED_UPGRADES, CARRY_UPGRADES, mobility_speed_next)
+			target = _resolve_alternating(SPEED_UPGRADES, CARRY_UPGRADES, mobility_arm == MobilityArm.SPEED)
 			target["fulfills"] = true
 	target["intent"] = intent
 	return target
@@ -973,12 +1292,11 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 		return
 	if id != active_upgrade_id:
 		return
+	_invalidate_carry_preview()
 	if active_upgrade_fulfills:
 		pending_intents.erase(active_upgrade_intent)
 		if active_upgrade_intent == UpgradeIntent.COMBAT:
 			combat_attack_next = active_upgrade_arm != 0
-		elif active_upgrade_intent == UpgradeIntent.MOBILITY:
-			mobility_speed_next = active_upgrade_arm != 0
 		elif active_upgrade_intent == UpgradeIntent.DRILL:
 			drill_hits_by_tile.clear()
 	_clear_active_upgrade()
@@ -1002,6 +1320,16 @@ func _path(from: Vector2, to: Vector2) -> PackedVector2Array:
 			return result
 	return PackedVector2Array()
 
+func _path_distance(from: Vector2, to: Vector2) -> float:
+	var points := _path(from, to)
+	if points.is_empty():
+		return INF
+	var distance := from.distance_to(points[0])
+	for index in range(1, points.size()):
+		distance += points[index - 1].distance_to(points[index])
+	distance += points[points.size() - 1].distance_to(to)
+	return distance
+
 func _move_open(target: Vector2) -> bool:
 	var points := _path(keeper.global_position, target)
 	if points.is_empty():
@@ -1012,8 +1340,9 @@ func _move_open(target: Vector2) -> bool:
 func _change(next: State, reason: String) -> void:
 	_release_all()
 	var previous := state
-	if next == State.RETURN and return_started_at < 0.0 and not keeper.isInsideDome:
-		return_started_at = GameWorld.runTime
+	if previous == State.CARRY and next != State.RECOVER:
+		carry = null
+		carry_plan.clear()
 	state = next; delay = 0.2; pickup_failures = 0
 	_reset_progress()
 	if state == State.RETURN:
@@ -1106,8 +1435,14 @@ func _wave_time() -> float:
 func _wave_needed() -> bool:
 	return _wave("wavebattle") or _wave("wavepresent") or _wave_time() <= WAVE_LEAD
 
-func _on_drop_picked_up(_drop, carrier) -> void:
+func _on_drop_picked_up(drop, carrier) -> void:
 	if carrier == keeper:
+		_invalidate_carry_preview()
+		if state == State.CARRY and drop is Drop:
+			var counts: Dictionary = carry_plan.get("counts", {})
+			if int(counts.get(drop.type, 0)) > 0:
+				counts[drop.type] = int(counts[drop.type]) - 1
+				carry_plan["counts"] = counts
 		_queue_record("Keeper picked up a resource")
 
 func _on_monster_spawned(monster: Monster) -> void:
@@ -1126,10 +1461,6 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 			if loss_ratio > WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD:
 				pending_intents[UpgradeIntent.COMBAT] = true
 		wave_health_tracking = false
-	elif property.ends_with(".event.keepers.insidedome") and not bool(old_value) and bool(new_value):
-		if return_started_at >= 0.0 and GameWorld.runTime - return_started_at > RETURN_MOBILITY_SECONDS_THRESHOLD:
-			pending_intents[UpgradeIntent.MOBILITY] = true
-		return_started_at = -1.0
 	if property.ends_with(".dome.health") or property.ends_with(".dome.maxhealth"):
 		_sync_repair_intent()
 	_queue_record("Game data changed: " + property.get_slice(".", property.get_slice_count(".") - 1))
@@ -1191,8 +1522,9 @@ func _release_all() -> void:
 
 func _exhaust_shaft(reason: String) -> void:
 	shaft_exhausted = true
-	if _choose_carry():
-		_change(State.CARRY, reason + "; begin one safely reachable cache cleanup phase")
+	if _begin_carry(reason + "; begin one safely reachable cache cleanup phase"):
+		return
+	if not running:
 		return
 	_change(State.RETURN, reason + "; return without ending collection")
 

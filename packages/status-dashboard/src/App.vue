@@ -12,16 +12,16 @@ const snapshot = computed(() => {
   return value?.available ? value : null
 })
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
+const preciseNumber = new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 })
 const format = (value: number, suffix = '') => `${number.format(value)}${suffix}`
+const precise = (value: number) => preciseNumber.format(value)
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds) % 60).padStart(2, '0')}`
 const resources = (value: Record<string, number>) => Object.entries(value).filter(([, count]) => count).map(([name, count]) => `${count} ${name}`).join(' · ') || 'None'
 const keeperRows = computed(() => snapshot.value
   ? [
-      ['Base movement speed', format(snapshot.value.keeper.stats.base_movement_speed)],
-      ['Attack strength', format(snapshot.value.keeper.stats.attack_strength)],
-      ['Current movement speed', format(snapshot.value.keeper.stats.current_movement_speed)],
-      ['Carry slowdown', format(snapshot.value.keeper.stats.carry_slowdown_percent, '%')],
-      ['Drill strength', format(snapshot.value.keeper.stats.drill_strength)],
+      ['Movement speed', `${format(snapshot.value.keeper.stats.movement_speed.current)} current · ${format(snapshot.value.keeper.stats.movement_speed.base)} base · Level ${snapshot.value.keeper.stats.movement_speed.level}`],
+      ['Carry strength', `${format(snapshot.value.keeper.stats.carry_strength.current_slowdown_percent, '%')} current slowdown · ${precise(snapshot.value.keeper.stats.carry_strength.speed_loss_per_carry)} loss · Level ${snapshot.value.keeper.stats.carry_strength.level}`],
+      ['Drill strength', `${format(snapshot.value.keeper.stats.drill_strength.value)} · Level ${snapshot.value.keeper.stats.drill_strength.level}`],
       ['Carried resources', resources(snapshot.value.keeper.carried_resources)],
     ]
   : [])
@@ -96,9 +96,15 @@ const keeperRows = computed(() => snapshot.value
         <div class="mt-4 grid gap-4 md:grid-cols-2">
           <section class="surface p-5">
             <h2 class="m-0 text-xl font-650">
-              Dome · {{ format(snapshot.dome.health) }} / {{ format(snapshot.dome.max_health) }} health
+              Dome · {{ format(snapshot.dome.health.current) }} / {{ format(snapshot.dome.health.maximum) }} health · Level {{ snapshot.dome.health.level }}
             </h2>
             <dl class="mt-4">
+              <div class="status-row">
+                <dt>Laser attack</dt><dd>{{ format(snapshot.dome.laser.attack_strength.value) }} · Level {{ snapshot.dome.laser.attack_strength.level }}</dd>
+              </div>
+              <div class="status-row">
+                <dt>Laser movement</dt><dd>{{ precise(snapshot.dome.laser.movement_speed.value) }} · {{ precise(snapshot.dome.laser.movement_speed.while_firing) }} firing · Level {{ snapshot.dome.laser.movement_speed.level }}</dd>
+              </div>
               <div v-for="(count, name) in snapshot.dome.stored_resources" :key="name" class="status-row">
                 <dt class="capitalize">
                   {{ name }}
@@ -108,7 +114,7 @@ const keeperRows = computed(() => snapshot.value
           </section>
           <section class="surface p-5">
             <h2 class="m-0 text-xl font-650">
-              Wave · {{ snapshot.wave.seconds_until_next === null ? '—' : `${Math.ceil(snapshot.wave.seconds_until_next)}s` }}
+              Wave {{ snapshot.wave.number }} · {{ snapshot.wave.seconds_until_next === null ? '—' : `${Math.ceil(snapshot.wave.seconds_until_next)}s` }}
             </h2>
             <dl class="mt-4">
               <div v-for="group in snapshot.wave.active_monsters" :key="group.kind" class="status-row">
