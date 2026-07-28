@@ -78,6 +78,7 @@ var align_x := 0.0
 var branch_entry_x := 0.0
 var bypass_side := 1
 var bypass_reversed := false
+var shaft_exhausted := false
 var tick_time := 0.0
 var delay := 0.0
 var pickup_failures := 0
@@ -132,6 +133,7 @@ func start() -> bool:
 	running = true; state = State.NAVIGATE; nav_mode = NavMode.ALIGN
 	branch_row = -1000000; branch_side = 1
 	align_x = dome.global_position.x; branch_entry_x = align_x
+	shaft_exhausted = false
 	caches.clear()
 	_reset_progress()
 	keeper.mined.connect(_on_mined)
@@ -147,28 +149,29 @@ func start() -> bool:
 	return true
 
 func stop() -> void:
-	var was_running := running
-	if was_running:
-		InputSystem.game_not_in_focus = false
+	if not running:
+		return
+	InputSystem.game_not_in_focus = false
 	_release_all()
 	for property in observed_properties:
 		Data.unlisten(self, property)
 	observed_properties.clear()
-	if is_instance_valid(keeper) and keeper.mined.is_connected(_on_mined):
-		keeper.mined.disconnect(_on_mined)
-	if Level.drops.synchronizer.drop_picked_up.is_connected(_on_drop_picked_up):
+	if is_instance_valid(keeper):
+		if keeper.mined.is_connected(_on_mined):
+			keeper.mined.disconnect(_on_mined)
+		var monster_wave = Level.monstersByTeamId.get(keeper.teamId)
+		if is_instance_valid(monster_wave) and is_instance_valid(monster_wave.monsterSynchronizer) and monster_wave.monsterSynchronizer.spawned.is_connected(_on_monster_spawned):
+			monster_wave.monsterSynchronizer.spawned.disconnect(_on_monster_spawned)
+	if is_instance_valid(Level.drops) and is_instance_valid(Level.drops.synchronizer) and Level.drops.synchronizer.drop_picked_up.is_connected(_on_drop_picked_up):
 		Level.drops.synchronizer.drop_picked_up.disconnect(_on_drop_picked_up)
-	if Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.is_connected(_on_monster_spawned):
-		Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.disconnect(_on_monster_spawned)
 	if GameWorld.upgradeBought.is_connected(_on_upgrade_bought):
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null
-	if was_running:
-		Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
-		InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
-		recording.clear()
+	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
+	InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
+	recording.clear()
 
 func _process(delta: float) -> void:
 	status_elapsed += delta
@@ -410,6 +413,17 @@ func _load_bindings() -> String:
 	return ""
 
 func _navigate() -> void:
+	if shaft_exhausted:
+		if not keeper.isInsideDome:
+			_change(State.RETURN, "The exhausted fishbone shaft has no pending cache cleanup")
+			return
+		var target := _next_upgrade_target()
+		var id: String = target.get("id", "")
+		if _wave_needed() or (not id.is_empty() and _upgrade_ready(id)):
+			_change(State.RETURN, "The exhausted fishbone shaft is idle and a station task is ready")
+			return
+		_release_all()
+		return
 	var wave_time := _wave_time()
 	if wave_time <= CARRY_LEAD:
 		if _choose_carry(false):
@@ -461,7 +475,7 @@ func _navigate() -> void:
 		if bypass_next is Tile and bypass_next.type == CONST.BORDER:
 			_release_all()
 			if bypass_reversed:
-				_fail("No deeper fishbone shaft exists beyond the revealed border")
+				_exhaust_shaft("Both lateral bypass directions ended at revealed border")
 				return
 			bypass_reversed = true
 			bypass_side = -1
@@ -1020,6 +1034,9 @@ func _track_progress(delta: float) -> void:
 	stalled += delta
 	if stalled < STALL_SECONDS:
 		return
+	if state == State.NAVIGATE and nav_mode == NavMode.BYPASS:
+		_exhaust_shaft("The revealed-border bypass made no directed progress")
+		return
 	interrupted = state; probe_index = (DIRECTIONS.find(action) + 1) % DIRECTIONS.size()
 	probe_count = 0; probe_time = 0.0
 	probe_origin = keeper.global_position
@@ -1154,7 +1171,14 @@ func _release_all() -> void:
 		_emit(action, false)
 	held.clear()
 
+func _exhaust_shaft(reason: String) -> void:
+	shaft_exhausted = true
+	if _choose_carry():
+		_change(State.CARRY, reason + "; begin one safely reachable cache cleanup phase")
+		return
+	_change(State.RETURN, reason + "; return without ending collection")
+
 func _fail(reason: String) -> void:
 	ModLoaderLog.error(reason + " state=" + str(State.keys()[state]), LOG_NAME)
-	stop()
+	_record("teacher_failed", reason, null)
 	failed.emit(reason)
