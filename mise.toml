@@ -42,7 +42,7 @@ run = "bun run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
-depends = ["lint", "typecheck"]
+depends = ["godot:check", "lint", "typecheck"]
 
 [tasks.decompile]
 description = "Decompile Dome Keeper and link repository mods"
@@ -51,6 +51,10 @@ run = "bun run decompile"
 [tasks."godot:open"]
 description = "Open the decompiled project in Godot"
 run = "\"{{ env.GODOT_BIN }}\" ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION/project.godot"
+
+[tasks."godot:check"]
+description = "Check that repository mods load in an isolated headless game"
+run = "bun run check:godot"
 
 [tasks."godot:run"]
 description = "Run the decompiled project in Godot"

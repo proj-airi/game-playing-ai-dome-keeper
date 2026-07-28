@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "check:godot": "bun scripts/check-domekeeper-mod.ts",
     "decompile": "bun scripts/decompile-domekeeper.ts",
     "record": "bun scripts/record-domekeeper.ts",
     "lint": "eslint .",

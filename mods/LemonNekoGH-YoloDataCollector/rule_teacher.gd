@@ -49,6 +49,7 @@ var recording := {}
 var record_pending := false
 var record_reason := ""
 var previous_pause_when_out_of_focus := true
+var previous_use_mouse_dome_gameplay := false
 var state := State.NAVIGATE
 var nav_mode := NavMode.ALIGN
 var keeper: Keeper
@@ -102,6 +103,9 @@ func _ready() -> void:
 	_write_status()
 
 func start() -> bool:
+	if running:
+		return true
+
 	var error := _preflight()
 	if error.is_empty():
 		error = _load_bindings()
@@ -110,7 +114,9 @@ func start() -> bool:
 		return false
 
 	previous_pause_when_out_of_focus = Options.pauseWhenOutOfFocus
+	previous_use_mouse_dome_gameplay = Options.useMouseDomeGameplay
 	Options.pauseWhenOutOfFocus = false
+	Options.useMouseDomeGameplay = false
 	InputSystem.game_not_in_focus = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	pending_intents.clear()
@@ -170,6 +176,7 @@ func stop() -> void:
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
+	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
 	InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
 	recording.clear()
 
@@ -797,6 +804,7 @@ func _aim() -> void:
 	if weapon == null or not weapon.inputReady or target == null:
 		_release_all()
 		return
+	var damageable: bool = target.canBeHit() and not target.invulnerable
 	var aim: Vector2 = target.getCenter() - weapon.global_position
 	var error := wrapf(aim.angle() - (weapon.rotation - CONST.PI_HALF), -PI, PI)
 	if aim.x < 0.0 and error > CONST.PI_HALF:
@@ -807,7 +815,7 @@ func _aim() -> void:
 	var actions: Array[StringName] = []
 	if absf(error) > LASER_STEERING_CUTOFF_ANGLE:
 		actions.append(&"ui_right" if error > 0.0 else &"ui_left")
-	if absf(error) <= LASER_FIRE_BRAKE_ANGLE:
+	if damageable and absf(error) <= LASER_FIRE_BRAKE_ANGLE:
 		var started_firing := not held.has(fire_action)
 		actions.append(fire_action)
 		_hold(actions)
@@ -819,19 +827,29 @@ func _aim() -> void:
 func _visible_monster():
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
 	var best = null
+	var best_damageable := false
 	var best_distance := INF
 	if not is_instance_valid(wave):
 		return null
 	for monster in wave.monstersInWave:
-		if not is_instance_valid(monster) or monster.dead or monster.leaving or not monster.canBeHit():
+		if not is_instance_valid(monster) or monster.dead or monster.leaving:
+			continue
+		if monster.type == Monster.Type.WORM_ROCK:
 			continue
 		var screen_position: Vector2 = monster.get_global_transform_with_canvas().origin
 		if not monster.is_visible_in_tree() or not get_viewport().get_visible_rect().has_point(screen_position):
 			continue
+		var damageable: bool = monster.canBeHit() and not monster.invulnerable
 		var distance := dome.global_position.distance_squared_to(monster.getCenter())
-		if distance < best_distance or (is_equal_approx(distance, best_distance) and monster.get_instance_id() < best.get_instance_id()):
-			best = monster
-			best_distance = distance
+		if best != null and not damageable and best_damageable:
+			continue
+		var closer := distance < best_distance
+		var earlier: bool = is_equal_approx(distance, best_distance) and monster.get_instance_id() < best.get_instance_id()
+		if best != null and damageable == best_damageable and not closer and not earlier:
+			continue
+		best = monster
+		best_damageable = damageable
+		best_distance = distance
 	return best
 
 func _laser():
