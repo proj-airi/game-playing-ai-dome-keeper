@@ -6,6 +6,7 @@ const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollecto
 
 enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
 enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
+enum CacheCleanupMode { NONE, PENDING_DEFENSE, ACTIVE }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 enum MobilityArm { SPEED, STRENGTH }
 
@@ -15,13 +16,14 @@ const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
 const RECORDING_MOVIE := "recording.avi"
 const TICK := 0.1
-const CARRY_RETURN_TARGET_SECONDS := 15.0
+const MOBILITY_RETURN_TARGET_SECONDS := 15.0
 const STATION_ENTRY_SECONDS := 2.0
 const CARRY_PICKUP_SECONDS := 0.35
 const CARRY_PREVIEW_INTERVAL := 1.0
 const GADGET_UI_STEP_LIMIT := 40
 const GADGET_TASK_WAIT_LIMIT := 100
 const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
+const CACHE_CLEANUP_LOAD_MULTIPLIER := 2
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
 const REVEAL_TILES := 1
@@ -79,7 +81,9 @@ var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
 var ore := NO_COORD
 var ore_approach_coord := NO_COORD
-var mine_resume_coord := NO_COORD
+var branch_resume_coord := NO_COORD
+var cache_cleanup_mode := CacheCleanupMode.NONE
+var ignored_cache_drop_ids := {}
 var carry: Drop
 var carry_plan := {}
 var carry_preview_cache := {}
@@ -147,7 +151,8 @@ func start() -> bool:
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
 	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
-	ore_approach_coord = NO_COORD; mine_resume_coord = NO_COORD
+	ore_approach_coord = NO_COORD; branch_resume_coord = NO_COORD
+	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
 	carry_preview_refresh_at = 0.0
@@ -208,6 +213,7 @@ func stop() -> void:
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
 	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
+	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
 	carry_preview_extra_site = null
@@ -516,14 +522,29 @@ func _navigate() -> void:
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
 		return
-	if shaft_exhausted:
-		if not keeper.isInsideDome:
-			if _begin_carry("The exhausted fishbone shaft begins its pending cache cleanup"):
-				return
-			if not running:
-				return
-			_change(State.RETURN, "The exhausted fishbone shaft has no pending cache cleanup")
+	if cache_cleanup_mode == CacheCleanupMode.ACTIVE:
+		if keeper.isInsideStation or _leaf() != "Keeper1InputProcessor":
+			_change(State.RETURN, "The active cache cleanup must finish leaving the station")
 			return
+		if _reachable_cached_resource_count() <= 0:
+			_change_cache_cleanup(CacheCleanupMode.NONE, "No known reachable cached resource remains")
+		elif _begin_carry("The active cache cleanup starts another trip"):
+			return
+		elif not running:
+			return
+		elif not keeper.isInsideDome or _wave_needed():
+			_change(State.RETURN, "No cache cleanup trip remains safe before defense")
+			return
+		else:
+			var cleanup_target := _next_upgrade_target()
+			var cleanup_upgrade_id: String = cleanup_target.get("id", "")
+			if not cleanup_upgrade_id.is_empty() and _upgrade_ready(cleanup_upgrade_id):
+				_change(State.RETURN, "Cache cleanup requested an affordable mobility or resource upgrade")
+				return
+			_release_all()
+			delay = minf(CARRY_PREVIEW_INTERVAL, maxf(_wave_time() - STATION_ENTRY_SECONDS, TICK))
+			return
+	if shaft_exhausted:
 		var target := _next_upgrade_target()
 		var id: String = target.get("id", "")
 		if _wave_needed() or (not id.is_empty() and _upgrade_ready(id)):
@@ -551,15 +572,15 @@ func _navigate() -> void:
 	if _must_return_now():
 		_change(State.RETURN, "No cache trip remains safe; return to the dome")
 		return
-	if mine_resume_coord != NO_COORD:
+	if branch_resume_coord != NO_COORD:
 		var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
-		if current_coord == mine_resume_coord:
-			mine_resume_coord = NO_COORD
+		if current_coord == branch_resume_coord:
+			branch_resume_coord = NO_COORD
 			_change_navigation(NavMode.BRANCH, "The keeper returned to the interrupted fishbone branch")
 			_release_all()
 			delay = 0.2
 			return
-		if _move_open(Level.map.getTilePos(mine_resume_coord)):
+		if _move_open(Level.map.getTilePos(branch_resume_coord)):
 			return
 		_fail("No open path remains to the interrupted fishbone branch")
 		return
@@ -567,8 +588,6 @@ func _navigate() -> void:
 	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	ore = _nearest_ore()
 	if ore != NO_COORD:
-		if nav_mode == NavMode.BRANCH:
-			mine_resume_coord = cell
 		ore_approach_coord = _faster_open_ore_approach(ore)
 		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
 		return
@@ -696,13 +715,21 @@ func _carry() -> void:
 		and focused.type == carry.type
 	):
 		carry = focused
+		if pickup_failures >= 3:
+			_ignore_failed_cleanup_drop()
+			_change(State.RETURN, "Repeated resource pickup attempts failed")
+			return
+		pickup_failures += 1
 		_release_all(); _tap(&"keeper1_pickup"); delay = 0.35
 		return
 	if _move_open(carry.global_position):
 		return
-	pickup_failures += 1; carry = null
+	pickup_failures += 1
 	if pickup_failures >= 3:
+		_ignore_failed_cleanup_drop()
 		_change(State.RETURN, "Repeated resource pickup or path attempts failed")
+		return
+	carry = null
 
 func _return() -> void:
 	if gadget_delivery_pending and not is_instance_valid(_carried_gadget()):
@@ -1306,13 +1333,50 @@ func _record_cache_site(site: Vector2) -> void:
 	if caches.all(func(existing): return existing.distance_to(site) > GameWorld.TILE_SIZE):
 		caches.append(site)
 	_invalidate_carry_preview()
+	_maybe_request_cache_cleanup()
 
-func _loose_resources() -> Array:
-	var result := []
-	for drop in Level.drops.get_all_drops().values():
-		if drop is Drop and drop.carryableType == "resource" and not drop.absorbed and not drop.independent and not drop.isCarried():
-			result.append(drop)
+func _cached_resources(extra_cache_site = null) -> Array[Drop]:
+	var result: Array[Drop] = []
+	for candidate in Level.drops.get_all_drops().values():
+		if not candidate is Drop:
+			continue
+		if candidate.carryableType != "resource" or candidate.absorbed or candidate.independent or candidate.isCarried():
+			continue
+		if ignored_cache_drop_ids.has(candidate.get_instance_id()):
+			continue
+		var near_cache := caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0)
+		if not near_cache and extra_cache_site is Vector2:
+			near_cache = extra_cache_site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0
+		if near_cache:
+			result.append(candidate)
 	return result
+
+func _reachable_cached_resource_count() -> int:
+	var reachable := 0
+	for drop in _cached_resources():
+		if not is_finite(_path_distance(keeper.global_position, drop.global_position)):
+			continue
+		if not is_finite(_path_distance(drop.global_position, _home_position())):
+			continue
+		reachable += 1
+	return reachable
+
+func _maybe_request_cache_cleanup() -> void:
+	if state != State.MINE or cache_cleanup_mode != CacheCleanupMode.NONE:
+		return
+	var full_load := _full_load_count(_carry_loss())
+	var threshold := full_load * CACHE_CLEANUP_LOAD_MULTIPLIER
+	var reachable := _reachable_cached_resource_count()
+	if reachable < threshold:
+		return
+	var reason := "Known reachable cache backlog reached %d resources; cleanup threshold: %d"
+	_change_cache_cleanup(CacheCleanupMode.PENDING_DEFENSE, reason % [reachable, threshold])
+
+func _ignore_failed_cleanup_drop() -> void:
+	if cache_cleanup_mode != CacheCleanupMode.ACTIVE or not is_instance_valid(carry):
+		return
+	ignored_cache_drop_ids[carry.get_instance_id()] = true
+	ModLoaderLog.info("A repeatedly failing resource was excluded from the active cache cleanup", LOG_NAME)
 
 func _begin_carry(reason: String, preview := {}) -> bool:
 	var preliminary: Dictionary = preview if not preview.is_empty() else _build_carry_plan(INF)
@@ -1361,15 +1425,7 @@ func _must_return_now() -> bool:
 	return wave_time <= return_seconds + STATION_ENTRY_SECONDS
 
 func _build_carry_plan(wave_time: float, extra_cache_site = null) -> Dictionary:
-	var remaining: Array[Drop] = []
-	for candidate in _loose_resources():
-		if not (candidate is Drop):
-			continue
-		var near_cache := caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0)
-		if not near_cache and extra_cache_site is Vector2:
-			near_cache = extra_cache_site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0
-		if near_cache:
-			remaining.append(candidate)
+	var remaining := _cached_resources(extra_cache_site)
 	var counts := {}
 	var pickup_count := 0
 	var collection_seconds := 0.0
@@ -1461,10 +1517,8 @@ func _choose_planned_carry() -> bool:
 	var best: Drop
 	var best_needed := false
 	var best_distance := INF
-	for candidate in _loose_resources():
-		if not (candidate is Drop) or int(counts.get(candidate.type, 0)) <= 0:
-			continue
-		if not caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0):
+	for candidate in _cached_resources():
+		if int(counts.get(candidate.type, 0)) <= 0:
 			continue
 		var distance := _path_distance(keeper.global_position, candidate.global_position)
 		if not is_finite(distance):
@@ -1680,7 +1734,7 @@ func _update_mobility_from_plan() -> bool:
 		return false
 	var safe_load := 0
 	for count in range(1, full_load + 1):
-		if _return_seconds(distance, count, base_speed, loss) <= CARRY_RETURN_TARGET_SECONDS:
+		if _return_seconds(distance, count, base_speed, loss) <= MOBILITY_RETURN_TARGET_SECONDS:
 			safe_load = count
 	var capacity_ratio := float(safe_load) / float(full_load)
 	if capacity_ratio >= MOBILITY_CAPACITY_RATIO_THRESHOLD:
@@ -1851,6 +1905,14 @@ func _move_open(target: Vector2) -> bool:
 func _change(next: State, reason: String) -> void:
 	_release_all()
 	var previous := state
+	if (
+		previous == State.NAVIGATE
+		and nav_mode == NavMode.BRANCH
+		and next != State.NAVIGATE
+		and next != State.RECOVER
+		and branch_resume_coord == NO_COORD
+	):
+		branch_resume_coord = Level.map.getTileCoord(keeper.global_position)
 	if previous == State.CARRY and next != State.RECOVER:
 		carry = null
 		carry_plan.clear()
@@ -1878,6 +1940,17 @@ func _change_navigation(next: NavMode, reason: String) -> void:
 	var current_name := str(NavMode.keys()[next])
 	ModLoaderLog.info("NAVIGATE " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
 	_record("navigation_state", reason, {"from": previous_name, "to": current_name})
+
+func _change_cache_cleanup(next: CacheCleanupMode, reason: String) -> void:
+	if next == cache_cleanup_mode:
+		return
+	var previous := cache_cleanup_mode
+	cache_cleanup_mode = next
+	if next == CacheCleanupMode.NONE:
+		ignored_cache_drop_ids.clear()
+	var previous_name := str(CacheCleanupMode.keys()[previous])
+	var current_name := str(CacheCleanupMode.keys()[next])
+	ModLoaderLog.info("CACHE_CLEANUP " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
 
 func _track_progress(delta: float) -> void:
 	var action := StringName(held.keys().front()) if not held.is_empty() else StringName()
@@ -1948,6 +2021,7 @@ func _wave_needed() -> bool:
 
 func _on_drop_picked_up(drop, carrier) -> void:
 	if carrier == keeper:
+		pickup_failures = 0
 		_invalidate_carry_preview()
 		if drop is Drop and drop.type == CONST.GADGET and drop.carryableType == "gadget":
 			var instance_id: int = drop.get_instance_id()
@@ -1978,6 +2052,8 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 			if loss_ratio > WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD:
 				pending_intents[UpgradeIntent.COMBAT] = true
 		wave_health_tracking = false
+		if cache_cleanup_mode == CacheCleanupMode.PENDING_DEFENSE:
+			_change_cache_cleanup(CacheCleanupMode.ACTIVE, "The next monster wave settled after cache cleanup was requested")
 	if property.ends_with(".dome.health") or property.ends_with(".dome.maxhealth"):
 		_sync_repair_intent()
 	_queue_record("Game data changed: " + property.get_slice(".", property.get_slice_count(".") - 1))
@@ -2039,11 +2115,14 @@ func _release_all() -> void:
 
 func _exhaust_shaft(reason: String) -> void:
 	shaft_exhausted = true
-	if _begin_carry(reason + "; begin one safely reachable cache cleanup phase"):
+	branch_resume_coord = NO_COORD
+	_change_cache_cleanup(CacheCleanupMode.ACTIVE, reason + "; activate persistent cache cleanup")
+	var cleanup_preview := _build_carry_plan(INF)
+	if int(cleanup_preview.get("pickup_count", 0)) > 0 and _begin_carry(reason + "; begin cache cleanup", cleanup_preview):
 		return
 	if not running:
 		return
-	_change(State.RETURN, reason + "; return without ending collection")
+	_change(State.RETURN, reason + "; return and keep cleanup active")
 
 func _fail(reason: String) -> void:
 	ModLoaderLog.error(reason + " state=" + str(State.keys()[state]), LOG_NAME)
