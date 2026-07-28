@@ -15,9 +15,8 @@ const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
 const RECORDING_MOVIE := "recording.avi"
 const TICK := 0.1
-const WAVE_LEAD := 12.0
 const CARRY_RETURN_TARGET_SECONDS := 15.0
-const CARRY_SAFETY_SECONDS := 2.0
+const STATION_ENTRY_SECONDS := 2.0
 const CARRY_PICKUP_SECONDS := 0.35
 const CARRY_PREVIEW_INTERVAL := 1.0
 const GADGET_UI_STEP_LIMIT := 40
@@ -79,6 +78,8 @@ var observed_properties: Array[String] = []
 var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
 var ore := NO_COORD
+var ore_approach_coord := NO_COORD
+var mine_resume_coord := NO_COORD
 var carry: Drop
 var carry_plan := {}
 var carry_preview_cache := {}
@@ -146,6 +147,7 @@ func start() -> bool:
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
 	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
+	ore_approach_coord = NO_COORD; mine_resume_coord = NO_COORD
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
 	carry_preview_refresh_at = 0.0
@@ -549,12 +551,28 @@ func _navigate() -> void:
 	if _must_return_now():
 		_change(State.RETURN, "No cache trip remains safe; return to the dome")
 		return
-	ore = _nearest_ore()
-	if ore != NO_COORD:
-		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
+	if mine_resume_coord != NO_COORD:
+		var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+		if current_coord == mine_resume_coord:
+			mine_resume_coord = NO_COORD
+			_change_navigation(NavMode.BRANCH, "The keeper returned to the interrupted fishbone branch")
+			_release_all()
+			delay = 0.2
+			return
+		if _move_open(Level.map.getTilePos(mine_resume_coord)):
+			return
+		_fail("No open path remains to the interrupted fishbone branch")
 		return
 
 	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	ore = _nearest_ore()
+	if ore != NO_COORD:
+		if nav_mode == NavMode.BRANCH:
+			mine_resume_coord = cell
+		ore_approach_coord = _faster_open_ore_approach(ore)
+		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
+		return
+
 	if nav_mode == NavMode.ALIGN:
 		if absf(keeper.global_position.x - align_x) > 6.0:
 			_hold([&"ui_right" if keeper.global_position.x < align_x else &"ui_left"])
@@ -633,15 +651,24 @@ func _mine() -> void:
 		_record_cache()
 		_change(State.RETURN, "No cache trip remains safe; stop mining and return")
 		return
-	if ore != NO_COORD and Level.map.getTile(ore) is Tile:
-		_hold(_axis(Level.map.getTilePos(ore)))
+	if ore == NO_COORD or not Level.map.getTile(ore) is Tile:
+		ore_approach_coord = NO_COORD
+		ore = _adjacent_ore()
+	if ore == NO_COORD:
+		_record_cache(); _change(State.NAVIGATE, "The revealed ore vein has been cleared")
 		return
-	ore = _adjacent_ore()
-	if ore != NO_COORD:
+	if not vein.has(ore):
 		vein.append(ore)
-		_hold(_axis(Level.map.getTilePos(ore)))
-		return
-	_record_cache(); _change(State.NAVIGATE, "The revealed ore vein has been cleared")
+		ore_approach_coord = _faster_open_ore_approach(ore)
+	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if (
+		ore_approach_coord != NO_COORD
+		and absi(current_coord.x - ore.x) + absi(current_coord.y - ore.y) > 1
+	):
+		if _move_open(Level.map.getTilePos(ore_approach_coord)):
+			return
+		ore_approach_coord = NO_COORD
+	_hold(_axis(Level.map.getTilePos(ore)))
 
 func _carry() -> void:
 	if _wave("wavepresent"):
@@ -1205,6 +1232,60 @@ func _nearest_ore() -> Vector2i:
 				best_distance = distance
 	return best
 
+func _faster_open_ore_approach(target: Vector2i) -> Vector2i:
+	var best := NO_COORD
+	var best_distance := INF
+	for offset in CARDINAL_OFFSETS:
+		var candidate := target + offset
+		if not Level.map.visibleTileCoords.has(candidate):
+			continue
+		var distance := _path_distance(keeper.global_position, Level.map.getTilePos(candidate))
+		if distance < best_distance:
+			best = candidate
+			best_distance = distance
+	if best == NO_COORD:
+		return NO_COORD
+	var speed := _effective_speed(keeper.carriedCarryables.size(), _planning_base_speed(), _carry_loss())
+	if best_distance / speed >= _direct_ore_approach_seconds(target, speed):
+		return NO_COORD
+	return best
+
+func _direct_ore_approach_seconds(target: Vector2i, speed: float) -> float:
+	var cursor: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	var seconds := 0.0
+	while absi(cursor.x - target.x) + absi(cursor.y - target.y) > 1:
+		var delta: Vector2i = target - cursor
+		if absi(delta.x) > absi(delta.y):
+			cursor.x += signi(delta.x)
+		else:
+			cursor.y += signi(delta.y)
+		if not Level.map.visibleTileCoords.has(cursor):
+			return INF
+		var tile = Level.map.getTile(cursor)
+		if tile is Tile:
+			var drill_seconds := _tile_drill_seconds(tile)
+			if not is_finite(drill_seconds):
+				return INF
+			seconds += drill_seconds
+		seconds += GameWorld.TILE_SIZE / speed
+	return seconds
+
+func _tile_drill_seconds(tile: Tile) -> float:
+	if not tile.get_meta("destructable", false):
+		return INF
+	var strength := float(Data.of(keeper.playerId + ".keeper1.drillStrength"))
+	if tile.hardness >= 3:
+		strength *= float(Data.ofOr(keeper.playerId + ".keeper1.hardtilesmodifier", 1.0))
+	if tile.maxDamagePerHit >= 0.0:
+		strength = minf(strength, tile.maxDamagePerHit)
+	if strength <= 0.0:
+		return INF
+	var cooldown := float(Data.of(keeper.playerId + ".keeper1.tileHitCooldown"))
+	var drill_buff := 1.0 - float(Data.ofOr(keeper.playerId + ".keeper.drillBuff", 0.0))
+	if drill_buff < 1.0:
+		cooldown = maxf(cooldown * drill_buff, 0.017)
+	return ceilf(tile.health / strength) * cooldown
+
 func _adjacent_ore() -> Vector2i:
 	for type in ORE_TYPES:
 		for tile in Level.map.tilesByType.get(type, []):
@@ -1219,6 +1300,7 @@ func _record_cache() -> void:
 	_record_cache_site(site)
 	vein.clear()
 	ore = NO_COORD
+	ore_approach_coord = NO_COORD
 
 func _record_cache_site(site: Vector2) -> void:
 	if caches.all(func(existing): return existing.distance_to(site) > GameWorld.TILE_SIZE):
@@ -1263,7 +1345,7 @@ func _carry_window_plan(extra_cache_site = null) -> Dictionary:
 		return {}
 	var planned_seconds := float(preview.get("collection_seconds", INF))
 	planned_seconds += float(preview.get("return_seconds", INF))
-	if wave_time > planned_seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS + TICK:
+	if wave_time > planned_seconds + STATION_ENTRY_SECONDS + TICK:
 		return {}
 	return preview
 
@@ -1276,7 +1358,7 @@ func _must_return_now() -> bool:
 		return true
 	var current_load := keeper.carriedCarryables.size()
 	var return_seconds := _return_seconds(distance, current_load, _planning_base_speed(), _carry_loss())
-	return wave_time <= return_seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS
+	return wave_time <= return_seconds + STATION_ENTRY_SECONDS
 
 func _build_carry_plan(wave_time: float, extra_cache_site = null) -> Dictionary:
 	var remaining: Array[Drop] = []
@@ -1318,7 +1400,7 @@ func _build_carry_plan(wave_time: float, extra_cache_site = null) -> Dictionary:
 			var outward_seconds := _return_seconds(outward_distance, load, base_speed, loss)
 			var inward_seconds := _return_seconds(inward_distance, load + 1, base_speed, loss)
 			var planned_total := collection_seconds + outward_seconds + CARRY_PICKUP_SECONDS + inward_seconds
-			if is_finite(wave_time) and planned_total + WAVE_LEAD + CARRY_SAFETY_SECONDS >= wave_time:
+			if is_finite(wave_time) and planned_total + STATION_ENTRY_SECONDS >= wave_time:
 				continue
 			var needed := int(deficits.get(drop.type, 0)) > 0
 			if not _carry_candidate_is_better(drop, needed, outward_seconds, best, best_needed, best_outward_seconds):
@@ -1410,7 +1492,7 @@ func _planned_pickup_is_safe(drop: Drop) -> bool:
 	var base_speed := _planning_base_speed()
 	var seconds := _return_seconds(outward_distance, next_load - 1, base_speed, loss)
 	seconds += CARRY_PICKUP_SECONDS + _return_seconds(inward_distance, next_load, base_speed, loss)
-	return not is_finite(_wave_time()) or seconds + WAVE_LEAD + CARRY_SAFETY_SECONDS < _wave_time()
+	return not is_finite(_wave_time()) or seconds + STATION_ENTRY_SECONDS < _wave_time()
 
 func _reserved_resource_deficits(extra_resources := {}) -> Dictionary:
 	var available := {}
@@ -1862,7 +1944,7 @@ func _wave_time() -> float:
 	return float(Data.of(key)) if GameWorld.runStarted and Data.has(key) else INF
 
 func _wave_needed() -> bool:
-	return _wave("wavebattle") or _wave("wavepresent") or _wave_time() <= WAVE_LEAD
+	return _wave("wavebattle") or _wave_time() <= STATION_ENTRY_SECONDS
 
 func _on_drop_picked_up(drop, carrier) -> void:
 	if carrier == keeper:
