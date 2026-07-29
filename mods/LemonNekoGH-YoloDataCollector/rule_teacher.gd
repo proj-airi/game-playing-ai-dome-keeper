@@ -33,7 +33,7 @@ const REVEAL_TILES := 1
 const BRANCH_ROW_STEP := 1 + REVEAL_TILES * 2
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
-const REPAIR_HEALTH_RATIO_THRESHOLD := 0.2
+const REPAIR_HEALTH_RESERVE_RATIO := 0.4
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
 const INTENT_CLASSES := [
@@ -79,9 +79,11 @@ var active_upgrade_arm := -1
 var combat_attack_next := true
 var mobility_arm := MobilityArm.SPEED
 var drill_hits_by_tile := {}
-var wave_start_health := 0.0
+var wave_start_missing_health := 0.0
 var wave_start_max_health := 0.0
+var last_wave_health_loss := 0.0
 var wave_health_tracking := false
+var repair_target_health := 0.0
 var observed_properties: Array[String] = []
 var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
@@ -168,7 +170,9 @@ func start() -> bool:
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
 	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
-	wave_start_health = _dome_health(); wave_start_max_health = _dome_max_health()
+	wave_start_max_health = _dome_max_health()
+	wave_start_missing_health = maxf(wave_start_max_health - _dome_health(), 0.0)
+	last_wave_health_loss = 0.0; repair_target_health = 0.0
 	_sync_repair_intent()
 	observed_properties.assign([
 		keeper.teamId + ".monsters.cycle", keeper.teamId + ".monsters.wavepresent",
@@ -1139,7 +1143,7 @@ func _mine_gadget_chamber() -> void:
 				if not _move_open(Level.map.getTilePos(approach)):
 					_fail("The revealed gadget cover approach became unreachable")
 				return
-				_hold(_axis(Level.map.getTilePos(target)))
+			_hold(_axis(Level.map.getTilePos(target)))
 		Chamber.State.OPENING:
 			_wait_for_gadget_task("Gadget chamber did not finish opening")
 		Chamber.State.OPEN:
@@ -1951,6 +1955,18 @@ func _freeze_upgrade_target() -> bool:
 	active_upgrade_intent = int(target["intent"])
 	active_upgrade_arm = int(target.get("arm", -1))
 	active_upgrade_fulfills = bool(target.get("fulfills", true))
+	if active_upgrade_intent == UpgradeIntent.REPAIR and repair_target_health <= 0.0:
+		repair_target_health = minf(
+			_dome_max_health(),
+			maxf(
+				_dome_max_health() * REPAIR_HEALTH_RESERVE_RATIO,
+				last_wave_health_loss
+			)
+		)
+		ModLoaderLog.info(
+			"UPGRADE repair target %.1f after %.1f net wave loss" % [repair_target_health, last_wave_health_loss],
+			LOG_NAME
+		)
 	return true
 
 func _upgrade_ready(id: String) -> bool:
@@ -1962,7 +1978,7 @@ func _upgrade_ready(id: String) -> bool:
 	return GameWorld.canAfford(GameWorld.upgrades[id].get("cost", {}), keeper.teamId)
 
 func _active_upgrade_ready() -> bool:
-	if active_upgrade_intent == UpgradeIntent.REPAIR and _dome_health() / _dome_max_health() >= REPAIR_HEALTH_RATIO_THRESHOLD:
+	if active_upgrade_intent == UpgradeIntent.REPAIR and _dome_health() >= repair_target_health:
 		return false
 	return not active_upgrade_id.is_empty() and _upgrade_ready(active_upgrade_id)
 
@@ -2061,6 +2077,9 @@ func _change(next: State, reason: String) -> void:
 	if previous == State.CARRY and next != State.RECOVER:
 		carry = null
 		carry_plan.clear()
+	if previous == State.UPGRADE and next != State.UPGRADE:
+		repair_target_health = 0.0
+		_sync_repair_intent()
 	state = next; delay = 0.2; pickup_failures = 0
 	_reset_progress()
 	if state == State.RETURN:
@@ -2188,11 +2207,14 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 	if not running:
 		return
 	if property.ends_with(".monsters.wavepresent") and bool(new_value) and not bool(old_value):
-		wave_start_health = _dome_health(); wave_start_max_health = _dome_max_health()
+		wave_start_max_health = _dome_max_health()
+		wave_start_missing_health = maxf(wave_start_max_health - _dome_health(), 0.0)
 		wave_health_tracking = true
 	elif property.ends_with(".monsters.wavebattle") and bool(old_value) and not bool(new_value):
 		if wave_health_tracking and wave_start_max_health > 0.0:
-			var loss_ratio := maxf(wave_start_health - _dome_health(), 0.0) / wave_start_max_health
+			var missing_health := maxf(_dome_max_health() - _dome_health(), 0.0)
+			last_wave_health_loss = maxf(missing_health - wave_start_missing_health, 0.0)
+			var loss_ratio := last_wave_health_loss / wave_start_max_health
 			if loss_ratio > WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD:
 				pending_intents[UpgradeIntent.COMBAT] = true
 		wave_health_tracking = false
@@ -2203,7 +2225,10 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 	_queue_record("Game data changed: " + property.get_slice(".", property.get_slice_count(".") - 1))
 
 func _sync_repair_intent() -> void:
-	if _dome_max_health() > 0.0 and _dome_health() / _dome_max_health() < REPAIR_HEALTH_RATIO_THRESHOLD:
+	var target_health := repair_target_health
+	if target_health <= 0.0:
+		target_health = _dome_max_health() * REPAIR_HEALTH_RESERVE_RATIO
+	if _dome_max_health() > 0.0 and _dome_health() < target_health:
 		pending_intents[UpgradeIntent.REPAIR] = true
 	else:
 		pending_intents.erase(UpgradeIntent.REPAIR)
