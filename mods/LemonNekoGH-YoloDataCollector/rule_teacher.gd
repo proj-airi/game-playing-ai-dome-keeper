@@ -33,7 +33,10 @@ const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
 const REPAIR_HEALTH_RATIO_THRESHOLD := 0.2
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
-const INTENT_PRIORITY: Array[int] = [UpgradeIntent.COMBAT, UpgradeIntent.REPAIR, UpgradeIntent.DRILL, UpgradeIntent.MOBILITY]
+const INTENT_CLASSES := [
+	[UpgradeIntent.COMBAT, UpgradeIntent.REPAIR],
+	[UpgradeIntent.DRILL, UpgradeIntent.MOBILITY],
+]
 const ATTACK_UPGRADES: Array[StringName] = [&"laserStrength1", &"laserStrength2", &"laserStrength3", &"laserStrength4"]
 const LASER_MOVE_UPGRADES: Array[StringName] = [&"laserMove1", &"laserMove2", &"laserMove3"]
 const HEALTH_UPGRADES: Array[StringName] = [&"dome1health1", &"dome1health2"]
@@ -478,9 +481,10 @@ func _status_active_monsters() -> Array[Dictionary]:
 
 func _status_pending_intents() -> Array[String]:
 	var intents: Array[String] = []
-	for intent in INTENT_PRIORITY:
-		if pending_intents.has(intent):
-			intents.append(str(UpgradeIntent.keys()[intent]).to_lower())
+	for intent_class in INTENT_CLASSES:
+		for intent in intent_class:
+			if pending_intents.has(intent):
+				intents.append(str(UpgradeIntent.keys()[intent]).to_lower())
 	return intents
 
 func _preflight() -> String:
@@ -925,10 +929,9 @@ func _choose_gadget_offer(popup) -> StringName:
 		if is_instance_valid(panel) and not bool(panel.disabled) and GADGET_CATALOG.is_supported(offered_id):
 			supported.append(offered_id)
 	supported.sort_custom(_gadget_offer_less)
-	for intent in INTENT_PRIORITY:
-		if not pending_intents.has(intent):
-			continue
-		var benefit := _gadget_benefit_for_intent(intent)
+	var target := _next_upgrade_target(false)
+	if not target.is_empty():
+		var benefit := _gadget_benefit_for_intent(int(target["intent"]))
 		for offered_id in supported:
 			if GADGET_CATALOG.benefit_mask(offered_id) & benefit != 0:
 				return offered_id
@@ -1549,34 +1552,48 @@ func _planned_pickup_is_safe(drop: Drop) -> bool:
 	return not is_finite(_wave_time()) or seconds + STATION_ENTRY_SECONDS < _wave_time()
 
 func _reserved_resource_deficits(extra_resources := {}) -> Dictionary:
-	var available := {}
-	for resource in ORE_TYPES:
-		available[resource] = int(Data.getInventory(resource, keeper.teamId))
+	var available := _stored_upgrade_resources()
 	for drop in keeper.carriedCarryables:
 		if drop is Drop and available.has(drop.type):
 			available[drop.type] += 1
 	for resource in extra_resources:
 		available[resource] = int(available.get(resource, 0)) + int(extra_resources[resource])
+	var excluded_intents := {}
 	var seen := {}
-	for intent in INTENT_PRIORITY:
-		if not pending_intents.has(intent):
-			continue
-		var target := _resolve_intent(intent)
+	for _index in pending_intents.size():
+		var target := _select_upgrade_target(available, false, excluded_intents, seen)
 		var id: String = target.get("id", "")
-		if id.is_empty() or seen.has(id):
-			continue
+		if id.is_empty():
+			return {}
+		excluded_intents[int(target["intent"])] = true
 		seen[id] = true
 		var cost: Dictionary = GameWorld.upgrades[id].get("cost", {})
-		var deficits := {}
-		for resource in cost:
-			var missing := int(cost[resource]) - int(available.get(resource, 0))
-			if missing > 0:
-				deficits[resource] = missing
+		var deficits := _resource_deficits(cost, available)
 		if not deficits.is_empty():
 			return deficits
 		for resource in cost:
 			available[resource] = int(available.get(resource, 0)) - int(cost[resource])
 	return {}
+
+func _stored_upgrade_resources() -> Dictionary:
+	var available := {}
+	for resource in ORE_TYPES:
+		available[resource] = int(Data.getInventory(resource, keeper.teamId))
+	return available
+
+func _resource_deficits(cost: Dictionary, available: Dictionary) -> Dictionary:
+	var deficits := {}
+	for resource in cost:
+		var missing := int(cost[resource]) - int(available.get(resource, 0))
+		if missing > 0:
+			deficits[resource] = missing
+	return deficits
+
+func _resource_total(resources: Dictionary) -> int:
+	var total := 0
+	for resource in resources:
+		total += int(resources[resource])
+	return total
 
 func _home_position() -> Vector2:
 	return Vector2(dome.global_position.x, -GameWorld.TILE_SIZE) + CONST.TILE_OFFSET
@@ -1807,19 +1824,47 @@ func _resolve_intent(intent: int) -> Dictionary:
 	target["intent"] = intent
 	return target
 
-func _next_upgrade_target(prune_exhausted := true) -> Dictionary:
-	for intent in INTENT_PRIORITY:
-		if not pending_intents.has(intent):
-			continue
-		var target := _resolve_intent(intent)
-		if bool(target.get("exhausted", false)):
-			if prune_exhausted:
-				pending_intents.erase(intent)
-				_queue_record("Upgrade plan changed")
-			continue
-		if not str(target.get("id", "")).is_empty():
-			return target
+func _select_upgrade_target(
+	available: Dictionary,
+	prune_exhausted := true,
+	excluded_intents := {},
+	excluded_ids := {},
+) -> Dictionary:
+	for intent_class in INTENT_CLASSES:
+		var best := {}
+		for intent in intent_class:
+			if not pending_intents.has(intent) or excluded_intents.has(intent):
+				continue
+			var target := _resolve_intent(intent)
+			if bool(target.get("exhausted", false)):
+				if prune_exhausted:
+					pending_intents.erase(intent)
+					_queue_record("Upgrade plan changed")
+				continue
+			var id: String = target.get("id", "")
+			if id.is_empty() or excluded_ids.has(id):
+				continue
+			if best.is_empty() or _upgrade_target_is_better(target, best, available):
+				best = target
+		if not best.is_empty():
+			return best
 	return {}
+
+func _upgrade_target_is_better(candidate: Dictionary, current: Dictionary, available: Dictionary) -> bool:
+	var candidate_cost: Dictionary = GameWorld.upgrades[candidate["id"]].get("cost", {})
+	var current_cost: Dictionary = GameWorld.upgrades[current["id"]].get("cost", {})
+	var candidate_deficits := _resource_deficits(candidate_cost, available)
+	var current_deficits := _resource_deficits(current_cost, available)
+	var candidate_affordable := candidate_deficits.is_empty()
+	var current_affordable := current_deficits.is_empty()
+	if candidate_affordable != current_affordable:
+		return candidate_affordable
+	if candidate_affordable:
+		return _resource_total(candidate_cost) < _resource_total(current_cost)
+	return _resource_total(candidate_deficits) < _resource_total(current_deficits)
+
+func _next_upgrade_target(prune_exhausted := true) -> Dictionary:
+	return _select_upgrade_target(_stored_upgrade_resources(), prune_exhausted)
 
 func _freeze_upgrade_target() -> bool:
 	if not active_upgrade_id.is_empty():
