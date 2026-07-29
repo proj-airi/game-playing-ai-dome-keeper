@@ -83,8 +83,8 @@ const keeperRows = computed(() => snapshot.value
           </div>
           <div>
             <p class="data-label">
-              Navigation
-            </p><strong>{{ snapshot.teacher.nav_mode ?? '—' }}</strong>
+              Exploration
+            </p><strong>{{ snapshot.teacher.explore_mode ?? '—' }}</strong>
           </div>
           <div>
             <p class="data-label">

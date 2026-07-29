@@ -5,7 +5,7 @@ export interface LeveledValue { value: number, level: number }
 export type StatusSnapshot = { available: false, run_time_seconds: 0 } | {
   available: true
   run_time_seconds: number
-  teacher: { state: string, nav_mode: string | null }
+  teacher: { state: string, explore_mode: string | null }
   keeper: {
     carried_resources: Resources
     stats: {

@@ -4,8 +4,8 @@ signal failed(reason: String)
 
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 
-enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
-enum NavMode { DESCEND, BRANCH, BYPASS }
+enum State { EXPLORE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
+enum ExploreMode { DESCEND, BRANCH, BYPASS }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
 enum FrontierSearch { READY, WAITING_WAVE, BLOCKED }
@@ -65,8 +65,8 @@ var record_pending := false
 var record_reason := ""
 var previous_pause_when_out_of_focus := true
 var previous_use_mouse_dome_gameplay := false
-var state := State.NAVIGATE
-var nav_mode := NavMode.DESCEND
+var state := State.EXPLORE
+var explore_mode := ExploreMode.DESCEND
 var keeper: Keeper
 var dome: Dome
 var bindings := {}
@@ -88,7 +88,7 @@ var vein: Array[Vector2i] = []
 var ore := NO_COORD
 var ore_approach_coord := NO_COORD
 var nav_travel_coord := NO_COORD
-var nav_travel_mode := -1
+var explore_resume_mode := -1
 var cache_cleanup_mode := CacheCleanupMode.NONE
 var ignored_cache_drop_ids := {}
 var carry: Drop
@@ -124,7 +124,7 @@ var gadget_confirming := false
 var progress_action := StringName()
 var progress_origin := Vector2.ZERO
 var stalled := 0.0
-var interrupted := State.NAVIGATE
+var interrupted := State.EXPLORE
 var probe_index := 0
 var probe_count := 0
 var probe_time := 0.0
@@ -161,7 +161,7 @@ func start() -> bool:
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
 	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
-	ore_approach_coord = NO_COORD; nav_travel_coord = NO_COORD; nav_travel_mode = -1
+	ore_approach_coord = NO_COORD; nav_travel_coord = NO_COORD; explore_resume_mode = -1
 	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
@@ -188,12 +188,12 @@ func start() -> bool:
 	if keeper.isInsideStation:
 		state = State.DEFEND if _leaf() == "BattleInputProcessor" else State.RETURN
 	else:
-		state = State.NAVIGATE
-	nav_mode = NavMode.DESCEND
+		state = State.EXPLORE
+	explore_mode = ExploreMode.DESCEND
 	branch_row = -1000000; branch_side = 1
 	branch_entry_coord = NO_COORD
 	nav_travel_coord = Level.map.getTileCoord(_home_position())
-	nav_travel_mode = NavMode.DESCEND
+	explore_resume_mode = ExploreMode.DESCEND
 	mining_outcome = MiningOutcome.ACTIVE
 	mining_outcome_reason = ""
 	completed_corridors.clear()
@@ -270,7 +270,13 @@ func _process(delta: float) -> void:
 		if keeper.carriedCarryables.size() != 1:
 			_fail("A chamber gadget attached to a non-exclusive load")
 			return
-		if not gadget_activation_pending or not is_instance_valid(gadget_chamber) or gadget_chamber.currentState == Chamber.State.EMPTY:
+		if gadget_activation_pending and not is_instance_valid(gadget_chamber):
+			_fail("The active gadget chamber disappeared before confirming artifact release")
+			return
+		if (
+			(state != State.CARRY or not gadget_activation_pending)
+			and (not gadget_activation_pending or gadget_chamber.currentState == Chamber.State.EMPTY)
+		):
 			gadget_drop_instance_id = carried_gadget.get_instance_id()
 			gadget_delivery_pending = true
 			if state != State.RETURN:
@@ -291,7 +297,7 @@ func _process(delta: float) -> void:
 	tick_time = 0.0
 
 	match state:
-		State.NAVIGATE: _navigate()
+		State.EXPLORE: _explore()
 		State.MINE: _mine()
 		State.CARRY: _carry()
 		State.RETURN: _return()
@@ -390,7 +396,7 @@ func get_status_snapshot() -> Dictionary:
 		"run_time_seconds": maxf(float(GameWorld.runTime), 0.0),
 		"teacher": {
 			"state": State.keys()[state],
-			"nav_mode": NavMode.keys()[nav_mode] if state == State.NAVIGATE else null,
+			"explore_mode": ExploreMode.keys()[explore_mode] if state == State.EXPLORE else null,
 			"mining_outcome": MiningOutcome.keys()[mining_outcome],
 			"mining_outcome_reason": mining_outcome_reason,
 		},
@@ -539,20 +545,12 @@ func _load_bindings() -> String:
 			return "Missing keyboard binding for action: " + str(action)
 	return ""
 
-func _navigate() -> void:
-	var had_gadget_task := gadget_activation_pending or is_instance_valid(gadget_chamber)
+func _explore() -> void:
 	if _claim_gadget_chamber():
-		if (
-			not had_gadget_task
-			and nav_travel_coord == NO_COORD
-			and (nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH)
-		):
-			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
-			nav_travel_mode = nav_mode
 		if _wave("wavepresent"):
-			_change(State.RETURN, "The active monster wave interrupted gadget retrieval")
+			_change(State.RETURN, "The active monster wave interrupted gadget chamber excavation")
 		else:
-			_handle_gadget_chamber()
+			_change(State.MINE, "A revealed gadget chamber takes priority over ordinary exploration")
 		return
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
@@ -638,19 +636,19 @@ func _navigate() -> void:
 		return
 	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	if nav_travel_coord != NO_COORD:
-		if nav_travel_mode != NavMode.DESCEND and nav_travel_mode != NavMode.BRANCH:
+		if explore_resume_mode != ExploreMode.DESCEND and explore_resume_mode != ExploreMode.BRANCH:
 			_fail("The open navigation target has no supported continuation")
 			return
 		var travel_position: Vector2 = Level.map.getTilePos(nav_travel_coord)
 		var reached := cell == nav_travel_coord
-		if nav_travel_mode == NavMode.DESCEND:
+		if explore_resume_mode == ExploreMode.DESCEND:
 			reached = reached and absf(keeper.global_position.x - travel_position.x) <= 6.0
 		if reached:
-			var continuation := nav_travel_mode
+			var continuation := explore_resume_mode
 			nav_travel_coord = NO_COORD
-			nav_travel_mode = -1
+			explore_resume_mode = -1
 			_release_all()
-			_change_navigation(continuation, "The keeper reached the saved open navigation target")
+			_change_exploration(continuation, "The keeper reached the saved open navigation target")
 			_reset_progress()
 			delay = 0.2
 			return
@@ -665,14 +663,14 @@ func _navigate() -> void:
 		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
 		return
 
-	if nav_mode == NavMode.DESCEND:
+	if explore_mode == ExploreMode.DESCEND:
 		if branch_row < -1000:
 			branch_row = maxi(cell.y + BRANCH_ROW_STEP, 1)
 		if cell.y < branch_row:
 			var below = Level.map.getTile(cell + Vector2i.DOWN)
 			if below is Tile and below.type == CONST.BORDER:
 				_release_all()
-				_change_navigation(NavMode.BYPASS, "Revealed border blocks the shaft below")
+				_change_exploration(ExploreMode.BYPASS, "Revealed border blocks the shaft below")
 				bypass_side = 1
 				bypass_reversed = false
 				_reset_progress()
@@ -683,8 +681,8 @@ func _navigate() -> void:
 		branch_entry_coord = cell
 		active_corridor_cells.clear()
 		active_corridor_cells[cell] = true
-		_change_navigation(NavMode.BRANCH, "The target fishbone branch row was reached")
-	if nav_mode == NavMode.BYPASS:
+		_change_exploration(ExploreMode.BRANCH, "The target fishbone branch row was reached")
+	if explore_mode == ExploreMode.BYPASS:
 		var bypass_below = Level.map.getTile(cell + Vector2i.DOWN)
 		if not (bypass_below is Tile and bypass_below.type == CONST.BORDER):
 			_adopt_descent_frontier(
@@ -715,12 +713,12 @@ func _navigate() -> void:
 			return
 		branch_side *= -1
 		nav_travel_coord = branch_entry_coord
-		nav_travel_mode = NavMode.BRANCH
+		explore_resume_mode = ExploreMode.BRANCH
 		if branch_side > 0:
 			_record_completed_corridor(branch_row)
 			attempted_descent_origins[branch_entry_coord] = true
 			branch_row += BRANCH_ROW_STEP
-			nav_travel_mode = NavMode.DESCEND
+			explore_resume_mode = ExploreMode.DESCEND
 		_reset_progress()
 		delay = 0.2
 		return
@@ -730,7 +728,7 @@ func _mine() -> void:
 	if _claim_gadget_chamber():
 		if not vein.is_empty():
 			_record_cache()
-		_change(State.NAVIGATE, "A revealed gadget chamber takes priority over the ore vein")
+		_mine_gadget_chamber()
 		return
 	var active_cache_site = Level.map.getTilePos(vein.front()) if not vein.is_empty() else null
 	var carry_preview := _carry_window_plan(active_cache_site)
@@ -750,7 +748,7 @@ func _mine() -> void:
 		ore_approach_coord = NO_COORD
 		ore = _adjacent_ore()
 	if ore == NO_COORD:
-		_record_cache(); _change(State.NAVIGATE, "The revealed ore vein has been cleared")
+		_record_cache(); _change(State.EXPLORE, "The revealed ore vein has been cleared")
 		return
 	if not vein.has(ore):
 		vein.append(ore)
@@ -770,7 +768,16 @@ func _carry() -> void:
 		_change(State.RETURN, "The monster wave has started")
 		return
 	if _claim_gadget_chamber():
-		_change(State.NAVIGATE, "A revealed gadget chamber interrupted the resource carry plan")
+		if not is_instance_valid(gadget_chamber):
+			_fail("The active gadget chamber disappeared")
+		elif gadget_activation_pending:
+			_wait_for_gadget_attachment()
+		elif not keeper.carriedCarryables.is_empty():
+			_drop_cargo_for_gadget()
+		elif gadget_chamber.currentState != Chamber.State.OPEN:
+			_change(State.MINE, "The revealed gadget chamber interrupted resource collection")
+		else:
+			_activate_gadget_chamber()
 		return
 	if not is_instance_valid(carry) or carry.isCarried():
 		carry = null
@@ -816,11 +823,11 @@ func _return() -> void:
 			_release_all()
 			if _leaf() == "StationInputProcessor":
 				_tap(&"ui_cancel")
-			_change(State.NAVIGATE, "The settled interruption resumes the saved gadget chamber")
+			_resume_gadget_task("The settled interruption resumes the saved gadget chamber")
 			delay = 0.5
 			return
 		if not _wave("wavepresent") and not _wave("wavebattle"):
-			_change(State.NAVIGATE, "The revealed gadget chamber cancels the ordinary return")
+			_resume_gadget_task("The revealed gadget chamber cancels the ordinary return")
 			return
 	if keeper.isInsideStation:
 		_release_all(); var leaf := _leaf()
@@ -838,10 +845,10 @@ func _return() -> void:
 			return
 		if leaf == "StationInputProcessor":
 			_tap(&"ui_cancel")
-			_change(State.NAVIGATE, "No upgrade or defense task requires the station")
+			_change(State.EXPLORE, "No upgrade or defense task requires the station")
 			delay = 0.5
 		elif leaf == "Keeper1InputProcessor":
-			_change(State.NAVIGATE, "No upgrade or defense task requires the station")
+			_change(State.EXPLORE, "No upgrade or defense task requires the station")
 		return
 
 	var main_station: DomeStation = dome.stations.front()
@@ -1100,30 +1107,23 @@ func _claim_gadget_chamber() -> bool:
 	gadget_chamber = best
 	return is_instance_valid(gadget_chamber)
 
-func _handle_gadget_chamber() -> void:
+func _resume_gadget_task(reason: String) -> void:
+	if not is_instance_valid(gadget_chamber):
+		_fail("The active gadget chamber disappeared")
+		return
+	if gadget_activation_pending or gadget_chamber.currentState == Chamber.State.OPEN:
+		_change(State.CARRY, reason)
+	elif gadget_chamber.currentState == Chamber.State.REVEALED or gadget_chamber.currentState == Chamber.State.OPENING:
+		_change(State.MINE, reason)
+	else:
+		_fail("The active gadget chamber has no resumable task")
+
+func _mine_gadget_chamber() -> void:
 	if not is_instance_valid(gadget_chamber):
 		_fail("The active gadget chamber disappeared")
 		return
 	if _wave("wavepresent"):
-		_change(State.RETURN, "The monster wave interrupted gadget chamber retrieval")
-		return
-	var carried := _carried_gadget()
-	if is_instance_valid(carried):
-		if keeper.carriedCarryables.size() != 1:
-			_fail("A chamber gadget attached before its load became exclusive")
-			return
-		if gadget_chamber.currentState != Chamber.State.EMPTY:
-			_wait_for_gadget_task("The chamber did not confirm the gadget release")
-			return
-		gadget_drop_instance_id = carried.get_instance_id()
-		gadget_delivery_pending = true
-		_change(State.RETURN, "The chamber gadget attached and must return alone")
-		return
-	if gadget_activation_pending:
-		_wait_for_gadget_attachment()
-		return
-	if not keeper.carriedCarryables.is_empty():
-		_drop_cargo_for_gadget()
+		_change(State.RETURN, "The monster wave interrupted gadget chamber excavation")
 		return
 
 	match gadget_chamber.currentState:
@@ -1139,12 +1139,11 @@ func _handle_gadget_chamber() -> void:
 				if not _move_open(Level.map.getTilePos(approach)):
 					_fail("The revealed gadget cover approach became unreachable")
 				return
-			_hold(_axis(Level.map.getTilePos(target)))
+				_hold(_axis(Level.map.getTilePos(target)))
 		Chamber.State.OPENING:
-			_release_all()
 			_wait_for_gadget_task("Gadget chamber did not finish opening")
 		Chamber.State.OPEN:
-			_activate_gadget_chamber()
+			_change(State.CARRY, "The excavated gadget chamber is ready for artifact acquisition")
 		Chamber.State.EMPTY:
 			_fail("Gadget chamber became empty without attaching its artifact")
 		_:
@@ -1207,9 +1206,6 @@ func _activate_gadget_chamber() -> void:
 func _wait_for_gadget_attachment() -> void:
 	var carried := _carried_gadget()
 	if is_instance_valid(carried) and gadget_chamber.currentState == Chamber.State.EMPTY:
-		if keeper.carriedCarryables.size() != 1:
-			_fail("The chamber gadget did not attach as an exclusive load")
-			return
 		gadget_drop_instance_id = carried.get_instance_id()
 		gadget_delivery_pending = true
 		_change(State.RETURN, "The chamber gadget attached and must return alone")
@@ -1280,7 +1276,7 @@ func _defend() -> void:
 		elif leaf == "StationInputProcessor":
 			_change(State.RETURN, "The settled wave releases the saved gadget task")
 		elif leaf == "Keeper1InputProcessor":
-			_change(State.NAVIGATE, "The settled wave releases the saved gadget task")
+			_resume_gadget_task("The settled wave releases the saved gadget task")
 		return
 	if _wave_needed() and leaf != "BattleInputProcessor":
 		_release_all()
@@ -1297,17 +1293,17 @@ func _defend() -> void:
 	elif leaf == "StationInputProcessor":
 		_change(State.RETURN, "The monster wave has settled; resume station task selection")
 	elif leaf == "Keeper1InputProcessor":
-		_change(State.NAVIGATE, "The monster wave has settled")
+		_change(State.EXPLORE, "The monster wave has settled")
 
 func _recover() -> void:
 	if _wave("wavepresent"):
 		if (
-			interrupted == State.NAVIGATE
+			interrupted == State.EXPLORE
 			and nav_travel_coord == NO_COORD
-			and (nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH)
+			and (explore_mode == ExploreMode.DESCEND or explore_mode == ExploreMode.BRANCH)
 		):
 			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
-			nav_travel_mode = nav_mode
+			explore_resume_mode = explore_mode
 		_change(State.RETURN, "The monster wave interrupted stuck recovery")
 		return
 	var action := DIRECTIONS[probe_index]
@@ -2053,15 +2049,15 @@ func _change(next: State, reason: String) -> void:
 	_release_all()
 	var previous := state
 	if (
-		previous == State.NAVIGATE
-		and next != State.NAVIGATE
+		previous == State.EXPLORE
+		and next != State.EXPLORE
 		and next != State.RECOVER
 		and mining_outcome == MiningOutcome.ACTIVE
 		and nav_travel_coord == NO_COORD
 	):
-		if nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH:
+		if explore_mode == ExploreMode.DESCEND or explore_mode == ExploreMode.BRANCH:
 			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
-			nav_travel_mode = nav_mode
+			explore_resume_mode = explore_mode
 	if previous == State.CARRY and next != State.RECOVER:
 		carry = null
 		carry_plan.clear()
@@ -2069,9 +2065,9 @@ func _change(next: State, reason: String) -> void:
 	_reset_progress()
 	if state == State.RETURN:
 		if nav_travel_coord == NO_COORD and mining_outcome == MiningOutcome.ACTIVE:
-			nav_mode = NavMode.DESCEND
+			explore_mode = ExploreMode.DESCEND
 			nav_travel_coord = Level.map.getTileCoord(_home_position())
-			nav_travel_mode = NavMode.DESCEND
+			explore_resume_mode = ExploreMode.DESCEND
 		bypass_side = 1; bypass_reversed = false
 	elif state == State.UPGRADE:
 		closing_upgrade = false; ui_steps = 0
@@ -2082,15 +2078,15 @@ func _change(next: State, reason: String) -> void:
 	ModLoaderLog.info(previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
 	_record("teacher_state", reason, {"from": previous_name, "to": current_name})
 
-func _change_navigation(next: NavMode, reason: String) -> void:
-	if next == nav_mode:
+func _change_exploration(next: ExploreMode, reason: String) -> void:
+	if next == explore_mode:
 		return
-	var previous := nav_mode
-	nav_mode = next
-	var previous_name := str(NavMode.keys()[previous])
-	var current_name := str(NavMode.keys()[next])
-	ModLoaderLog.info("NAVIGATE " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
-	_record("navigation_state", reason, {"from": previous_name, "to": current_name})
+	var previous := explore_mode
+	explore_mode = next
+	var previous_name := str(ExploreMode.keys()[previous])
+	var current_name := str(ExploreMode.keys()[next])
+	ModLoaderLog.info("EXPLORE " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
+	_record("exploration_state", reason, {"from": previous_name, "to": current_name})
 
 func _change_cache_cleanup(next: CacheCleanupMode, reason: String) -> void:
 	if next == cache_cleanup_mode:
@@ -2272,9 +2268,9 @@ func _adopt_descent_frontier(coord: Vector2i, target_row: int, reason: String) -
 	bypass_side = 1
 	bypass_reversed = false
 	nav_travel_coord = coord
-	nav_travel_mode = NavMode.DESCEND
+	explore_resume_mode = ExploreMode.DESCEND
 	_release_all()
-	_change_navigation(NavMode.DESCEND, reason)
+	_change_exploration(ExploreMode.DESCEND, reason)
 	_reset_progress()
 	delay = 0.2
 
@@ -2384,7 +2380,7 @@ func _finish_terminal_descent(reason: String) -> void:
 	mining_outcome = MiningOutcome.BACKTRACK_PENDING
 	mining_outcome_reason = reason
 	nav_travel_coord = NO_COORD
-	nav_travel_mode = -1
+	explore_resume_mode = -1
 	branch_entry_coord = NO_COORD
 	active_corridor_cells.clear()
 	_change_cache_cleanup(CacheCleanupMode.ACTIVE, reason + "; activate persistent cache cleanup")
