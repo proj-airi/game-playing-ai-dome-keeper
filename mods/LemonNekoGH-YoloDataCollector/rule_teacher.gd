@@ -5,7 +5,10 @@ signal failed(reason: String)
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 
 enum State { NAVIGATE, MINE, CARRY, RETURN, UPGRADE, DEFEND, RECOVER }
-enum NavMode { ALIGN, DESCEND, BRANCH, BYPASS }
+enum NavMode { DESCEND, BRANCH, BYPASS }
+enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
+enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
+enum FrontierSearch { READY, WAITING_WAVE, BLOCKED }
 enum CacheCleanupMode { NONE, PENDING_DEFENSE, ACTIVE }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 enum MobilityArm { SPEED, STRENGTH }
@@ -63,7 +66,7 @@ var record_reason := ""
 var previous_pause_when_out_of_focus := true
 var previous_use_mouse_dome_gameplay := false
 var state := State.NAVIGATE
-var nav_mode := NavMode.ALIGN
+var nav_mode := NavMode.DESCEND
 var keeper: Keeper
 var dome: Dome
 var bindings := {}
@@ -84,7 +87,8 @@ var caches: Array[Vector2] = []
 var vein: Array[Vector2i] = []
 var ore := NO_COORD
 var ore_approach_coord := NO_COORD
-var branch_resume_coord := NO_COORD
+var nav_travel_coord := NO_COORD
+var nav_travel_mode := -1
 var cache_cleanup_mode := CacheCleanupMode.NONE
 var ignored_cache_drop_ids := {}
 var carry: Drop
@@ -100,11 +104,14 @@ var gadget_prior_drop_ids := {}
 var gadget_task_wait_steps := 0
 var branch_row := -1000000
 var branch_side := 1
-var align_x := 0.0
-var branch_entry_x := 0.0
+var branch_entry_coord := NO_COORD
 var bypass_side := 1
 var bypass_reversed := false
-var shaft_exhausted := false
+var mining_outcome := MiningOutcome.ACTIVE
+var mining_outcome_reason := ""
+var completed_corridors: Array[Dictionary] = []
+var active_corridor_cells := {}
+var attempted_descent_origins := {}
 var tick_time := 0.0
 var delay := 0.0
 var pickup_failures := 0
@@ -154,7 +161,7 @@ func start() -> bool:
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
 	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
-	ore_approach_coord = NO_COORD; branch_resume_coord = NO_COORD
+	ore_approach_coord = NO_COORD; nav_travel_coord = NO_COORD; nav_travel_mode = -1
 	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
@@ -177,10 +184,22 @@ func start() -> bool:
 	])
 	for property in observed_properties:
 		Data.listen(self, property)
-	running = true; state = State.NAVIGATE; nav_mode = NavMode.ALIGN
+	running = true
+	if keeper.isInsideStation:
+		state = State.DEFEND if _leaf() == "BattleInputProcessor" else State.RETURN
+	else:
+		state = State.NAVIGATE
+	nav_mode = NavMode.DESCEND
 	branch_row = -1000000; branch_side = 1
-	align_x = dome.global_position.x; branch_entry_x = align_x
-	shaft_exhausted = false
+	branch_entry_coord = NO_COORD
+	nav_travel_coord = Level.map.getTileCoord(_home_position())
+	nav_travel_mode = NavMode.DESCEND
+	mining_outcome = MiningOutcome.ACTIVE
+	mining_outcome_reason = ""
+	completed_corridors.clear()
+	active_corridor_cells.clear()
+	attempted_descent_origins.clear()
+	attempted_descent_origins[nav_travel_coord] = true
 	caches.clear()
 	_reset_progress()
 	keeper.mined.connect(_on_mined)
@@ -372,6 +391,8 @@ func get_status_snapshot() -> Dictionary:
 		"teacher": {
 			"state": State.keys()[state],
 			"nav_mode": NavMode.keys()[nav_mode] if state == State.NAVIGATE else null,
+			"mining_outcome": MiningOutcome.keys()[mining_outcome],
+			"mining_outcome_reason": mining_outcome_reason,
 		},
 		"keeper": {
 			"carried_resources": _status_carried_resources(),
@@ -495,6 +516,8 @@ func _preflight() -> String:
 	keeper = Keepers.getLocalKeeperByDeviceId(0)
 	if not is_instance_valid(keeper) or keeper.techId != "keeper1":
 		return "Teacher requires Engineer on keyboard device 0"
+	if keeper.isInsideStation and _leaf() != "StationInputProcessor" and _leaf() != "BattleInputProcessor":
+		return "Close station modals before starting teacher collection"
 	dome = Level.getDome(keeper.teamId)
 	if not is_instance_valid(dome) or dome.techId != "dome1" or _laser() == null:
 		return "Teacher requires one normal Laser Dome weapon"
@@ -517,7 +540,15 @@ func _load_bindings() -> String:
 	return ""
 
 func _navigate() -> void:
+	var had_gadget_task := gadget_activation_pending or is_instance_valid(gadget_chamber)
 	if _claim_gadget_chamber():
+		if (
+			not had_gadget_task
+			and nav_travel_coord == NO_COORD
+			and (nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH)
+		):
+			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
+			nav_travel_mode = nav_mode
 		if _wave("wavepresent"):
 			_change(State.RETURN, "The active monster wave interrupted gadget retrieval")
 		else:
@@ -548,11 +579,40 @@ func _navigate() -> void:
 			_release_all()
 			delay = minf(CARRY_PREVIEW_INTERVAL, maxf(_wave_time() - STATION_ENTRY_SECONDS, TICK))
 			return
-	if shaft_exhausted:
+	if mining_outcome == MiningOutcome.BACKTRACK_PENDING or mining_outcome == MiningOutcome.WAITING_WAVE:
 		var target := _next_upgrade_target()
 		var id: String = target.get("id", "")
 		if _wave_needed() or (not id.is_empty() and _upgrade_ready(id)):
-			_change(State.RETURN, "The exhausted fishbone shaft is idle and a station task is ready")
+			_change(State.RETURN, "A station task takes priority over descent backtracking")
+			return
+		var search := _find_backtrack_frontier()
+		var search_status := int(search.get("status", FrontierSearch.BLOCKED))
+		if search_status == FrontierSearch.READY:
+			_adopt_descent_frontier(
+				Vector2i(search["coord"]),
+				int(search["row"]) + BRANCH_ROW_STEP,
+				"The nearest untried descent frontier on a completed branch corridor was selected"
+			)
+			return
+		if search_status == FrontierSearch.WAITING_WAVE:
+			mining_outcome = MiningOutcome.WAITING_WAVE
+			mining_outcome_reason = "No descent frontier has a safe round trip before the next wave"
+			_release_all()
+			delay = minf(CARRY_PREVIEW_INTERVAL, maxf(_wave_time() - STATION_ENTRY_SECONDS, TICK))
+			return
+		mining_outcome = MiningOutcome.BLOCKED
+		mining_outcome_reason = str(search.get(
+			"reason",
+			"No untried recorded descent frontier remains; map completion is not claimed"
+		))
+		ModLoaderLog.info(mining_outcome_reason, LOG_NAME)
+		_release_all()
+		return
+	if mining_outcome == MiningOutcome.BLOCKED:
+		var blocked_target := _next_upgrade_target()
+		var blocked_id: String = blocked_target.get("id", "")
+		if _wave_needed() or (not blocked_id.is_empty() and _upgrade_ready(blocked_id)):
+			_change(State.RETURN, "Mining is blocked and a station task is ready")
 			return
 		_release_all()
 		return
@@ -576,34 +636,38 @@ func _navigate() -> void:
 	if _must_return_now():
 		_change(State.RETURN, "No cache trip remains safe; return to the dome")
 		return
-	if branch_resume_coord != NO_COORD:
-		var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
-		if current_coord == branch_resume_coord:
-			branch_resume_coord = NO_COORD
-			_change_navigation(NavMode.BRANCH, "The keeper returned to the interrupted fishbone branch")
+	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if nav_travel_coord != NO_COORD:
+		if nav_travel_mode != NavMode.DESCEND and nav_travel_mode != NavMode.BRANCH:
+			_fail("The open navigation target has no supported continuation")
+			return
+		var travel_position: Vector2 = Level.map.getTilePos(nav_travel_coord)
+		var reached := cell == nav_travel_coord
+		if nav_travel_mode == NavMode.DESCEND:
+			reached = reached and absf(keeper.global_position.x - travel_position.x) <= 6.0
+		if reached:
+			var continuation := nav_travel_mode
+			nav_travel_coord = NO_COORD
+			nav_travel_mode = -1
 			_release_all()
+			_change_navigation(continuation, "The keeper reached the saved open navigation target")
+			_reset_progress()
 			delay = 0.2
 			return
-		if _move_open(Level.map.getTilePos(branch_resume_coord)):
+		if _move_open(travel_position):
 			return
-		_fail("No open path remains to the interrupted fishbone branch")
+		_fail("No open path remains to the saved navigation target")
 		return
 
-	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	ore = _nearest_ore()
 	if ore != NO_COORD:
 		ore_approach_coord = _faster_open_ore_approach(ore)
 		vein = [ore]; _change(State.MINE, "A revealed ore vein is in view")
 		return
 
-	if nav_mode == NavMode.ALIGN:
-		if absf(keeper.global_position.x - align_x) > 6.0:
-			_hold([&"ui_right" if keeper.global_position.x < align_x else &"ui_left"])
-			return
+	if nav_mode == NavMode.DESCEND:
 		if branch_row < -1000:
 			branch_row = maxi(cell.y + BRANCH_ROW_STEP, 1)
-		_change_navigation(NavMode.DESCEND, "The keeper is aligned with the shaft")
-	if nav_mode == NavMode.DESCEND:
 		if cell.y < branch_row:
 			var below = Level.map.getTile(cell + Vector2i.DOWN)
 			if below is Tile and below.type == CONST.BORDER:
@@ -616,23 +680,24 @@ func _navigate() -> void:
 				return
 			_hold([&"ui_down"])
 			return
-		branch_entry_x = Level.map.getTilePos(cell).x
+		branch_entry_coord = cell
+		active_corridor_cells.clear()
+		active_corridor_cells[cell] = true
 		_change_navigation(NavMode.BRANCH, "The target fishbone branch row was reached")
 	if nav_mode == NavMode.BYPASS:
 		var bypass_below = Level.map.getTile(cell + Vector2i.DOWN)
 		if not (bypass_below is Tile and bypass_below.type == CONST.BORDER):
-			_release_all()
-			align_x = Level.map.getTilePos(cell).x
-			_change_navigation(NavMode.ALIGN, "A deeper column was found beyond the border")
-			bypass_reversed = false
-			_reset_progress()
-			delay = 0.2
+			_adopt_descent_frontier(
+				cell,
+				branch_row,
+				"The first lateral column that can continue downward was adopted"
+			)
 			return
 		var bypass_next = Level.map.getTile(cell + Vector2i(bypass_side, 0))
 		if bypass_next is Tile and bypass_next.type == CONST.BORDER:
 			_release_all()
 			if bypass_reversed:
-				_exhaust_shaft("Both lateral bypass directions ended at revealed border")
+				_finish_terminal_descent("Both lateral bypass directions ended at revealed border")
 				return
 			bypass_reversed = true
 			bypass_side = -1
@@ -641,14 +706,21 @@ func _navigate() -> void:
 			return
 		_hold([&"ui_right" if bypass_side > 0 else &"ui_left"])
 		return
+	active_corridor_cells[cell] = true
 	var branch_next = Level.map.getTile(cell + Vector2i(branch_side, 0))
 	if branch_next is Tile and branch_next.type == CONST.BORDER:
 		_release_all()
+		if branch_entry_coord == NO_COORD:
+			_fail("The fishbone branch has no saved open shaft intersection")
+			return
 		branch_side *= -1
-		align_x = branch_entry_x
-		_change_navigation(NavMode.ALIGN, "The revealed branch endpoint was reached")
+		nav_travel_coord = branch_entry_coord
+		nav_travel_mode = NavMode.BRANCH
 		if branch_side > 0:
+			_record_completed_corridor(branch_row)
+			attempted_descent_origins[branch_entry_coord] = true
 			branch_row += BRANCH_ROW_STEP
+			nav_travel_mode = NavMode.DESCEND
 		_reset_progress()
 		delay = 0.2
 		return
@@ -1229,6 +1301,13 @@ func _defend() -> void:
 
 func _recover() -> void:
 	if _wave("wavepresent"):
+		if (
+			interrupted == State.NAVIGATE
+			and nav_travel_coord == NO_COORD
+			and (nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH)
+		):
+			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
+			nav_travel_mode = nav_mode
 		_change(State.RETURN, "The monster wave interrupted stuck recovery")
 		return
 	var action := DIRECTIONS[probe_index]
@@ -1924,11 +2003,34 @@ func _on_upgrade_error(id: String, team_id: String, player_id: String) -> void:
 	_fail("Game rejected intended upgrade: " + id)
 
 func _path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	if (
+		keeper.getIsInsideDome()
+		and from.distance_squared_to(keeper.global_position) <= 1.0
+	):
+		var departure_path := _dome_departure_path(from, to)
+		if not departure_path.is_empty():
+			return departure_path
+	return _map_path(from, to)
+
+func _map_path(from: Vector2, to: Vector2) -> PackedVector2Array:
 	for offset in CONST.PATHFINDING_OFFSETS:
 		var result = Level.map.findPath(from + Vector2(offset), to, keeper.teamId)
 		if result is PackedVector2Array and not result.is_empty():
 			return result
 	return PackedVector2Array()
+
+func _dome_departure_path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var map_path := _map_path(_home_position(), to)
+	if map_path.is_empty():
+		return PackedVector2Array()
+	var points := PackedVector2Array([from])
+	var shaft_at_current_height := Vector2(dome.global_position.x, from.y)
+	if from.distance_squared_to(shaft_at_current_height) > 16.0:
+		points.append(shaft_at_current_height)
+	for point in map_path:
+		if not points[points.size() - 1].is_equal_approx(point):
+			points.append(point)
+	return points
 
 func _path_distance(from: Vector2, to: Vector2) -> float:
 	var points := _path(from, to)
@@ -1952,20 +2054,24 @@ func _change(next: State, reason: String) -> void:
 	var previous := state
 	if (
 		previous == State.NAVIGATE
-		and nav_mode == NavMode.BRANCH
 		and next != State.NAVIGATE
 		and next != State.RECOVER
-		and branch_resume_coord == NO_COORD
+		and mining_outcome == MiningOutcome.ACTIVE
+		and nav_travel_coord == NO_COORD
 	):
-		branch_resume_coord = Level.map.getTileCoord(keeper.global_position)
+		if nav_mode == NavMode.DESCEND or nav_mode == NavMode.BRANCH:
+			nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
+			nav_travel_mode = nav_mode
 	if previous == State.CARRY and next != State.RECOVER:
 		carry = null
 		carry_plan.clear()
 	state = next; delay = 0.2; pickup_failures = 0
 	_reset_progress()
 	if state == State.RETURN:
-		nav_mode = NavMode.ALIGN
-		align_x = dome.global_position.x
+		if nav_travel_coord == NO_COORD and mining_outcome == MiningOutcome.ACTIVE:
+			nav_mode = NavMode.DESCEND
+			nav_travel_coord = Level.map.getTileCoord(_home_position())
+			nav_travel_mode = NavMode.DESCEND
 		bypass_side = 1; bypass_reversed = false
 	elif state == State.UPGRADE:
 		closing_upgrade = false; ui_steps = 0
@@ -2009,9 +2115,6 @@ func _track_progress(delta: float) -> void:
 		return
 	stalled += delta
 	if stalled < STALL_SECONDS:
-		return
-	if state == State.NAVIGATE and nav_mode == NavMode.BYPASS:
-		_exhaust_shaft("The revealed-border bypass made no directed progress")
 		return
 	interrupted = state; probe_index = (DIRECTIONS.find(action) + 1) % DIRECTIONS.size()
 	probe_count = 0; probe_time = 0.0
@@ -2158,9 +2261,132 @@ func _release_all() -> void:
 		_emit(action, false)
 	held.clear()
 
-func _exhaust_shaft(reason: String) -> void:
-	shaft_exhausted = true
-	branch_resume_coord = NO_COORD
+func _adopt_descent_frontier(coord: Vector2i, target_row: int, reason: String) -> void:
+	attempted_descent_origins[coord] = true
+	mining_outcome = MiningOutcome.ACTIVE
+	mining_outcome_reason = ""
+	branch_row = target_row
+	branch_side = 1
+	branch_entry_coord = NO_COORD
+	active_corridor_cells.clear()
+	bypass_side = 1
+	bypass_reversed = false
+	nav_travel_coord = coord
+	nav_travel_mode = NavMode.DESCEND
+	_release_all()
+	_change_navigation(NavMode.DESCEND, reason)
+	_reset_progress()
+	delay = 0.2
+
+func _record_completed_corridor(row: int) -> void:
+	var cells: Dictionary = active_corridor_cells.duplicate()
+	active_corridor_cells.clear()
+	for index in range(completed_corridors.size()):
+		var corridor: Dictionary = completed_corridors[index]
+		if int(corridor.get("row", -1)) != row:
+			continue
+		var known_cells: Dictionary = corridor.get("cells", {})
+		var overlaps := false
+		for coord in cells:
+			if known_cells.has(coord):
+				overlaps = true
+				break
+		if not overlaps:
+			continue
+		for coord in cells:
+			known_cells[coord] = true
+		completed_corridors.remove_at(index)
+		completed_corridors.append({"row": row, "cells": known_cells})
+		return
+	completed_corridors.append({"row": row, "cells": cells})
+
+func _find_backtrack_frontier() -> Dictionary:
+	var saw_unreachable := false
+	var saw_unsupported := false
+	var saw_wave_unsafe := false
+	for corridor_index in range(completed_corridors.size() - 1, -1, -1):
+		var corridor: Dictionary = completed_corridors[corridor_index]
+		var cells: Dictionary = corridor.get("cells", {})
+		var best_coord := NO_COORD
+		var best_distance := INF
+		for raw_coord in cells:
+			var coord := Vector2i(raw_coord)
+			if attempted_descent_origins.has(coord):
+				continue
+			var frontier := _descent_frontier(coord)
+			if frontier == DescentFrontier.CLOSED:
+				continue
+			if frontier == DescentFrontier.UNSUPPORTED:
+				saw_unsupported = true
+				continue
+			var position: Vector2 = Level.map.getTilePos(coord)
+			var outward_distance := _path_distance(keeper.global_position, position)
+			var return_distance := _path_distance(position, _home_position())
+			if not is_finite(outward_distance) or not is_finite(return_distance):
+				saw_unreachable = true
+				continue
+			if not _descent_frontier_trip_is_safe(outward_distance, return_distance):
+				saw_wave_unsafe = true
+				continue
+			if outward_distance > best_distance:
+				continue
+			if is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
+				continue
+			best_coord = coord
+			best_distance = outward_distance
+		if best_coord != NO_COORD:
+			return {
+				"status": FrontierSearch.READY,
+				"coord": best_coord,
+				"row": int(corridor.get("row", best_coord.y)),
+			}
+	if saw_wave_unsafe:
+		return {"status": FrontierSearch.WAITING_WAVE}
+	if saw_unreachable:
+		return {
+			"status": FrontierSearch.BLOCKED,
+			"reason": "Recorded descent frontiers are not reachable through the open A* graph; map completion is not claimed",
+		}
+	if saw_unsupported:
+		return {
+			"status": FrontierSearch.BLOCKED,
+			"reason": "Only unsupported revealed descent frontiers remain; map completion is not claimed",
+		}
+	return {
+		"status": FrontierSearch.BLOCKED,
+		"reason": "No untried recorded descent frontier remains; map completion is not claimed",
+	}
+
+func _descent_frontier(coord: Vector2i) -> DescentFrontier:
+	var below := coord + Vector2i.DOWN
+	if not Level.map.visibleTileCoords.has(below):
+		return DescentFrontier.OPEN
+	if int(Level.map.visibleTileCoords[below]) == Data.TILE_EMPTY:
+		return DescentFrontier.CLOSED
+	var tile = Level.map.getTile(below)
+	if not tile is Tile:
+		return DescentFrontier.UNSUPPORTED
+	if tile.type == CONST.BORDER:
+		return DescentFrontier.CLOSED
+	return DescentFrontier.OPEN if tile.get_meta("destructable", false) else DescentFrontier.UNSUPPORTED
+
+func _descent_frontier_trip_is_safe(outward_distance: float, return_distance: float) -> bool:
+	var wave_time := _wave_time()
+	if not is_finite(wave_time):
+		return true
+	var speed := _effective_speed(keeper.carriedCarryables.size(), _planning_base_speed(), _carry_loss())
+	if not is_finite(speed) or speed <= 0.0:
+		return false
+	var seconds := (outward_distance + return_distance) / speed
+	return seconds + STATION_ENTRY_SECONDS + TICK < wave_time
+
+func _finish_terminal_descent(reason: String) -> void:
+	mining_outcome = MiningOutcome.BACKTRACK_PENDING
+	mining_outcome_reason = reason
+	nav_travel_coord = NO_COORD
+	nav_travel_mode = -1
+	branch_entry_coord = NO_COORD
+	active_corridor_cells.clear()
 	_change_cache_cleanup(CacheCleanupMode.ACTIVE, reason + "; activate persistent cache cleanup")
 	var cleanup_preview := _build_carry_plan(INF)
 	if int(cleanup_preview.get("pickup_count", 0)) > 0 and _begin_carry(reason + "; begin cache cleanup", cleanup_preview):
