@@ -25,6 +25,7 @@ const CARRY_PICKUP_SECONDS := 0.35
 const CARRY_PREVIEW_INTERVAL := 1.0
 const GADGET_UI_STEP_LIMIT := 40
 const GADGET_TASK_WAIT_LIMIT := 100
+const GADGET_RECOVERY_LIMIT := 3
 const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
 const CACHE_CLEANUP_LOAD_MULTIPLIER := 2
 const MIN_SPEED_RATIO := 0.55
@@ -36,6 +37,7 @@ const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
 const REPAIR_HEALTH_RESERVE_RATIO := 0.4
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
+const GADGET_CLEARANCE_TILE_TYPES: Array[String] = ["dirt", CONST.IRON, CONST.SAND, CONST.WATER]
 const INTENT_CLASSES := [
 	[UpgradeIntent.COMBAT, UpgradeIntent.REPAIR],
 	[UpgradeIntent.DRILL, UpgradeIntent.MOBILITY],
@@ -104,6 +106,9 @@ var gadget_delivery_pending := false
 var gadget_drop_instance_id := 0
 var gadget_prior_drop_ids := {}
 var gadget_task_wait_steps := 0
+var gadget_recovery_coord := NO_COORD
+var gadget_recovery_attempts := 0
+var gadget_recovery_cache_recorded := false
 var branch_row := -1000000
 var branch_side := 1
 var branch_entry_coord := NO_COORD
@@ -277,11 +282,20 @@ func _process(delta: float) -> void:
 		if gadget_activation_pending and not is_instance_valid(gadget_chamber):
 			_fail("The active gadget chamber disappeared before confirming artifact release")
 			return
+		gadget_drop_instance_id = carried_gadget.get_instance_id()
+		if gadget_delivery_pending:
+			if state != State.RETURN:
+				var reason := "The chamber gadget requires an exclusive direct return"
+				if gadget_recovery_coord != NO_COORD:
+					reason = "The detached chamber gadget was reattached; resume its direct return"
+				gadget_recovery_coord = NO_COORD
+				gadget_task_wait_steps = 0
+				_change(State.RETURN, reason)
+				return
 		if (
 			(state != State.CARRY or not gadget_activation_pending)
 			and (not gadget_activation_pending or gadget_chamber.currentState == Chamber.State.EMPTY)
-		):
-			gadget_drop_instance_id = carried_gadget.get_instance_id()
+			):
 			gadget_delivery_pending = true
 			if state != State.RETURN:
 				_change(State.RETURN, "The chamber gadget requires an exclusive direct return")
@@ -729,6 +743,9 @@ func _explore() -> void:
 	_hold([&"ui_right" if branch_side > 0 else &"ui_left"])
 
 func _mine() -> void:
+	if gadget_delivery_pending and gadget_recovery_coord != NO_COORD:
+		_mine_gadget_recovery()
+		return
 	if _claim_gadget_chamber():
 		if not vein.is_empty():
 			_record_cache()
@@ -770,6 +787,9 @@ func _mine() -> void:
 func _carry() -> void:
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
+		return
+	if gadget_delivery_pending and gadget_recovery_coord != NO_COORD:
+		_reattach_detached_gadget()
 		return
 	if _claim_gadget_chamber():
 		if not is_instance_valid(gadget_chamber):
@@ -820,8 +840,27 @@ func _carry() -> void:
 
 func _return() -> void:
 	if gadget_delivery_pending and not is_instance_valid(_carried_gadget()):
-		_wait_for_gadget_task("Delivered chamber gadget did not open its mandatory choice popup")
-		return
+		var tracked_gadget := _tracked_gadget()
+		if (
+			is_instance_valid(tracked_gadget)
+			and not tracked_gadget.absorbed
+			and not tracked_gadget.independent
+		):
+			if tracked_gadget.isCarried():
+				_fail("The tracked chamber gadget attached to an unexpected carrier")
+				return
+			if not _wave("wavepresent") and not _wave("wavebattle"):
+				if keeper.isInsideStation and _leaf() != "Keeper1InputProcessor":
+					_release_all()
+					if _leaf() == "StationInputProcessor" or _leaf() == "BattleInputProcessor":
+						_tap(&"ui_cancel")
+						delay = 0.5
+					return
+				_begin_detached_gadget_recovery(tracked_gadget)
+				return
+		else:
+			_wait_for_gadget_task("Authoritative gadget handoff did not open its mandatory choice popup")
+			return
 	if _claim_gadget_chamber() and not gadget_delivery_pending:
 		if not _wave("wavepresent") and not _wave("wavebattle") and keeper.isInsideStation:
 			_release_all()
@@ -1175,6 +1214,114 @@ func _gadget_cover_plan() -> Dictionary:
 				best_distance = distance
 	return best
 
+func _begin_detached_gadget_recovery(gadget: Drop) -> void:
+	if gadget_recovery_coord != NO_COORD:
+		_change(State.MINE, "Resume clearance around the detached chamber gadget")
+		return
+	if gadget_recovery_attempts >= GADGET_RECOVERY_LIMIT:
+		_fail("The chamber gadget detached more than three times before delivery")
+		return
+	gadget_recovery_attempts += 1
+	gadget_recovery_coord = Level.map.getTileCoord(gadget.global_position)
+	gadget_recovery_cache_recorded = false
+	gadget_task_wait_steps = 0
+	_change(
+		State.MINE,
+		"The chamber gadget detached before delivery; clear its fixed neighboring tiles (%d/%d)"
+		% [gadget_recovery_attempts, GADGET_RECOVERY_LIMIT]
+	)
+
+func _mine_gadget_recovery() -> void:
+	if _wave("wavepresent"):
+		_change(State.RETURN, "The monster wave interrupted detached gadget clearance")
+		return
+	var gadget := _tracked_gadget()
+	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
+		gadget_recovery_coord = NO_COORD
+		_change(State.RETURN, "The tracked gadget entered authoritative handoff during clearance")
+		return
+	if gadget.isCarried():
+		_fail("The tracked chamber gadget attached to an unexpected carrier during clearance")
+		return
+	var plan := _gadget_recovery_clearance_plan()
+	if int(plan["remaining"]) == 0:
+		gadget_task_wait_steps = 0
+		_change(State.CARRY, "The detached gadget clearance is complete; reacquire the exact gadget")
+		return
+	if not plan.has("target"):
+		_wait_for_gadget_task("No open approach reaches the detached gadget clearance tiles")
+		return
+	gadget_task_wait_steps = 0
+	var target: Vector2i = plan["target"]
+	var target_tile = Level.map.getTile(target)
+	if (
+		not gadget_recovery_cache_recorded
+		and target_tile is Tile
+		and ORE_TYPES.has(target_tile.type)
+	):
+		_record_cache_site(Level.map.getTilePos(gadget_recovery_coord))
+		gadget_recovery_cache_recorded = true
+	var approach: Vector2i = plan["approach"]
+	if Level.map.getTileCoord(keeper.global_position) != approach:
+		if not _move_open(Level.map.getTilePos(approach)):
+			_fail("The detached gadget clearance approach became unreachable")
+		return
+	_hold(_axis(Level.map.getTilePos(target)))
+
+func _gadget_recovery_clearance_plan() -> Dictionary:
+	var result := {"remaining": 0}
+	var best_distance := INF
+	for y_offset in range(-1, 2):
+		for x_offset in range(-1, 2):
+			if x_offset == 0 and y_offset == 0:
+				continue
+			var target := gadget_recovery_coord + Vector2i(x_offset, y_offset)
+			if not Level.map.isRevealed(target):
+				continue
+			var tile = Level.map.getTile(target)
+			if (
+				not tile is Tile
+				or not GADGET_CLEARANCE_TILE_TYPES.has(tile.type)
+				or not tile.get_meta("destructable", false)
+			):
+				continue
+			result["remaining"] = int(result["remaining"]) + 1
+			for direction in CARDINAL_OFFSETS:
+				var approach: Vector2i = target + direction
+				var distance := _path_distance(keeper.global_position, Level.map.getTilePos(approach))
+				if not is_finite(distance) or distance >= best_distance:
+					continue
+				result["target"] = target
+				result["approach"] = approach
+				best_distance = distance
+	return result
+
+func _reattach_detached_gadget() -> void:
+	var gadget := _tracked_gadget()
+	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
+		gadget_recovery_coord = NO_COORD
+		_change(State.RETURN, "The tracked gadget entered authoritative handoff before reattachment")
+		return
+	if gadget.isCarried():
+		_fail("The tracked chamber gadget attached to an unexpected carrier before reattachment")
+		return
+	if not keeper.carriedCarryables.is_empty():
+		_fail("Cannot reacquire the chamber gadget with a non-exclusive load")
+		return
+	if keeper.focussedCarryable == gadget and _leaf() == "Keeper1InputProcessor":
+		if pickup_failures >= 3:
+			_fail("Repeated exact chamber gadget pickup attempts failed")
+			return
+		pickup_failures += 1
+		_release_all()
+		_tap(&"keeper1_pickup")
+		delay = CARRY_PICKUP_SECONDS
+		return
+	if _move_open(gadget.global_position):
+		gadget_task_wait_steps = 0
+		return
+	_wait_for_gadget_task("No open path reaches the detached chamber gadget")
+
 func _activate_gadget_chamber() -> void:
 	if not keeper.carriedCarryables.is_empty():
 		_drop_cargo_for_gadget()
@@ -1249,6 +1396,14 @@ func _carried_gadget() -> Drop:
 		return carried
 	return null
 
+func _tracked_gadget() -> Drop:
+	if gadget_drop_instance_id == 0:
+		return null
+	for candidate in Level.drops.get_all_drops().values():
+		if candidate is Drop and candidate.get_instance_id() == gadget_drop_instance_id:
+			return candidate
+	return null
+
 func _reset_gadget_retrieval() -> void:
 	gadget_chamber = null
 	gadget_activation_pending = false
@@ -1256,6 +1411,9 @@ func _reset_gadget_retrieval() -> void:
 	gadget_drop_instance_id = 0
 	gadget_prior_drop_ids.clear()
 	gadget_task_wait_steps = 0
+	gadget_recovery_coord = NO_COORD
+	gadget_recovery_attempts = 0
+	gadget_recovery_cache_recorded = false
 
 func _consume_upgrade_step(reason: String) -> bool:
 	ui_steps += 1
