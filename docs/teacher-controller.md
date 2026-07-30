@@ -347,7 +347,10 @@ continuation when no saved target exists.
 - Store quota counts by runtime resource type and reselect the nearest valid
   matching Drop during execution. Recheck the actual next leg against the hard
   wave budget. Same-type Drops remain interchangeable; behavior for overlapping
-  Drops of different types remains undecided pending recording evidence.
+  Drops of different types remains undecided. When an unresolved resource
+  endpoint produces no directional input, consume the bounded pickup failure
+  budget instead of treating a nonempty path as movement progress. Active cache
+  cleanup excludes the repeatedly failing Drop before returning.
 - The 15-second return target diagnoses mobility pressure only. It does not
   forbid a wave-safe pickup, trigger cleanup, or control live pickup admission.
 - Funding one intent does not end collection. Continue toward later deficits,

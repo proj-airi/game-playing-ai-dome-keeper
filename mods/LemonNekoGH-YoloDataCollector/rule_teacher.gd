@@ -921,8 +921,9 @@ func _carry() -> void:
 		pickup_failures += 1
 		_release_all(); _tap(&"keeper1_pickup"); delay = 0.35
 		return
-	if _move_open(carry.global_position):
+	if _move_open(carry.global_position) and not held.is_empty():
 		return
+	_release_all()
 	pickup_failures += 1
 	if pickup_failures >= 3:
 		_ignore_failed_cleanup_drop()
