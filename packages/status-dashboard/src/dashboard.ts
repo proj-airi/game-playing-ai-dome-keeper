@@ -30,19 +30,26 @@ export function useDashboard() {
       timer = setTimeout(poll, 1_000)
   }
 
-  async function selectJson(event: Event) {
+  async function selectReplay(event: Event) {
     const input = event.currentTarget as HTMLInputElement
     const file = input.files?.[0]
     input.value = ''
     if (!file)
       return
     try {
-      replay.value = JSON.parse(await file.text()) as ReplayRecording
+      const lines = (await file.text()).split(/\r?\n/)
+      if (lines.at(-1) === '')
+        lines.pop()
+      const metadata = JSON.parse(lines.shift() ?? '') as Pick<ReplayRecording, 'fixed_fps'>
+      replay.value = {
+        fixed_fps: metadata.fixed_fps,
+        events: lines.map(line => JSON.parse(line) as ReplayRecording['events'][number]),
+      }
       fileError.value = null
       selectEvent(0)
     }
     catch (error) {
-      fileError.value = error instanceof Error ? error.message : 'Unable to read replay JSON'
+      fileError.value = error instanceof Error ? error.message : 'Unable to read replay JSONL'
     }
   }
 
@@ -96,5 +103,5 @@ export function useDashboard() {
     clearTimeout(timer)
     clearMovie()
   })
-  return { eventIndex, fileError, live, liveError, movieUrl, rate, replay, selectEvent, selectJson, selectMp4, selectedEvent, syncEvent, video }
+  return { eventIndex, fileError, live, liveError, movieUrl, rate, replay, selectEvent, selectMp4, selectReplay, selectedEvent, syncEvent, video }
 }

@@ -1,6 +1,7 @@
 extends Node
 
 signal failed(reason: String)
+signal recording_finished
 
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 
@@ -18,6 +19,7 @@ const STATUS_FILE := "airi-dome-keeper-status.json"
 const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
 const RECORDING_MOVIE := "recording.avi"
+const RECORDING_RESOLUTION := Vector2i(1280, 720)
 const TICK := 0.1
 const MOBILITY_RETURN_TARGET_SECONDS := 15.0
 const STATION_ENTRY_SECONDS := 2.0
@@ -62,8 +64,10 @@ var status_elapsed := 1.0
 var status_path := ""
 var recording_path := ""
 var recording_fps := 0
-var recording := {}
-var recording_dirty := false
+var recording_file: FileAccess
+var pending_recording_events: Array[Dictionary] = []
+var recording_terminal := false
+var recording_write_failed := false
 var record_pending := false
 var record_reason := ""
 var laser_selected_monster: Variant = null
@@ -160,6 +164,8 @@ func start() -> bool:
 	var error := _preflight()
 	if error.is_empty():
 		error = _load_bindings()
+	if error.is_empty() and not recording_path.is_empty():
+		error = _open_recording()
 	if not error.is_empty():
 		ModLoaderLog.error(error, LOG_NAME)
 		return false
@@ -188,6 +194,7 @@ func start() -> bool:
 	last_wave_health_loss = 0.0; repair_target_health = 0.0
 	_sync_repair_intent()
 	observed_properties.assign([
+		"game.over",
 		keeper.teamId + ".monsters.cycle", keeper.teamId + ".monsters.wavepresent",
 		keeper.teamId + ".monsters.wavebattle",
 		keeper.teamId + ".event.keepers.insidedome", keeper.teamId + ".dome.health",
@@ -228,14 +235,12 @@ func start() -> bool:
 	_reset_laser_aim()
 	if not recording_path.is_empty():
 		record_pending = false
-		recording_dirty = false
-		recording = {"fixed_fps": recording_fps, "events": []}
 		_record("session_started", "Teacher collection started", null)
 	return true
 
-func stop() -> void:
+func stop() -> bool:
 	if not running:
-		return
+		return not recording_write_failed
 	InputSystem.game_not_in_focus = false
 	_release_all()
 	for property in observed_properties:
@@ -253,7 +258,10 @@ func stop() -> void:
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
-	_flush_recording()
+	var recording_flushed := _flush_recording()
+	if recording_file != null:
+		recording_file.close()
+		recording_file = null
 	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
 	_reset_laser_aim()
 	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
@@ -263,8 +271,8 @@ func stop() -> void:
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
 	InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
-	recording.clear()
-	recording_dirty = false
+	pending_recording_events.clear()
+	return recording_flushed
 
 func _process(delta: float) -> void:
 	status_elapsed += delta
@@ -364,22 +372,57 @@ func _physics_process(_delta: float) -> void:
 
 func _configure_recording() -> void:
 	var directory := ""
+	var recording_requested := false
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with(RECORDING_ARG):
+			recording_requested = true
 			directory = argument.trim_prefix(RECORDING_ARG).simplify_path()
 		elif argument.begins_with(RECORDING_FPS_ARG):
+			recording_requested = true
 			recording_fps = int(argument.trim_prefix(RECORDING_FPS_ARG))
-	if directory.is_empty() and recording_fps == 0:
+	if not recording_requested:
 		return
 	var movie := ProjectSettings.globalize_path(Engine.get_write_movie_path()).simplify_path()
-	if not directory.is_absolute_path() or not DirAccess.dir_exists_absolute(directory) or recording_fps <= 0:
+	var window_size := get_window().size
+	if (
+		not directory.is_absolute_path()
+		or not DirAccess.dir_exists_absolute(directory)
+		or recording_fps <= 0
+	):
 		push_error("Recording directory and FPS are invalid")
 		get_tree().quit(1)
 	elif not OS.has_feature("movie") or movie != directory.path_join(RECORDING_MOVIE):
 		push_error("Movie Maker output does not match the recording session")
 		get_tree().quit(1)
+	elif window_size != RECORDING_RESOLUTION:
+		push_error(
+			"Recording window is %s instead of %s"
+			% [str(window_size), str(RECORDING_RESOLUTION)]
+		)
+		get_tree().quit(1)
 	else:
-		recording_path = directory.path_join("recording.json")
+		recording_path = directory.path_join("recording.jsonl")
+
+func is_recording_configured() -> bool:
+	return not recording_path.is_empty()
+
+func _open_recording() -> String:
+	pending_recording_events.clear()
+	recording_terminal = false
+	recording_write_failed = false
+	if FileAccess.file_exists(recording_path):
+		return "Replay already exists for this recording session"
+	recording_file = FileAccess.open(recording_path, FileAccess.WRITE)
+	if recording_file == null:
+		return "Failed to open replay: " + error_string(FileAccess.get_open_error())
+	recording_file.store_line(JSON.stringify({"fixed_fps": recording_fps}))
+	recording_file.flush()
+	if recording_file.get_error() == OK:
+		return ""
+	var error := "Failed to write replay metadata: " + error_string(recording_file.get_error())
+	recording_file.close()
+	recording_file = null
+	return error
 
 func _temp_dir() -> String:
 	for variable in ["TMPDIR", "TEMP", "TMP"]:
@@ -396,7 +439,7 @@ func _write_status() -> void:
 	file.store_string(JSON.stringify(get_status_snapshot()))
 
 func _queue_record(reason: String) -> void:
-	if recording.is_empty() or record_pending:
+	if recording_file == null or recording_terminal or record_pending:
 		return
 	record_pending = true
 	record_reason = reason
@@ -405,23 +448,36 @@ func _queue_record(reason: String) -> void:
 	_record("observation", record_reason, null)
 
 func _record(type: String, reason: String, transition) -> void:
-	if recording.is_empty():
+	if recording_file == null or recording_terminal:
 		return
-	recording["events"].append({
+	pending_recording_events.append({
 		"movie_frame": Engine.get_process_frames(), "type": type, "reason": reason,
 		"transition": transition, "state": get_status_snapshot(),
 	})
-	recording_dirty = true
 
-func _flush_recording() -> void:
-	if recording.is_empty() or not recording_dirty:
-		return
-	var file := FileAccess.open(recording_path, FileAccess.WRITE)
-	if file == null:
-		push_error("Failed to write replay: " + error_string(FileAccess.get_open_error()))
-		return
-	file.store_string(JSON.stringify(recording))
-	recording_dirty = false
+func _flush_recording() -> bool:
+	if recording_write_failed:
+		return false
+	if recording_file == null or pending_recording_events.is_empty():
+		return true
+	var write_error := OK
+	for event in pending_recording_events:
+		recording_file.store_line(JSON.stringify(event))
+		write_error = recording_file.get_error()
+		if write_error != OK:
+			break
+	if write_error == OK:
+		recording_file.flush()
+		write_error = recording_file.get_error()
+	if write_error != OK:
+		push_error("Failed to write replay: " + error_string(write_error))
+		recording_write_failed = true
+		recording_file.close()
+		recording_file = null
+		get_tree().quit(1)
+		return false
+	pending_recording_events.clear()
+	return true
 
 func get_status_snapshot() -> Dictionary:
 	if not running or not StageManager.isInLevel() or not Level.initialized or not is_instance_valid(keeper) or not is_instance_valid(dome):
@@ -569,6 +625,8 @@ func _status_pending_intents() -> Array[String]:
 func _preflight() -> String:
 	if not StageManager.isInLevel() or not Level.initialized or Level.map == null:
 		return "Start a run before starting teacher collection"
+	if GameWorld.gameover:
+		return "Teacher cannot start after the run has ended"
 	if Level.isMultiplayer() or Keepers.local.getCount() != 1 or Options.useGamepad(0):
 		return "Teacher requires one offline keyboard keeper"
 	keeper = Keepers.getLocalKeeperByDeviceId(0)
@@ -2617,6 +2675,18 @@ func _on_monster_spawned(monster: Monster) -> void:
 
 func propertyChanged(property: String, old_value, new_value) -> void:
 	if not running:
+		return
+	if property == "game.over":
+		if new_value == "":
+			return
+		if new_value != "won" and new_value != "lost":
+			_fail("Unsupported game.over value: " + str(new_value))
+			return
+		if recording_file != null:
+			var outcome := String(new_value)
+			_record("run_" + outcome, "Run " + outcome, null)
+			recording_terminal = true
+			recording_finished.emit()
 		return
 	if property.ends_with(".monsters.wavepresent") and bool(new_value) and not bool(old_value):
 		wave_start_max_health = _dome_max_health()

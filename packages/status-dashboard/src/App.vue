@@ -54,7 +54,7 @@ const keeperRows = computed(() => snapshot.value
 
       <section v-if="mode === DashboardMode.Replay" class="surface mb-4 p-5">
         <div class="flex flex-wrap gap-2">
-          <label class="file-button">Select JSON<input class="hidden" type="file" accept=".json,application/json" @change="dashboard.selectJson"></label>
+          <label class="file-button">Select JSONL<input class="hidden" type="file" accept=".jsonl" @change="dashboard.selectReplay"></label>
           <label class="file-button">Select MP4<input class="hidden" type="file" accept=".mp4,video/mp4" @change="dashboard.selectMp4"></label>
         </div>
         <p v-if="dashboard.fileError.value" class="text-sm text-orange-600">
@@ -80,7 +80,7 @@ const keeperRows = computed(() => snapshot.value
       </section>
 
       <section v-if="!snapshot" class="surface p-10 text-center text-neutral-500">
-        {{ mode === DashboardMode.Live ? 'Waiting for an active Dome Keeper run.' : 'Select replay JSON to show synchronized status.' }}
+        {{ mode === DashboardMode.Live ? 'Waiting for an active Dome Keeper run.' : 'Select replay JSONL to show synchronized status.' }}
       </section>
       <template v-else>
         <section class="surface grid gap-4 p-5 sm:grid-cols-3">

@@ -24,7 +24,7 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `AStar2D.get_point_path`](https://docs.godotengine.org/en/4.3/classes/class_astar2d.html#class-astar2d-method-get-point-path) — The path-query API used for open-tile navigation, returns, work resumption, and frontier selection.
 - [Godot 4.3: `BaseButton.pressed`](https://docs.godotengine.org/en/4.3/classes/class_basebutton.html#signal-basebutton-pressed) — The button signal used by the pause-menu control that starts and stops data collection.
 - [Godot 4.3: `Engine.get_process_frames`](https://docs.godotengine.org/en/4.3/classes/class_engine.html#class-engine-method-get-process-frames) — The frame counter used as the synchronization clock for Movie Maker recordings and replay snapshots.
-- [Godot 4.3: FileAccess](https://docs.godotengine.org/en/4.3/classes/class_fileaccess.html) — The file API used to write live status data and event-driven replay records.
+- [Godot 4.3: FileAccess](https://docs.godotengine.org/en/4.3/classes/class_fileaccess.html) — The file API used to write live status data and append and flush event-driven replay records.
 - [Godot 4.3: Image](https://docs.godotengine.org/en/4.3/classes/class_image.html) — The image API used for captured-frame processing and YOLO-compatible letterboxing.
 - [Godot 4.3: `Input.parse_input_event`](https://docs.godotengine.org/en/4.3/classes/class_input.html#class-input-method-parse-input-event) — The in-process event API used to emit normal configured gameplay and UI actions.
 - [Godot 4.3: Input MouseMode](https://docs.godotengine.org/en/4.3/classes/class_input.html#enum-input-mousemode) — The mouse-mode reference supporting visible-cursor behavior during background collection.
@@ -35,7 +35,9 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `OS.get_environment`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-environment) — The environment API used to resolve the same temporary-directory variables recognized by Node.js.
 - [Godot 4.3: RayCast2D](https://docs.godotengine.org/en/4.3/classes/class_raycast2d.html) — The ray-collision API used to confirm that the selected monster is the Laser's first acquired collider.
 - [Godot 4.3: `SceneTree.node_added`](https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#signal-scenetree-node-added) — The scene-tree signal used to discover dynamically created pause and upgrade interfaces.
+- [Godot 4.3: `SceneTree.quit`](https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#class-scenetree-method-quit) — The normal process-exit API used after the final replay event is flushed so Movie Maker can finalize its output.
 - [Godot 4.3: `TileMap.local_to_map`](https://docs.godotengine.org/en/4.3/classes/class_tilemap.html#class-tilemap-method-local-to-map) — The coordinate-conversion API used by mining, navigation, and recovery logic.
+- [Godot 4.3: `Window.size`](https://docs.godotengine.org/en/4.3/classes/class_window.html#class-window-property-size) — The actual recording-window dimensions validated against the requested Movie Maker output resolution, independently of the project's scaled logical viewport.
 - [Godot 4.3: Creating Movies](https://docs.godotengine.org/en/4.3/tutorials/animation/creating_movies.html) — The Movie Maker guide used for deterministic fixed-frame-rate replay recording.
 - [Godot 4.3: Project Organization](https://docs.godotengine.org/en/4.3/tutorials/best_practices/project_organization.html) — The organization guidance consulted when defining responsibility boundaries during teacher cleanup.
 - [Godot 4.3: Command-Line Tutorial](https://docs.godotengine.org/en/4.3/tutorials/editor/command_line_tutorial.html) — The command-line reference used for headless validation and Movie Maker launches.
@@ -89,6 +91,7 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Web UI and Inference Runtime
 
+- [JSON Lines](https://jsonlines.org/) — The line-delimited JSON format used for append-only replay metadata and events.
 - [ONNX Runtime Web Tutorial](https://onnxruntime.ai/docs/tutorials/web/) — Official guidance for loading and running ONNX models in browsers, informing the project's web and Electron inference flow.
 - [ONNX Runtime Web JavaScript Setup](https://onnxruntime.ai/docs/get-started/with-javascript/web.html) — Setup and execution-provider documentation for `onnxruntime-web`, which the project runs with WebGPU where supported.
 - [MDN: `WorkerNavigator.gpu`](https://developer.mozilla.org/en-US/docs/Web/API/WorkerNavigator/gpu) — The WebGPU API available inside Web Workers, enabling the project to keep inference off the main UI thread.

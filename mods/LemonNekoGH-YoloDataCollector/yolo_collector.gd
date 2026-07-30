@@ -9,6 +9,8 @@ const SEGMENT_CYCLE := 6
 const TRAIN_SEGMENTS := 4
 const TARGETS_PER_NO_TARGET := 5
 
+enum RecordingLifecycle { MANUAL, WAITING_FOR_RUN, ACTIVE, STOPPING }
+
 const CLASS_PLAYER := 0
 const CLASS_DOME := 1
 const CLASS_IRON := 2
@@ -24,16 +26,46 @@ const DATASET_NAMES := [
 	"enemy",
 ]
 
-var yolo_collecting := false
+var collection_active := false
+var yolo_capture_active := false
 var yolo_timer: Timer
 var capture_index := 0
 var session_dir := ""
 var targets_since_no_target := 0
 var capture_size_logged := false
 var teacher: Node
+var recording_lifecycle := RecordingLifecycle.MANUAL
 
 func _init() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	ModLoaderLog.debug("YOLO Data Collector Node Initiated!", "YOLO Data Collector")
+
+
+func _ready() -> void:
+	if teacher != null and bool(teacher.call(&"is_recording_configured")):
+		recording_lifecycle = RecordingLifecycle.WAITING_FOR_RUN
+
+
+func _process(_delta: float) -> void:
+	if recording_lifecycle != RecordingLifecycle.WAITING_FOR_RUN:
+		return
+	if not is_instance_valid(StageManager.currentStage):
+		return
+	if not StageManager.currentStage is LandingStage and not StageManager.currentStage is LevelStage:
+		recording_lifecycle = RecordingLifecycle.STOPPING
+		push_error(
+			"Recording startup reached unsupported stage: "
+			+ str(StageManager.currentStage.name)
+		)
+		get_tree().quit(1)
+		return
+	if not _recording_run_ready():
+		return
+	if start_collection():
+		recording_lifecycle = RecordingLifecycle.ACTIVE
+		return
+	recording_lifecycle = RecordingLifecycle.STOPPING
+	get_tree().quit(1)
 
 func _enter_tree() -> void:
 	ModLoaderLog.debug("Collector entered tree. Inside: " + str(is_inside_tree()), "YOLO Data Collector")
@@ -50,6 +82,8 @@ func _exit_tree() -> void:
 
 func _on_tree_node_added(node: Node) -> void:
 	if node.name != &"PauseMenu":
+		return
+	if teacher != null and bool(teacher.call(&"is_recording_configured")):
 		return
 
 	var menu_panel := node.get_node_or_null("MenuPanel")
@@ -85,7 +119,7 @@ func _add_pause_menu_button(pause_menu: Node) -> void:
 
 
 func _on_collection_button_pressed(button: Button) -> void:
-	if yolo_collecting:
+	if collection_active:
 		stop_collection()
 	else:
 		start_collection()
@@ -95,7 +129,7 @@ func _on_collection_button_pressed(button: Button) -> void:
 
 
 func _collection_button_text() -> String:
-	if yolo_collecting:
+	if collection_active:
 		return "Stop Teacher Collection"
 	return "Start Teacher Collection"
 
@@ -103,14 +137,18 @@ func _collection_button_text() -> String:
 func set_teacher(value: Node) -> void:
 	teacher = value
 	teacher.connect(&"failed", _on_teacher_failed)
+	teacher.connect(&"recording_finished", _on_recording_finished)
 
 
-func start_collection() -> void:
-	if yolo_collecting:
-		return
+func start_collection() -> bool:
+	if collection_active:
+		return true
 	if teacher != null and not bool(teacher.call(&"start")):
-		return
-	yolo_collecting = true
+		return false
+	collection_active = true
+	if teacher != null and bool(teacher.call(&"is_recording_configured")):
+		return true
+	yolo_capture_active = true
 	_start_new_session()
 	if yolo_timer == null:
 		yolo_timer = Timer.new()
@@ -120,21 +158,48 @@ func start_collection() -> void:
 		yolo_timer.timeout.connect(_capture_frame)
 	yolo_timer.start()
 	_capture_frame()
+	return true
 
 
-func stop_collection() -> void:
+func stop_collection() -> bool:
+	var teacher_stopped := true
 	if teacher != null:
-		teacher.call(&"stop")
-	if not yolo_collecting:
-		return
-	yolo_collecting = false
+		teacher_stopped = bool(teacher.call(&"stop"))
+	if not collection_active:
+		return teacher_stopped
+	collection_active = false
 	if yolo_timer:
 		yolo_timer.stop()
+	if not yolo_capture_active:
+		return teacher_stopped
+	yolo_capture_active = false
 	_open_session_dir()
+	return teacher_stopped
+
+
+func _recording_run_ready() -> bool:
+	return StageManager.isInLevel() and Level.initialized and bool(Level.stage.keeperInputStarted)
+
+
+func _on_recording_finished() -> void:
+	if recording_lifecycle != RecordingLifecycle.ACTIVE:
+		return
+	recording_lifecycle = RecordingLifecycle.STOPPING
+	call_deferred("_finish_configured_recording")
+
+
+func _finish_configured_recording() -> void:
+	if stop_collection():
+		get_tree().quit(0)
 
 
 func _on_teacher_failed(_reason: String) -> void:
-	stop_collection()
+	var configured_recording := recording_lifecycle == RecordingLifecycle.ACTIVE
+	var stopped := stop_collection()
+	if configured_recording:
+		recording_lifecycle = RecordingLifecycle.STOPPING
+		if stopped:
+			get_tree().quit(1)
 	for button in get_tree().get_nodes_in_group("yolo_collection_button"):
 		button.text = _collection_button_text()
 

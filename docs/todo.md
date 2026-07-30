@@ -23,40 +23,40 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 
 ## Long-Run Recording Performance
 
-- Reproduce and profile the severe recording slowdown reported after wave 20 in
-  the latest long run. Separate simulation and rendering cost, Godot Movie Maker
-  output, viewport readback and YOLO image encoding, replay serialization, and
-  post-run conversion; the conversion that starts after the game exits cannot
-  explain an in-run stall. Record before-and-after simulation throughput or wall
-  time per fixed game minute rather than requiring an unmeasurable absence of
-  slowdown.
+- Measure the gradual recording slowdown that was already noticeable by wave 20
+  in the latest long run. Separate simulation and rendering cost, Godot Movie
+  Maker output, viewport readback and YOLO image encoding when enabled, replay
+  serialization, and post-run conversion; the conversion that starts after the
+  game exits cannot explain an in-run slowdown. Calculate the throughput trend
+  from fixed-frame replay events and matching timestamped logs rather than
+  treating wave 20 as a performance discontinuity.
 - Reduce the identified candidate bottlenecks while preserving exact
   fixed-frame replay synchronization, complete observer and aim telemetry, and
   the existing YOLO image-label contract whenever YOLO capture is enabled.
-  Evaluate a replay-only teacher mode, batched append-only event persistence
-  with finalization to the current replay JSON, and a lower movie resolution as
-  separate measured changes. Keep the fixed FPS unchanged until evidence shows
-  that changing the simulation and synchronization clock is safe, and do not
-  hide the problem by dropping confirmed telemetry.
-- Bound long-session intermediate-output growth per fixed game minute and
-  validate finalization after a representative run beyond wave 20. If the
-  built-in AVI writer remains an unsafe or impractical long-session boundary,
-  decide a fixed-timeline segmented or custom writer separately rather than
-  switching to an external wall-clock recorder.
+  Repository recording runs are replay-only, persist batched events directly to
+  the final append-only JSONL, and record Movie Maker output at `1280x720`.
+  Keep the fixed FPS unchanged and do not hide the problem by dropping confirmed
+  telemetry. Preserve ordinary manual YOLO collection for later label work.
+- Bound JSONL and movie growth per fixed game minute, and validate the final
+  replay flush and synchronized playback after a representative run beyond wave
+  20. Do not prioritize the built-in AVI size boundary based on file size alone:
+  the current recording beyond 4 GB remained readable and converted with an
+  exact frame count. Revisit a fixed-timeline segmented or custom writer only
+  after a representative recording is actually unreadable or fails conversion;
+  do not switch to an external wall-clock recorder.
 
-## Automated Recording Lifecycle
+## Automated Recording Lifecycle Validation
 
-- Make the repository recording command opt into an automatic lifecycle. Once
-  the supported single-player Engineer and Laser run is authoritatively ready,
-  start the rule teacher and YOLO collection without requiring the pause-menu
-  button. Keep ordinary launches and manually started collection unchanged, and
-  fail closed if the requested recording configuration or supported run cannot
-  be established.
-- Treat authoritative dome collapse and successful run completion as terminal
-  outcomes. Capture the final outcome and complete status snapshot, stop new
-  captures, flush the replay and collector output, and then request a normal
-  Godot shutdown so Movie Maker can finalize its AVI. Preserve all incomplete
-  artifacts and report failure on an unexpected exit or any teardown error.
+- Validate the repository recording command's automatic lifecycle in fresh won
+  and lost runs. It waits for the supported single-player Engineer and Laser
+  run's Keeper input to become active, starts the rule teacher and replay without
+  the pause-menu button, treats authoritative `game.over` values as terminal,
+  appends `run_won` or `run_lost` with the final complete snapshot, flushes the
+  JSONL, and requests a normal Godot shutdown. Confirm ordinary launches and
+  manually started YOLO collection remain unchanged. Confirm invalid recording
+  configuration, an unsupported run, teacher failure, manual window closure,
+  malformed JSONL, and a missing terminal event all preserve incomplete
+  artifacts, report failure, and skip MP4 conversion.
 - After Godot has exited successfully, transcode only that session's exact AVI
   to its MP4 destination and verify that the conversion completed successfully.
   Delete that exact AVI only after the MP4 passes the chosen validation; keep

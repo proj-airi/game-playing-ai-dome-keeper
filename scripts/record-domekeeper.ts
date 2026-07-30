@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
-import { existsSync } from 'node:fs'
+import { createReadStream, existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { createInterface } from 'node:readline'
 import { x } from 'tinyexec'
 
 const args = process.argv.slice(2)
@@ -14,6 +15,7 @@ const version = import.meta.env.DOMEKEEPER_VERSION
 if (!godot || !version)
   fail('GODOT_BIN and DOMEKEEPER_VERSION must be provided by mise')
 const project = path.resolve(import.meta.dir, '..', 'external', 'domekeeper-decompiled', version)
+const recordingResolution = '1280x720'
 
 if (!existsSync(godot))
   fail(`Godot binary does not exist: ${godot}`)
@@ -23,7 +25,7 @@ const timestamp = new Date().toISOString().replaceAll(':', '-').replace('.', '-'
 const sessionDir = path.join(process.cwd(), 'recordings', `session_${timestamp}_${crypto.randomUUID()}`)
 const avi = path.join(sessionDir, 'recording.avi')
 const mp4 = path.join(sessionDir, 'recording.mp4')
-const replay = path.join(sessionDir, 'recording.json')
+const replay = path.join(sessionDir, 'recording.jsonl')
 
 await mkdir(sessionDir, { recursive: true })
 console.log(`Recording to ${sessionDir}`)
@@ -32,6 +34,9 @@ await run(godot, [
   project,
   '--render-thread',
   'safe',
+  '--windowed',
+  '--resolution',
+  recordingResolution,
   '--write-movie',
   avi,
   '--fixed-fps',
@@ -42,7 +47,9 @@ await run(godot, [
 ], 'Godot recording failed; the incomplete session was kept')
 
 if (!existsSync(replay))
-  fail(`No replay JSON was written. Start teacher collection during the run. Movie output: ${avi}`)
+  fail(`No replay JSONL was written. The incomplete movie was kept: ${avi}`)
+
+await requireCompletedReplay(replay)
 
 await run('ffmpeg', [
   '-i',
@@ -54,7 +61,7 @@ await run('ffmpeg', [
   '-c:a',
   'aac',
   mp4,
-], 'FFmpeg conversion failed; the AVI and replay JSON were kept')
+], 'FFmpeg conversion failed; the AVI and replay JSONL were kept')
 
 console.log(`Replay ready: ${replay}`)
 
@@ -67,6 +74,26 @@ async function run(command: string, args: string[], failure: string): Promise<vo
     console.error(error)
     process.exit(1)
   }
+}
+
+async function requireCompletedReplay(replayPath: string): Promise<void> {
+  const lines = createInterface({ input: createReadStream(replayPath), crlfDelay: Infinity })
+  let lineNumber = 0
+  let finalEvent: { type?: string } | undefined
+  for await (const line of lines) {
+    lineNumber += 1
+    try {
+      finalEvent = JSON.parse(line)
+    }
+    catch (error) {
+      console.error(error)
+      fail(`Replay JSONL has malformed JSON on line ${lineNumber}; the incomplete session was kept: ${replayPath}`)
+    }
+  }
+  if (lineNumber < 2 || finalEvent == null)
+    fail(`Replay JSONL has no terminal event; the incomplete session was kept: ${replayPath}`)
+  if (finalEvent.type !== 'run_won' && finalEvent.type !== 'run_lost')
+    fail(`Replay JSONL has no terminal run outcome; the incomplete session was kept: ${replayPath}`)
 }
 
 function fail(message: string): never {

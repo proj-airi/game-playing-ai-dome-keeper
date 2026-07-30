@@ -56,6 +56,9 @@ func install_script_extensions() -> void:
 	ModLoaderMod.install_script_extension(
 		extensions_dir_path.path_join("content/techtree/TechTreePopup.gd")
 	)
+	ModLoaderMod.install_script_extension(
+		extensions_dir_path.path_join("systems/options/Options.gd")
+	)
 
 
 func _ready() -> void:
