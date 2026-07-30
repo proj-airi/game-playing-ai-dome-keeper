@@ -500,20 +500,34 @@ continuation when no saved target exists.
 
 ## Defense Targeting Policy
 
-- Select deterministically from visible, alive `Monster` instances registered in
-  the supported team's active wave. Never select projectile-group nodes.
+- Select deterministically from valid, alive, non-leaving `Monster` instances
+  registered in the supported team's active wave. Require the monster's actual
+  `getCenter()` aim point to be inside the visible viewport, and never select
+  projectile-group nodes.
 - Exclude `Monster.Type.WORM_ROCK` from intentional pre-aim and fire despite its
   `Monster` implementation. Leave it in the normal wave lifecycle, never let it
   authorize fire, and tolerate only unavoidable one-physics-tick incidental
   collision from cached ray/input timing.
-- Prefer a target currently damageable by runtime `canBeHit()` and
-  `invulnerable` state. When none is damageable, pre-aim a visible alive target
-  but do not fire until that same runtime gate permits it. Never hard-code
-  eligibility from monster type or apparent animation phase.
-- Use signed angular error only to choose steering direction until the Laser's
-  enabled raycasts, in the weapon's collision-priority order, report the exact
-  selected monster as first collider. Consume the cached ray result used by the
-  weapon without forcing a same-frame refresh.
+- Revalidate the retained target on every physics tick. While it remains
+  eligible, keep it without reranking against other candidates and try to kill
+  it before changing targets. If it becomes ineligible, replace it immediately.
+- When the retained target is currently damageable by runtime `canBeHit()` and
+  `invulnerable` state, keep it. Otherwise select a damageable eligible target
+  when one exists. Only when no damageable target exists may the teacher retain
+  or select an eligible non-damageable target for pre-aim, and it must not fire
+  at that target. Never hard-code damageability from monster type or apparent
+  animation phase.
+- For initial selection and required reselection, rank the applicable candidate
+  tier by the smallest absolute signed angular error along the normal Laser's
+  actual steering path. Break equal-angle ties by runtime monster UID and then
+  instance ID. Do not rank by dome distance, alternate sides for fairness, or
+  expire an otherwise eligible retained target.
+- Read the enabled raycasts in the weapon's collision-priority order and consume
+  their cached physics result without forcing a same-frame refresh. If their
+  first collider is a different eligible and currently damageable monster,
+  adopt it as the retained target and fire in the same physics tick. Never skip
+  an ineligible projectile, `WORM_ROCK`, or other blocker to inspect a collider
+  behind it.
 - Stop steering and fire only while the exact acquired target is also runtime
   damageable. Release fire immediately when acquisition is lost. Do not use a
   fixed angular dead zone, early-fire braking, random sweeping, direct Laser
@@ -527,6 +541,8 @@ continuation when no saved target exists.
   Record semantic target, damageability, and first-collider changes as replay
   events, with concrete target-switch reasons in the event header. Older replay
   files may omit the aim object.
+- Leave persistent ineligible-blocker timeouts open until fresh targeting
+  telemetry distinguishes transient intersections from a repeatable stall.
 - Emit weapon controls only while the keeper is inside the station and
   `BattleInputProcessor` is active. Recover battle input when a wave still needs
   defense and wait for authoritative `wavebattle` settlement before the normal

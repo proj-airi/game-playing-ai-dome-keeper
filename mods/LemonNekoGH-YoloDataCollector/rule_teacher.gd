@@ -72,6 +72,7 @@ var laser_signed_angular_error: Variant = null
 var laser_first_collider: Variant = null
 var laser_first_collider_ray_index: Variant = null
 var laser_selected_monster_ref: WeakRef
+var laser_target: Monster
 var previous_pause_when_out_of_focus := true
 var previous_use_mouse_dome_gameplay := false
 var state := State.EXPLORE
@@ -1895,22 +1896,19 @@ func _full_load_count(loss: float) -> int:
 	return count
 
 func _aim() -> void:
-	var weapon = _laser(); var target = _visible_monster()
+	var weapon = _laser()
 	if weapon == null or not weapon.inputReady:
 		_clear_laser_aim("The normal Laser is not ready for aiming input")
 		_release_all()
 		return
+	var target = _select_laser_target(weapon)
+	laser_target = target
 	if target == null:
 		_update_laser_aim(null, null, null, null, null)
 		_release_all()
 		return
 	var damageable: bool = target.canBeHit() and not target.invulnerable
-	var aim: Vector2 = target.getCenter() - weapon.global_position
-	var error := wrapf(aim.angle() - (weapon.rotation - CONST.PI_HALF), -PI, PI)
-	if aim.x < 0.0 and error > CONST.PI_HALF:
-		error -= TAU
-	elif aim.x > 0.0 and error < -CONST.PI_HALF:
-		error += TAU
+	var error := _laser_aim_error(weapon, target)
 	var collider = null
 	var collider_ray_index: Variant = null
 	for ray_index in weapon.raycasts.size():
@@ -1921,6 +1919,19 @@ func _aim() -> void:
 		if collider != null:
 			collider_ray_index = ray_index
 			break
+	var switch_reason := ""
+	var wave = Level.monstersByTeamId.get(keeper.teamId)
+	if (
+		collider != target
+		and collider is Monster
+		and _laser_target_is_eligible(collider, wave)
+		and _laser_target_is_damageable(collider)
+	):
+		target = collider
+		laser_target = target
+		damageable = true
+		error = _laser_aim_error(weapon, target)
+		switch_reason = "an eligible first collider took over"
 	var fire_action := StringName(dome.techId + "_fire")
 	var actions: Array[StringName] = []
 	var started_firing := false
@@ -1933,11 +1944,12 @@ func _aim() -> void:
 		elif error < 0.0:
 			actions.append(&"ui_left")
 	_hold(actions)
-	_update_laser_aim(target, damageable, error, collider, collider_ray_index)
+	_update_laser_aim(target, damageable, error, collider, collider_ray_index, switch_reason)
 	if started_firing:
 		_queue_record("Laser began firing at an acquired monster")
 
 func _reset_laser_aim() -> void:
+	laser_target = null
 	laser_selected_monster = null
 	laser_selected_monster_damageable = null
 	laser_signed_angular_error = null
@@ -1946,6 +1958,7 @@ func _reset_laser_aim() -> void:
 	laser_selected_monster_ref = null
 
 func _clear_laser_aim(reason: String) -> void:
+	laser_target = null
 	if (
 		laser_selected_monster == null
 		and laser_selected_monster_damageable == null
@@ -2050,57 +2063,96 @@ func _laser_target_switch_reason(previous, target, had_previous: bool) -> String
 			return "the previous target died and no replacement is selectable"
 		if previous.leaving:
 			return "the previous target departed and no replacement is selectable"
+		if not previous.alive():
+			return "the previous target was no longer alive and no replacement is selectable"
+		var previous_wave = Level.monstersByTeamId.get(keeper.teamId)
+		if not is_instance_valid(previous_wave) or not previous_wave.monstersInWave.has(previous):
+			return "the previous target left the active wave and no replacement is selectable"
 		return "the previous target left the visible selectable set"
 	if not is_instance_valid(previous):
 		if had_previous:
 			return "the previous target became unavailable"
-		return "an initial selectable target became available"
+		return (
+			"an initial damageable target became available"
+			if _laser_target_is_damageable(target)
+			else "only a non-damageable pre-aim target was available"
+		)
 	if previous.dead:
 		return "the previous target died"
 	if previous.leaving:
 		return "the previous target departed"
-	var screen_position: Vector2 = previous.get_global_transform_with_canvas().origin
+	if not previous.alive():
+		return "the previous target was no longer alive"
+	var wave = Level.monstersByTeamId.get(keeper.teamId)
+	if not is_instance_valid(wave) or not wave.monstersInWave.has(previous):
+		return "the previous target left the active wave"
+	var local_center: Vector2 = previous.to_local(previous.getCenter())
+	var screen_position: Vector2 = previous.get_global_transform_with_canvas() * local_center
 	if not previous.is_visible_in_tree() or not get_viewport().get_visible_rect().has_point(screen_position):
 		return "the previous target left the visible viewport"
 	var previous_damageable: bool = previous.canBeHit() and not previous.invulnerable
 	var target_damageable: bool = target.canBeHit() and not target.invulnerable
 	if target_damageable and not previous_damageable:
-		return "a damageable target outranked the previous target"
-	var previous_distance := dome.global_position.distance_squared_to(previous.getCenter())
-	var target_distance := dome.global_position.distance_squared_to(target.getCenter())
-	if target_distance < previous_distance:
-		return "an equal-damageability target became closer to the dome"
-	if is_equal_approx(target_distance, previous_distance) and target.get_instance_id() < previous.get_instance_id():
-		return "the deterministic equal-distance tie-break changed"
-	return "the selector priority changed"
+		return "a damageable target became available while pre-aiming"
+	return "the minimum-turn selector acquired a replacement"
 
-func _visible_monster():
+func _select_laser_target(weapon):
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
-	var best = null
-	var best_damageable := false
-	var best_distance := INF
 	if not is_instance_valid(wave):
 		return null
+	var retained = laser_target if _laser_target_is_eligible(laser_target, wave) else null
+	if retained != null and _laser_target_is_damageable(retained):
+		return retained
+	var best_damageable = null
+	var best_pre_aim = null
 	for monster in wave.monstersInWave:
-		if not is_instance_valid(monster) or monster.dead or monster.leaving:
+		if not _laser_target_is_eligible(monster, wave):
 			continue
-		if monster.type == Monster.Type.WORM_ROCK:
+		if _laser_target_is_damageable(monster):
+			if _laser_target_is_better(monster, best_damageable, weapon):
+				best_damageable = monster
 			continue
-		var screen_position: Vector2 = monster.get_global_transform_with_canvas().origin
-		if not monster.is_visible_in_tree() or not get_viewport().get_visible_rect().has_point(screen_position):
-			continue
-		var damageable: bool = monster.canBeHit() and not monster.invulnerable
-		var distance := dome.global_position.distance_squared_to(monster.getCenter())
-		if best != null and not damageable and best_damageable:
-			continue
-		var closer := distance < best_distance
-		var earlier: bool = is_equal_approx(distance, best_distance) and monster.get_instance_id() < best.get_instance_id()
-		if best != null and damageable == best_damageable and not closer and not earlier:
-			continue
-		best = monster
-		best_damageable = damageable
-		best_distance = distance
-	return best
+		if retained == null and _laser_target_is_better(monster, best_pre_aim, weapon):
+			best_pre_aim = monster
+	if best_damageable != null:
+		return best_damageable
+	if retained != null:
+		return retained
+	return best_pre_aim
+
+func _laser_target_is_eligible(monster, wave) -> bool:
+	if not is_instance_valid(monster) or not monster is Monster or not is_instance_valid(wave):
+		return false
+	if not wave.monstersInWave.has(monster) or not monster.alive() or monster.dead or monster.leaving:
+		return false
+	if monster.type == Monster.Type.WORM_ROCK or monster.is_in_group("projectile") or not monster.is_visible_in_tree():
+		return false
+	var local_center: Vector2 = monster.to_local(monster.getCenter())
+	var screen_position: Vector2 = monster.get_global_transform_with_canvas() * local_center
+	return get_viewport().get_visible_rect().has_point(screen_position)
+
+func _laser_target_is_damageable(monster: Monster) -> bool:
+	return monster.canBeHit() and not monster.invulnerable
+
+func _laser_target_is_better(candidate: Monster, current, weapon) -> bool:
+	if not is_instance_valid(current):
+		return true
+	var candidate_error := absf(_laser_aim_error(weapon, candidate))
+	var current_error := absf(_laser_aim_error(weapon, current))
+	if not is_equal_approx(candidate_error, current_error):
+		return candidate_error < current_error
+	if candidate.UID != current.UID:
+		return candidate.UID < current.UID
+	return candidate.get_instance_id() < current.get_instance_id()
+
+func _laser_aim_error(weapon, target: Monster) -> float:
+	var aim: Vector2 = target.getCenter() - weapon.global_position
+	var error := wrapf(aim.angle() - (weapon.rotation - CONST.PI_HALF), -PI, PI)
+	if aim.x < 0.0 and error > CONST.PI_HALF:
+		error -= TAU
+	elif aim.x > 0.0 and error < -CONST.PI_HALF:
+		error += TAU
+	return error
 
 func _laser():
 	var found = null
