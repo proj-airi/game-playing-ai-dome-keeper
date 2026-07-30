@@ -72,10 +72,16 @@ export function useDashboard() {
     const current = replay.value.events[eventIndex.value]
     if (current && Math.abs(time - current.movie_frame / replay.value.fixed_fps) < 0.000_1)
       return
-    let index = 0
-    while (index + 1 < replay.value.events.length && replay.value.events[index + 1].movie_frame / replay.value.fixed_fps <= time)
-      index++
-    eventIndex.value = index
+    let lower = 0
+    let upper = replay.value.events.length
+    while (lower < upper) {
+      const middle = Math.floor((lower + upper) / 2)
+      if (replay.value.events[middle].movie_frame / replay.value.fixed_fps <= time)
+        lower = middle + 1
+      else
+        upper = middle
+    }
+    eventIndex.value = Math.max(lower - 1, 0)
   }
 
   function clearMovie() {

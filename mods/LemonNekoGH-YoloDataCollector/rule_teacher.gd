@@ -63,8 +63,15 @@ var status_path := ""
 var recording_path := ""
 var recording_fps := 0
 var recording := {}
+var recording_dirty := false
 var record_pending := false
 var record_reason := ""
+var laser_selected_monster: Variant = null
+var laser_selected_monster_damageable: Variant = null
+var laser_signed_angular_error: Variant = null
+var laser_first_collider: Variant = null
+var laser_first_collider_ray_index: Variant = null
+var laser_selected_monster_ref: WeakRef
 var previous_pause_when_out_of_focus := true
 var previous_use_mouse_dome_gameplay := false
 var state := State.EXPLORE
@@ -217,8 +224,10 @@ func start() -> bool:
 	GameWorld.upgradeBought.connect(_on_upgrade_bought)
 	GameWorld.upgradeError.connect(_on_upgrade_error)
 	ModLoaderLog.info("Started rule teacher", LOG_NAME)
+	_reset_laser_aim()
 	if not recording_path.is_empty():
 		record_pending = false
+		recording_dirty = false
 		recording = {"fixed_fps": recording_fps, "events": []}
 		_record("session_started", "Teacher collection started", null)
 	return true
@@ -243,7 +252,9 @@ func stop() -> void:
 		GameWorld.upgradeBought.disconnect(_on_upgrade_bought)
 	if GameWorld.upgradeError.is_connected(_on_upgrade_error):
 		GameWorld.upgradeError.disconnect(_on_upgrade_error)
+	_flush_recording()
 	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
+	_reset_laser_aim()
 	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
 	_reset_gadget_choice()
 	_reset_gadget_retrieval()
@@ -252,12 +263,14 @@ func stop() -> void:
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
 	InputSystem.game_not_in_focus = not DisplayServer.window_is_focused()
 	recording.clear()
+	recording_dirty = false
 
 func _process(delta: float) -> void:
 	status_elapsed += delta
 	if status_elapsed >= 1.0:
 		status_elapsed = 0.0
 		_write_status()
+		_flush_recording()
 	if not running:
 		return
 	var focus_was_lost: bool = bool(InputSystem.game_not_in_focus)
@@ -325,6 +338,7 @@ func _process(delta: float) -> void:
 
 func _physics_process(_delta: float) -> void:
 	if not running or state != State.DEFEND:
+		_clear_laser_aim("Laser aiming became inactive")
 		return
 	if (
 		delay > 0.0
@@ -333,6 +347,7 @@ func _physics_process(_delta: float) -> void:
 		or not is_instance_valid(keeper)
 		or not is_instance_valid(dome)
 	):
+		_clear_laser_aim("Laser aiming lost the supported game state")
 		_release_all()
 		return
 	if (
@@ -341,6 +356,7 @@ func _physics_process(_delta: float) -> void:
 		or not _wave("wavepresent")
 		or _leaf() != "BattleInputProcessor"
 	):
+		_clear_laser_aim("Laser aiming input became unavailable")
 		_release_all()
 		return
 	_aim()
@@ -394,11 +410,17 @@ func _record(type: String, reason: String, transition) -> void:
 		"movie_frame": Engine.get_process_frames(), "type": type, "reason": reason,
 		"transition": transition, "state": get_status_snapshot(),
 	})
+	recording_dirty = true
+
+func _flush_recording() -> void:
+	if recording.is_empty() or not recording_dirty:
+		return
 	var file := FileAccess.open(recording_path, FileAccess.WRITE)
 	if file == null:
 		push_error("Failed to write replay: " + error_string(FileAccess.get_open_error()))
 		return
 	file.store_string(JSON.stringify(recording))
+	recording_dirty = false
 
 func get_status_snapshot() -> Dictionary:
 	if not running or not StageManager.isInLevel() or not Level.initialized or not is_instance_valid(keeper) or not is_instance_valid(dome):
@@ -499,6 +521,17 @@ func _status_laser_stats() -> Dictionary:
 			"value": movement_speed,
 			"while_firing": movement_speed * float(Data.ofOr(keeper.teamId + ".laser.movespeedwhilefiring", 1.0)),
 			"level": _bought_count(LASER_MOVE_UPGRADES),
+		},
+		"aim": {
+			"selected_monster": laser_selected_monster,
+			"selected_monster_damageable": laser_selected_monster_damageable,
+			"signed_angular_error_radians": laser_signed_angular_error,
+			"first_collider": (
+				null if laser_first_collider == null else {
+					"ray_index": laser_first_collider_ray_index,
+					"object": laser_first_collider,
+				}
+			),
 		},
 	}
 
@@ -1863,7 +1896,12 @@ func _full_load_count(loss: float) -> int:
 
 func _aim() -> void:
 	var weapon = _laser(); var target = _visible_monster()
-	if weapon == null or not weapon.inputReady or target == null:
+	if weapon == null or not weapon.inputReady:
+		_clear_laser_aim("The normal Laser is not ready for aiming input")
+		_release_all()
+		return
+	if target == null:
+		_update_laser_aim(null, null, null, null, null)
 		_release_all()
 		return
 	var damageable: bool = target.canBeHit() and not target.invulnerable
@@ -1874,11 +1912,14 @@ func _aim() -> void:
 	elif aim.x > 0.0 and error < -CONST.PI_HALF:
 		error += TAU
 	var collider = null
-	for raycast in weapon.raycasts:
+	var collider_ray_index: Variant = null
+	for ray_index in weapon.raycasts.size():
+		var raycast = weapon.raycasts[ray_index]
 		if not raycast.enabled:
 			continue
 		collider = raycast.get_collider()
 		if collider != null:
+			collider_ray_index = ray_index
 			break
 	var fire_action := StringName(dome.techId + "_fire")
 	var actions: Array[StringName] = []
@@ -1892,8 +1933,146 @@ func _aim() -> void:
 		elif error < 0.0:
 			actions.append(&"ui_left")
 	_hold(actions)
+	_update_laser_aim(target, damageable, error, collider, collider_ray_index)
 	if started_firing:
 		_queue_record("Laser began firing at an acquired monster")
+
+func _reset_laser_aim() -> void:
+	laser_selected_monster = null
+	laser_selected_monster_damageable = null
+	laser_signed_angular_error = null
+	laser_first_collider = null
+	laser_first_collider_ray_index = null
+	laser_selected_monster_ref = null
+
+func _clear_laser_aim(reason: String) -> void:
+	if (
+		laser_selected_monster == null
+		and laser_selected_monster_damageable == null
+		and laser_signed_angular_error == null
+		and laser_first_collider == null
+	):
+		return
+	_update_laser_aim(null, null, null, null, null, reason)
+
+func _update_laser_aim(target, damageable, error, collider, collider_ray_index, reason := "") -> void:
+	var selected_monster: Variant = _laser_aim_object(target)
+	var first_collider: Variant = _laser_aim_object(collider)
+	var target_changed: bool = selected_monster != laser_selected_monster
+	var damageability_changed: bool = damageable != laser_selected_monster_damageable
+	var collider_changed: bool = (
+		first_collider != laser_first_collider
+		or collider_ray_index != laser_first_collider_ray_index
+	)
+	var previous_target = laser_selected_monster_ref.get_ref() if laser_selected_monster_ref != null else null
+	var previous_selected_monster = laser_selected_monster
+	var previous_first_collider = laser_first_collider
+	var previous_collider_ray_index = laser_first_collider_ray_index
+
+	laser_selected_monster = selected_monster
+	laser_selected_monster_damageable = damageable
+	laser_signed_angular_error = error
+	laser_first_collider = first_collider
+	laser_first_collider_ray_index = collider_ray_index
+	if target_changed:
+		laser_selected_monster_ref = weakref(target) if is_instance_valid(target) else null
+
+	if target_changed:
+		var switch_reason := reason
+		if switch_reason.is_empty():
+			switch_reason = _laser_target_switch_reason(
+				previous_target,
+				target,
+				previous_selected_monster != null,
+			)
+		_record(
+			"laser_target_changed",
+			"Laser target changed from %s to %s: %s" % [
+				_describe_laser_aim_object(previous_selected_monster),
+				_describe_laser_aim_object(selected_monster),
+				switch_reason,
+			],
+			null,
+		)
+		return
+	if damageability_changed:
+		_record(
+			"laser_target_damageability_changed",
+			"Selected Laser target became %s" % ("damageable" if damageable else "not damageable"),
+			null,
+		)
+		return
+	if collider_changed:
+		var previous_ray := "none" if previous_collider_ray_index == null else str(previous_collider_ray_index)
+		var current_ray := "none" if collider_ray_index == null else str(collider_ray_index)
+		_record(
+			"laser_first_collider_changed",
+			"Laser first collider changed from %s on ray %s to %s on ray %s" % [
+				_describe_laser_aim_object(previous_first_collider),
+				previous_ray,
+				_describe_laser_aim_object(first_collider),
+				current_ray,
+			],
+			null,
+		)
+
+func _laser_aim_object(value) -> Variant:
+	if not is_instance_valid(value):
+		return null
+	if value is Monster:
+		return {
+			"category": "monster",
+			"kind": Utils.decode_monster_type(value.type),
+			"uid": int(value.UID),
+			"counter": int(value.counter),
+			"instance_id": null,
+		}
+	return {
+		"category": "projectile" if value.is_in_group("projectile") else "other",
+		"kind": value.get_class(),
+		"uid": null,
+		"counter": null,
+		"instance_id": str(value.get_instance_id()),
+	}
+
+func _describe_laser_aim_object(value) -> String:
+	if value == null:
+		return "none"
+	if value["category"] != "monster":
+		return "%s %s (instance %s)" % [value["category"], value["kind"], value["instance_id"]]
+	return "%s #%d (UID %d)" % [value["kind"], value["counter"], value["uid"]]
+
+func _laser_target_switch_reason(previous, target, had_previous: bool) -> String:
+	if not is_instance_valid(target):
+		if not is_instance_valid(previous):
+			return "no selectable target remains"
+		if previous.dead:
+			return "the previous target died and no replacement is selectable"
+		if previous.leaving:
+			return "the previous target departed and no replacement is selectable"
+		return "the previous target left the visible selectable set"
+	if not is_instance_valid(previous):
+		if had_previous:
+			return "the previous target became unavailable"
+		return "an initial selectable target became available"
+	if previous.dead:
+		return "the previous target died"
+	if previous.leaving:
+		return "the previous target departed"
+	var screen_position: Vector2 = previous.get_global_transform_with_canvas().origin
+	if not previous.is_visible_in_tree() or not get_viewport().get_visible_rect().has_point(screen_position):
+		return "the previous target left the visible viewport"
+	var previous_damageable: bool = previous.canBeHit() and not previous.invulnerable
+	var target_damageable: bool = target.canBeHit() and not target.invulnerable
+	if target_damageable and not previous_damageable:
+		return "a damageable target outranked the previous target"
+	var previous_distance := dome.global_position.distance_squared_to(previous.getCenter())
+	var target_distance := dome.global_position.distance_squared_to(target.getCenter())
+	if target_distance < previous_distance:
+		return "an equal-damageability target became closer to the dome"
+	if is_equal_approx(target_distance, previous_distance) and target.get_instance_id() < previous.get_instance_id():
+		return "the deterministic equal-distance tie-break changed"
+	return "the selector priority changed"
 
 func _visible_monster():
 	var wave = Level.monstersByTeamId.get(keeper.teamId)
@@ -2243,6 +2422,8 @@ func _move_open(target: Vector2) -> bool:
 func _change(next: State, reason: String) -> void:
 	_release_all()
 	var previous := state
+	if previous == State.DEFEND and next != State.DEFEND:
+		_clear_laser_aim("Laser aiming became inactive")
 	if (
 		previous == State.EXPLORE
 		and next != State.EXPLORE

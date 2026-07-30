@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { LaserAimObject } from './types/status'
 import Button from '@proj-airi/ui/src/components/misc/button.vue'
 import { computed, ref } from 'vue'
 import { useDashboard } from './dashboard'
@@ -17,6 +18,13 @@ const format = (value: number, suffix = '') => `${number.format(value)}${suffix}
 const precise = (value: number) => preciseNumber.format(value)
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds) % 60).padStart(2, '0')}`
 const resources = (value: Record<string, number>) => Object.entries(value).filter(([, count]) => count).map(([name, count]) => `${count} ${name}`).join(' · ') || 'None'
+function aimObject(value: LaserAimObject | null | undefined) {
+  if (!value)
+    return 'None'
+  if (value.category !== 'monster')
+    return `${value.category} · ${value.kind} · instance ${value.instance_id}`
+  return `${value.kind} #${value.counter} · UID ${value.uid}`
+}
 const keeperRows = computed(() => snapshot.value
   ? [
       ['Movement speed', `${format(snapshot.value.keeper.stats.movement_speed.current)} current · ${format(snapshot.value.keeper.stats.movement_speed.base)} base · Level ${snapshot.value.keeper.stats.movement_speed.level}`],
@@ -104,6 +112,15 @@ const keeperRows = computed(() => snapshot.value
               </div>
               <div class="status-row">
                 <dt>Laser movement</dt><dd>{{ precise(snapshot.dome.laser.movement_speed.value) }} · {{ precise(snapshot.dome.laser.movement_speed.while_firing) }} firing · Level {{ snapshot.dome.laser.movement_speed.level }}</dd>
+              </div>
+              <div v-if="snapshot.dome.laser.aim" class="status-row">
+                <dt>Laser target</dt><dd>{{ aimObject(snapshot.dome.laser.aim.selected_monster) }} · {{ snapshot.dome.laser.aim.selected_monster_damageable === null ? 'not selected' : snapshot.dome.laser.aim.selected_monster_damageable ? 'damageable' : 'not damageable' }}</dd>
+              </div>
+              <div v-if="snapshot.dome.laser.aim" class="status-row">
+                <dt>Signed aim error</dt><dd>{{ snapshot.dome.laser.aim.signed_angular_error_radians === null ? '—' : `${precise(snapshot.dome.laser.aim.signed_angular_error_radians)} rad` }}</dd>
+              </div>
+              <div v-if="snapshot.dome.laser.aim" class="status-row">
+                <dt>First collider</dt><dd>{{ aimObject(snapshot.dome.laser.aim.first_collider?.object) }}{{ snapshot.dome.laser.aim.first_collider ? ` · ray ${snapshot.dome.laser.aim.first_collider.ray_index}` : '' }}</dd>
               </div>
               <div v-for="(count, name) in snapshot.dome.stored_resources" :key="name" class="status-row">
                 <dt class="capitalize">

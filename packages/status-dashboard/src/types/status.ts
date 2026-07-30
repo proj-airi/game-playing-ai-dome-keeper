@@ -2,6 +2,13 @@ export enum DashboardMode { Live = 'live', Replay = 'replay' }
 export interface Resources { iron: number, cobalt: number, water: number }
 export interface MonsterGroup { kind: string, count: number, health: number, max_health: number }
 export interface LeveledValue { value: number, level: number }
+export interface LaserAimObject { category: string, kind: string, uid: number | null, counter: number | null, instance_id: string | null }
+export interface LaserAim {
+  selected_monster: LaserAimObject | null
+  selected_monster_damageable: boolean | null
+  signed_angular_error_radians: number | null
+  first_collider: { ray_index: number, object: LaserAimObject } | null
+}
 export type StatusSnapshot = { available: false, run_time_seconds: 0 } | {
   available: true
   run_time_seconds: number
@@ -19,6 +26,7 @@ export type StatusSnapshot = { available: false, run_time_seconds: 0 } | {
     laser: {
       attack_strength: LeveledValue
       movement_speed: { value: number, while_firing: number, level: number }
+      aim?: LaserAim
     }
     stored_resources: Resources
   }

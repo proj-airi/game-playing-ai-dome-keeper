@@ -518,6 +518,15 @@ continuation when no saved target exists.
   damageable. Release fire immediately when acquisition is lost. Do not use a
   fixed angular dead zone, early-fire braking, random sweeping, direct Laser
   angle mutation, or direct weapon-field mutation.
+- Observe normal-Laser aiming without changing selection or control behavior.
+  Live status and every replay snapshot identify the selected monster by its
+  runtime UID, wave counter, and kind; include current damageability, signed
+  angular error in radians, and the first collider with its enabled-ray order.
+  Identify non-monster colliders by category, runtime class, and session-only
+  instance ID.
+  Record semantic target, damageability, and first-collider changes as replay
+  events, with concrete target-switch reasons in the event header. Older replay
+  files may omit the aim object.
 - Emit weapon controls only while the keeper is inside the station and
   `BattleInputProcessor` is active. Recover battle input when a wave still needs
   defense and wait for authoritative `wavebattle` settlement before the normal
