@@ -34,6 +34,7 @@ await run(godot, [
   project,
   '--render-thread',
   'safe',
+  '--disable-vsync',
   '--windowed',
   '--resolution',
   recordingResolution,

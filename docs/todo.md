@@ -34,7 +34,8 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   fixed-frame replay synchronization, complete observer and aim telemetry, and
   the existing YOLO image-label contract whenever YOLO capture is enabled.
   Repository recording runs are replay-only, persist batched events directly to
-  the final append-only JSONL, and record Movie Maker output at `1280x720`.
+  the final append-only JSONL, and record Movie Maker output at `1280x720` with
+  VSync forced off only for the recording process.
   Keep the fixed FPS unchanged and do not hide the problem by dropping confirmed
   telemetry. Preserve ordinary manual YOLO collection for later label work.
 - Bound JSONL and movie growth per fixed game minute, and validate the final
