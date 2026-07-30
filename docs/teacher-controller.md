@@ -325,9 +325,12 @@ continuation when no saved target exists.
   pending intent set or a carry plan, and do not store concrete Drop routes in a
   carry plan. Resolve current upgrade targets and runtime costs during
   reservation and purchase.
-- Reserve stored and carried resources through the same class-based arbitration
-  used for purchase. Consume each fully funded selected cost before recalculating
-  candidates and the next deficit so no mineral is counted twice.
+- Reserve stored and carried resources through the same resource-aware class
+  arbitration used for purchase. When a higher class has no affordable target,
+  reserve every positive-cost resource type used by its current targets. A later
+  class may use other resource types, but never a reserved type. Consume each
+  fully funded selected cost before recalculating candidates and the next
+  deficit so no mineral is counted twice.
 - Open the resource `CARRY` window when a load-capped preview's collection ETA,
   loaded return ETA, and two-second station-entry margin reach the remaining wave
   time. The margin represents the observed 1.6–2.0 seconds from dome entrance to
@@ -433,12 +436,16 @@ continuation when no saved target exists.
 
 - Maintain a deduplicated set of semantic intents and seed `drill` at startup.
   The survival class (`combat`, `repair`) outranks the development class
-  (`drill`, `mobility`); exhaust the highest nonempty class before considering a
-  lower one.
-- Resolve every pending intent to its next current runtime target. Within a
-  class, prefer affordable over unaffordable, lower total current cost among
-  affordable targets, lower total current deficit otherwise, and use
-  `combat > repair` or `drill > mobility` only as the final stable tie.
+  (`drill`, `mobility`). An affordable target in a higher class wins. When no
+  target in that class is affordable, reserve every positive-cost resource type
+  used by its current targets; a lower-class target may proceed only when it is
+  affordable and uses none of those reserved resource types. For example, an
+  unfunded cobalt-only repair must not block an iron-only development upgrade.
+- Resolve every pending intent to its next current runtime target. Among targets
+  in the same class that are not blocked by a higher class's resource types,
+  prefer affordable over unaffordable, lower total current cost among affordable
+  targets, lower total current deficit otherwise, and use `combat > repair` or
+  `drill > mobility` only as the final stable tie.
 - Enqueue `combat` after a settled wave whose net health loss exceeds the
   configurable per-wave limit, initially 15% of maximum health. Alternate
   confirmed combat purchases between Laser attack strength first and dome
@@ -463,7 +470,7 @@ continuation when no saved target exists.
 - Provide independent ordinary upgrade opportunities before and after defense.
   A mandatory Gadget task coupled to an active wave retains the `RETURN`
   priority documented above.
-- When the highest-class selected target is affordable, enter `UPGRADE` before
+- When the resource-aware selected target is affordable, enter `UPGRADE` before
   ordinary defense because upgrade input pauses gameplay. Freeze the intent and
   decision-time target, use normal UI actions, and clear fulfillment only after
   the matching purchase signal.

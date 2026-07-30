@@ -2067,7 +2067,10 @@ func _select_upgrade_target(
 	excluded_intents := {},
 	excluded_ids := {},
 ) -> Dictionary:
+	var reserved_resource_types := {}
+	var fallback := {}
 	for intent_class in INTENT_CLASSES:
+		var class_resource_types := {}
 		var best := {}
 		for intent in intent_class:
 			if not pending_intents.has(intent) or excluded_intents.has(intent):
@@ -2081,11 +2084,29 @@ func _select_upgrade_target(
 			var id: String = target.get("id", "")
 			if id.is_empty() or excluded_ids.has(id):
 				continue
+			var cost: Dictionary = GameWorld.upgrades[id].get("cost", {})
+			var uses_reserved_resource := false
+			for resource in cost:
+				if int(cost[resource]) <= 0:
+					continue
+				class_resource_types[resource] = true
+				if not reserved_resource_types.has(resource):
+					continue
+				uses_reserved_resource = true
+			if uses_reserved_resource:
+				continue
 			if best.is_empty() or _upgrade_target_is_better(target, best, available):
 				best = target
-		if not best.is_empty():
+		if not best.is_empty() and _resource_deficits(
+			GameWorld.upgrades[best["id"]].get("cost", {}),
+			available,
+		).is_empty():
 			return best
-	return {}
+		if not best.is_empty() and fallback.is_empty():
+			fallback = best
+		for resource in class_resource_types:
+			reserved_resource_types[resource] = true
+	return fallback
 
 func _upgrade_target_is_better(candidate: Dictionary, current: Dictionary, available: Dictionary) -> bool:
 	var candidate_cost: Dictionary = GameWorld.upgrades[candidate["id"]].get("cost", {})
