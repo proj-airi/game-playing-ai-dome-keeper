@@ -5,6 +5,7 @@ This page collects external resources useful for understanding and maintaining t
 ## Project and Game
 
 - [Project AIRI](https://github.com/moeru-ai/airi) — The main Project AIRI repository; this project is a Dome Keeper plugin for AIRI.
+- [Project AIRI v0.10.0 Release](https://github.com/moeru-ai/airi/releases/tag/v0.10.0) — The upstream release that introduced the current plugin manifest and Kits, Bindings, Tools, and Gamelet APIs relevant to defining this project's future AIRI integration boundary.
 - [Dome Keeper Engineer](https://domekeeper.wiki.gg/wiki/Engineer) — A gameplay reference for the Engineer's drilling, carrying, controls, and upgrades used by the teacher.
 - [Dome Keeper Laser Dome](https://domekeeper.wiki.gg/wiki/Laser_Dome) — A reference for the weapon and upgrades used by the currently supported Engineer and Laser Dome setup.
 - [Dome Keeper Relic Hunt](https://domekeeper.wiki.gg/wiki/Relic_Hunt#Bedrock) — A guide to Relic Hunt progression, victory, and bedrock boundaries relevant to planned completion support and current exploration behavior.
@@ -53,7 +54,6 @@ This page collects external resources useful for understanding and maintaining t
 - [Ultralytics YOLO Detection Datasets](https://docs.ultralytics.com/datasets/detect) — The detection dataset and `data.yaml` format reference followed by the project's collector and dataset splits.
 - [Ultralytics Model Training](https://docs.ultralytics.com/modes/train) — The YOLO training command and configuration reference used for fixed-resolution model training.
 - [Ultralytics Model Validation](https://docs.ultralytics.com/modes/val) — The reference for precision, recall, and mAP metrics used to evaluate the project's vision models.
-- [Ultralytics Hyperparameter Tuning](https://docs.ultralytics.com/guides/hyperparameter-tuning) — Guidance for controlled hyperparameter searches, relevant to future budget-bounded optimization experiments.
 - [Ultralytics Quickstart](https://docs.ultralytics.com/quickstart) — Installation and basic usage documentation for the Python package and `yolo` CLI used by the project's training and export commands.
 - [Ultralytics Model Export](https://docs.ultralytics.com/modes/export) — Documentation for exporting models to ONNX, NCNN, OpenVINO, TensorRT, and other formats used by non-Python inference runtimes.
 - [Ultralytics End-to-End Object Detection](https://docs.ultralytics.com/guides/end2end-detection) — Documentation for end-to-end detection outputs without external NMS, used to define the default YOLO26 ONNX output contract.
@@ -62,8 +62,6 @@ This page collects external resources useful for understanding and maintaining t
 - [Hugging Face Hub Repository Guide](https://huggingface.co/docs/huggingface_hub/guides/repository) — The repository versioning guide used for the project's model and dataset release workflow.
 - [Dome Keeper YOLO v0 Model](https://huggingface.co/proj-airi/domekeeper-yolo-v0) — The project's public model repository containing the model card, ONNX artifact, and evaluation material.
 - [Dome Keeper YOLO v0 Dataset](https://huggingface.co/datasets/proj-airi/domekeeper-yolo-dataset-v0) — The public dataset repository paired with the v0 model and pinned by the model card.
-- [MLflow Tracking](https://mlflow.org/docs/latest/tracking/) — An experiment tracking system for parameters, metrics, and artifacts that can keep future orchestrated runs attributable and comparable.
-- [DAgger](https://proceedings.mlr.press/v15/ross11a.html) — The original imitation-learning paper providing methodological context for future teacher-action imitation and student rollout evaluation.
 
 ## Development Toolchain
 
