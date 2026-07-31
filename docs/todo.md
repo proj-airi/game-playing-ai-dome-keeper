@@ -54,6 +54,38 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   Do not use globs, directory-wide cleanup, age-based pruning, or deletion that
   can affect another recording session.
 
+## Late-Game Save Checkpoint Debugging
+
+- Use Dome Keeper's own save system to shorten iteration on late-game teacher
+  behavior that is first reachable roughly 30 game minutes into a run,
+  including natural Caves, Supply Drops, and the Relic lifecycle. Preserve
+  representative saves shortly before each target encounter instead of
+  replaying the entire early game after every policy change. Treat this as a
+  focused debugging workflow, not evidence that a modified policy can still
+  reach the checkpoint correctly from a fresh run.
+- First confirm that a restored save preserves the target-version state needed
+  for representative validation, including the generated and revealed map,
+  mined terrain, run timer and wave progression, resources, upgrades, equipped
+  Gadgets, chamber and Relic progress, player and dome state, and pending enemy
+  or reward state. Record the game version, mod revision, save provenance, and
+  target encounter with each checkpoint. Invalidate or regenerate a checkpoint
+  when a game, save-schema, map-generation, economy, or progression change
+  makes it unrepresentative or incompatible.
+- Add repository automation to back up a completed game save, restore an
+  immutable checkpoint into an isolated test profile, and launch a recording
+  from that restored state. Restore the pristine checkpoint before every
+  attempt so a previous test cannot mutate the baseline. Copy only after the
+  game has completed its save write or exited normally; use explicit validated
+  paths and atomic replacement where practical, and never use globs or
+  directory-wide deletion that could affect ordinary player saves.
+- Start each resumed evaluation early enough for the teacher to observe the
+  restored world and rebuild any controller-only transient state that Dome
+  Keeper does not save. Declare the warm-up interval and the exact expected
+  encounter outcome in the resulting replay. Keep fresh-run regression as the
+  final acceptance gate whenever a change can affect the earlier decisions,
+  resources, upgrades, exploration route, or ability to reach that late-game
+  state.
+
 ## Late-Game Carry Reliability
 
 - Correct the resource-delivery loss demonstrated after movement speed level
