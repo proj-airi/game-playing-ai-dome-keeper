@@ -16,8 +16,9 @@ to weaken the policy.
   local keyboard-controlled Engineer and the normal Laser Dome.
 - The teacher currently covers fishbone exploration, revealed ore mining,
   resource pickup and delivery, supported Gadget Chamber retrieval and choice,
-  return, upgrades, simple Laser defense, and bounded stuck recovery while the
-  collector produces ore/enemy YOLO image-label pairs.
+  artifact-choice water rerolls, Power Core Chamber activation and Supplement
+  choice, return, upgrades, simple Laser defense, and bounded stuck recovery
+  while the collector produces ore/enemy YOLO image-label pairs.
 - The user starts the run. Automated loadout or menu navigation and restart
   after death are not supported.
 - Starting collection inside a station supports only the normal
@@ -73,14 +74,15 @@ The controller in
 [`rule_teacher.gd`](../mods/LemonNekoGH-YoloDataCollector/rule_teacher.gd) has
 seven top-level states. It is hierarchical and event-driven rather than a fixed
 linear sequence: exploration modes, mining outcomes, cache-cleanup modes,
-upgrade arbitration, Gadget task flags, asynchronous game events, and the
-Gadget choice modal alter routing without adding top-level states.
+upgrade arbitration, Gadget and Power Core task context, asynchronous game
+events, and the shared artifact-choice modal alter routing without adding
+top-level states.
 
 | State | Owns | Possible next states |
 | --- | --- | --- |
 | `EXPLORE` | Saved-work travel and the fishbone mining pattern | `MINE`, `CARRY`, `RETURN`, `RECOVER` |
-| `MINE` | Ore excavation, Gadget Chamber excavation, and detached-Gadget clearance | `EXPLORE`, `CARRY`, `RETURN`, `RECOVER` |
-| `CARRY` | Resource pickup plans, Gadget activation, and exact Gadget reattachment | `MINE`, `RETURN`, `RECOVER` |
+| `MINE` | Ore and chamber excavation, chamber opening, and detached-artifact clearance | `EXPLORE`, `CARRY`, `RETURN`, `RECOVER` |
+| `CARRY` | Resource pickup plans, physical chamber water delivery, artifact activation, and exact reattachment | `MINE`, `RETURN`, `RECOVER` |
 | `RETURN` | Travel to the main Laser station and station task arbitration | `EXPLORE`, `MINE`, `CARRY`, `UPGRADE`, `DEFEND`, `RECOVER` |
 | `UPGRADE` | Normal-input TechTree navigation and confirmed purchases | `RETURN`, `DEFEND` |
 | `DEFEND` | Battle-input entry, Laser aiming and firing, and wave settlement | `EXPLORE`, `MINE`, `CARRY`, `RETURN` |
@@ -108,8 +110,9 @@ or leave mining blocked inside `EXPLORE`.
 - Leaving `CARRY` clears the concrete Drop and live carry plan except when
   entering `RECOVER`. Leaving `UPGRADE` clears the opportunity-local repair
   target and re-evaluates the persistent repair intent.
-- The mandatory `GadgetChoiceInputProcessor` is a cross-cutting modal. It
-  temporarily owns input without changing the top-level state, then restores
+- The mandatory `GadgetChoiceInputProcessor` is a cross-cutting modal for both
+  exact Gadget and Power Core Drops. It temporarily owns input without changing
+  the top-level state, dispatches policy by exact popup `droptype`, then restores
   that state after authoritative popup closure.
 - Detecting the exact carried chamber Gadget outside acquisition forces
   `RETURN`; it must be transported alone. Unsupported modal/input state blocks
@@ -270,6 +273,9 @@ continuation when no saved target exists.
 - Claimed chamber identity, exact Gadget identity, delivery flag, recovery
   coordinate, and bounded recovery count survive wave and station interruption
   until authoritative delivery and choice complete.
+- The claimed Power Core Chamber and selected physical water survive wave
+  interruptions. After attachment, the Power Core uses the same exact-Drop
+  transport and bounded recovery state as a chamber Gadget.
 - Event-driven wave-health tracking preserves the inputs intended for post-wave
   combat and repair decisions across state changes.
 
@@ -405,6 +411,12 @@ continuation when no saved target exists.
   canonical-ID order. When no non-shred offer is supported, select the exact
   `shredgadgettocobalt` fallback. Gadget selection never clears the corresponding
   upgrade intent.
+- In either a Gadget or Supplement choice, reroll when the current best offer
+  does not benefit the selected intent, the normal reroll button is visible and
+  enabled, and stored water is nonzero. Do not reserve water in advance. Submit
+  the focused button through normal UI input and re-evaluate each regenerated
+  offer set; when no reroll is available, select the current supported offer or
+  shred fallback.
 - Handle `GadgetChoiceInputProcessor` as a mandatory cross-cutting modal, not a
   top-level state or `UPGRADE`. Wait for authoritative offers and animation
   readiness, freeze one target, navigate only through configured `ui_*` actions,
@@ -432,6 +444,35 @@ continuation when no saved target exists.
 - Permit three complete detachment recoveries and fail closed on the fourth. Do
   not recenter the clearance window as the rigid body drifts, add a top-level
   state, teleport the Gadget, or alter collision masks.
+
+## Power Core Chamber and Supplement Policy
+
+- Identify a Power Core Chamber by exact `drop_type == CONST.POWERCORE`. Once
+  discovered, excavating and activating it is exclusive except for a wave or an
+  already attached/recovering Gadget handoff.
+- Excavate the chamber cover, then use a reachable physical water Drop from a
+  known cache immediately. If no cached water exists, continue the existing
+  fishbone exploration solely for water: remember revealed ore and Gadget
+  Chambers, but do not act on them until the core task completes. Carry the
+  selected water to the saved receiver approach and require authoritative
+  `ResourceGrabber.spent` before treating it as accepted.
+- Wait for exact chamber `OPEN`, unload ordinary cargo, activate its focused
+  `Usable`, and require chamber `EMPTY` plus a newly attached exact
+  `Drop.type == CONST.POWERCORE`. From that point, use the existing Gadget
+  exact-Drop transport, detachment recovery, wave interruption, and dome handoff
+  mechanics, parameterized by the Power Core type.
+- Finish an already attached or recovering Gadget handoff before claiming or
+  resuming a Power Core task. Neither artifact task may unload the other's exact
+  Drop as ordinary cargo.
+- Dispatch the resulting shared popup only when `droptype == CONST.POWERCORE`.
+  Keep the target-version allowlist in `supplement_catalog.gd`, normalize runtime
+  team/player prefixes, prefer an allowlisted benefit for the selected planning
+  intent, and otherwise choose deterministic supported order or exact shred.
+  Unknown, control-changing, planning-invalidating, or new-action Supplements
+  fail closed to shred. Confirm a non-shred runtime ID in
+  `GameWorld.boughtUpgrades` after popup closure. After completion, resume normal
+  priority: a remembered Gadget Chamber, then remembered revealed ore, then
+  ordinary exploration.
 
 ## Upgrade Policy
 

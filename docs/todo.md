@@ -6,17 +6,6 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 
 - After a fresh gameplay recording and teacher log confirm the current shaft-shift and descent-backtracking behavior, schedule a dedicated teacher cleanup before the planned Relic Hunt expansion without turning it into a blanket gate on urgent fixes. Establish explicit expected observable outcomes for the representative lifecycle scenarios in scope rather than preserving one recording's exact action trace. Audit the current code and state-machine logic for dead or duplicated paths, unreachable transitions, unclear state ownership, accidental coupling, and contradictory invariants; identify responsibility boundaries without presuming that every large function or file must be split. Keep each batch independently reviewable and verifiable. Pure refactors must preserve the declared outcomes, while defect or policy corrections must declare the corrected expectation and receive targeted runtime validation.
 
-## Gadget Choice Water Reroll
-
-- Consider bounded normal-UI use of a paid water reroll during the currently
-  supported Gadget choice flow. Before implementation, decide when rerolling is
-  preferable to the current supported offer or shred fallback, how pending
-  upgrade resource reservations constrain water spending, when rerolling must
-  stop, and how the available free-reroll pool participates. After each
-  confirmed reroll, re-evaluate the regenerated offers and authoritative reroll
-  availability and cost before acting again. Keep Supplement rerolls outside
-  this task until their acquisition flow enters the supported scope.
-
 ## Laser Targeting Runtime Validation
 
 - Validate the corrected normal-Laser policy in a fresh recording. The teacher now retains an eligible target and tries to kill it before switching, replaces an ineligible target immediately, chooses initial or replacement targets by minimum actual turn with deterministic UID ties, pre-aims a non-damageable target only when no damageable target is visible, and lets a different eligible damageable first ray collider take over in the same physics tick. It no longer ranks by dome distance. Aim telemetry captures selected-monster identity and damageability, target-switch reasons, signed angular error, and the normal Laser's ordered first collider in Live status and replay events. Declare and check expected observable outcomes for same-tier crossings, runtime damageability changes, target death or departure, visibility loss, opposite-side candidates, and `WORM_ROCK` or projectile intersections. Preserve the intentional-target and exact-acquisition fire gates. Do not add fairness rotation, hysteresis, or an acquisition timeout unless runtime evidence demonstrates a remaining pathological switch or persistent-blocker stall.
@@ -83,26 +72,6 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   from the current recording, not as a permanent level-based rule. Do not alter
   collision masks, tether distance, pull impulses, or resource positions, and
   do not treat another carry-strength purchase as a fix for rigid-body loss.
-
-## Power Core Chamber and Supplement Choice
-
-- Add a dedicated normal-input lifecycle for the target-version
-  `PowerCoreChamber`. Keep it distinct from a natural Cave and from an ordinary
-  Gadget Chamber: reveal and excavate its four cover tiles, reserve and
-  physically deliver exactly one water Drop to its one-shot `ResourceGrabber`,
-  wait for the chamber to open, use its `Usable` to receive the carried
-  `powercore`, return that core to the dome, and complete the mandatory
-  `CONST.POWERCORE` Supplement choice.
-- Preserve wave-safe interruption and resumption, resource reservations,
-  exclusive special-artifact transport, detachment recovery, and authoritative
-  acquisition and delivery confirmation. Reuse the established Gadget Chamber
-  mechanics only where their runtime semantics actually match; do not classify
-  `powercore` as a Gadget or pass its popup through a Gadget-only allowlist.
-- Define a target-version Supplement allowlist and selection policy before
-  accepting offers. Prefer a supported combat, survival, or current-planning
-  benefit over shredding, and incorporate the selected Supplement's effects
-  into affected planners. Keep paid and free Supplement rerolls outside this
-  item until their spending and stopping policy is confirmed separately.
 
 ## Natural Cave Interaction Inventory
 
