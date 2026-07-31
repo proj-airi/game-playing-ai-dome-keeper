@@ -17,16 +17,17 @@ to weaken the policy.
 - The teacher currently covers fishbone exploration, revealed ore mining,
   resource pickup and delivery, supported Gadget Chamber retrieval and choice,
   artifact-choice water rerolls, Power Core Chamber activation and Supplement
-  choice, return, upgrades, simple Laser defense, and bounded stuck recovery
-  while the collector produces ore/enemy YOLO image-label pairs.
+  choice, opportunistic `ScannerCave` and `DroneCave` side tasks, return,
+  upgrades, simple Laser defense, and bounded stuck recovery while the collector
+  produces ore/enemy YOLO image-label pairs.
 - The user starts the run. Automated loadout or menu navigation and restart
   after death are not supported.
 - Starting collection inside a station supports only the normal
   `StationInputProcessor` or `BattleInputProcessor`. Startup while an upgrade or
   another station modal remains open must be rejected.
-- Multiplayer, other keepers, non-Laser weapons, Relic Hunt completion, and
-  dynamic reveal-radius behavior are outside the current supported scope. Later
-  capability work belongs in [`roadmap.md`](roadmap.md).
+- Multiplayer, other keepers, non-Laser weapons, and Relic Hunt completion are
+  outside the current supported scope. Later capability work belongs in
+  [`roadmap.md`](roadmap.md).
 
 ## Compatibility Boundary
 
@@ -74,15 +75,15 @@ The controller in
 [`rule_teacher.gd`](../mods/LemonNekoGH-YoloDataCollector/rule_teacher.gd) has
 seven top-level states. It is hierarchical and event-driven rather than a fixed
 linear sequence: exploration modes, mining outcomes, cache-cleanup modes,
-upgrade arbitration, Gadget and Power Core task context, asynchronous game
-events, and the shared artifact-choice modal alter routing without adding
-top-level states.
+upgrade arbitration, Gadget, Power Core, and natural Cave task context,
+asynchronous game events, and the shared artifact-choice modal alter routing
+without adding top-level states.
 
 | State | Owns | Possible next states |
 | --- | --- | --- |
 | `EXPLORE` | Saved-work travel and the fishbone mining pattern | `MINE`, `CARRY`, `RETURN`, `RECOVER` |
 | `MINE` | Ore and chamber excavation, chamber opening, and detached-artifact clearance | `EXPLORE`, `CARRY`, `RETURN`, `RECOVER` |
-| `CARRY` | Resource pickup plans, physical chamber water delivery, artifact activation, and exact reattachment | `MINE`, `RETURN`, `RECOVER` |
+| `CARRY` | Resource pickup plans, physical chamber or Cave input delivery, artifact activation, and exact reattachment | `MINE`, `RETURN`, `RECOVER` |
 | `RETURN` | Travel to the main Laser station and station task arbitration | `EXPLORE`, `MINE`, `CARRY`, `UPGRADE`, `DEFEND`, `RECOVER` |
 | `UPGRADE` | Normal-input TechTree navigation and confirmed purchases | `RETURN`, `DEFEND` |
 | `DEFEND` | Battle-input entry, Laser aiming and firing, and wave settlement | `EXPLORE`, `MINE`, `CARRY`, `RETURN` |
@@ -276,8 +277,30 @@ continuation when no saved target exists.
 - The claimed Power Core Chamber and selected physical water survive wave
   interruptions. After attachment, the Power Core uses the same exact-Drop
   transport and bounded recovery state as a chamber Gadget.
+- A claimed Scanner or Drone Cave, its exact reserved physical input, receiver
+  progress, and Scanner activation state survive wave interruption. The teacher
+  resumes the bounded side task after defense and clears it only after checking
+  the exact resulting reveal distance or owned helper.
 - Event-driven wave-health tracking preserves the inputs intended for post-wave
   combat and repair decisions across state changes.
+
+## Supported Natural Cave Tasks
+
+- Claim only a revealed and reachable `ScannerCave` or `DroneCave` encountered
+  during ordinary exploration. Never inspect hidden map data, select a frontier
+  to search for a Cave, or retain a completed Cave as a revisit waypoint.
+- A Scanner task reserves and carries two exact loose iron Drops, one to each
+  unspent receiver, activates the exact focused `Usable` through configured
+  input, and succeeds only after the Cave consumes its scanner and
+  `map.revealdistance` authoritatively becomes `2`.
+- A Drone task reserves and carries one exact loose water Drop to its receiver.
+  It succeeds only after opening finishes and the Cave's dispatcher owns a
+  team-matching Squidley created by the exact target-version script.
+- Gadget acquisition may suspend either Cave task. Active or imminent waves and
+  hard return deadlines drop any attached Cave input into the ordinary cache,
+  preserve authoritative receiver progress, and resume the same task after
+  defense. Missing exact nodes, inconsistent lifecycle state, or exhausted
+  bounded interaction retries fail closed.
 
 ## Exploration and Mining Policy
 
@@ -290,9 +313,10 @@ continuation when no saved target exists.
   from the keeper's actual position horizontally to the runtime dome shaft
   x-coordinate and vertically toward the mouth. Keep the bridge outside the
   shared map graph and never hard-code team-one coordinates.
-- Use a fixed reveal distance of one tile. Fishbone spacing is
-  `1 + reveal_distance * 2`, or three rows, leaving two untouched rows between
-  branches. Dynamic reveal-radius handling is not supported.
+- Accept an authoritative reveal distance of one or two tiles. Fishbone spacing
+  is `1 + reveal_distance * 2`: three rows normally and five rows after the
+  Scanner Cave applies reveal distance two. Any other value is unsupported and
+  fails preflight.
 - Use only revealed Tiles, recorded open coordinates, and the open A* graph for
   planning. Never inspect hidden resource or map data and never infer full map
   completion from one terminal pocket or an exhausted recorded frontier set.

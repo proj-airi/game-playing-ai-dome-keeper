@@ -14,7 +14,7 @@ An unavailable producer snapshot is `{ "available": false, "run_time_seconds": 0
 
 ## Replay
 
-Start a recorded run with `mise run godot:record`; pass `-- --fps 60` to override the default 30 FPS. The mise task records at `1280x720`, forces VSync off only for that recording process, and writes each session under `recordings/session_<UTC timestamp>_<UUID>/` in the repository root. It starts the teacher after Keeper input becomes active and closes Godot after recording the authoritative win or loss; closing the window or a teacher failure keeps the incomplete artifacts and fails the command before MP4 conversion.
+Start a recorded run with `mise run godot:record`; pass `-- --fps 60` to override the default 10 FPS. The mise task records at `1280x720`, forces VSync off only for that recording process, and writes each session under `recordings/session_<UTC timestamp>_<UUID>/` in the repository root. It starts the teacher after Keeper input becomes active and closes Godot after recording the authoritative win or loss; closing the window or a teacher failure keeps the incomplete artifacts and fails the command before MP4 conversion.
 
 Replay mode consumes full-snapshot events and synchronizes them to the manually selected MP4 with `movie_frame / fixed_fps`. It supports play/pause, previous and next event, movie scrubbing, playback speed, and transition reasons.
 

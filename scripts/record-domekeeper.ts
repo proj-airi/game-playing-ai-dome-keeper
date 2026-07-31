@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline'
 import { x } from 'tinyexec'
 
 const args = process.argv.slice(2)
-const fps = args.length ? Number(args[1]) : 30
+const fps = args.length ? Number(args[1]) : 10
 if ((args.length && (args.length !== 2 || args[0] !== '--fps')) || !Number.isInteger(fps) || fps <= 0)
   fail('Usage: mise run godot:record -- --fps <positive integer>')
 const godot = import.meta.env.GODOT_BIN

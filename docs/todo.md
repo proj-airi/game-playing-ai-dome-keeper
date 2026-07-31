@@ -25,8 +25,10 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   Repository recording runs are replay-only, persist batched events directly to
   the final append-only JSONL, and record Movie Maker output at `1280x720` with
   VSync forced off only for the recording process.
-  Keep the fixed FPS unchanged and do not hide the problem by dropping confirmed
-  telemetry. Preserve ordinary manual YOLO collection for later label work.
+  Keep the declared FPS unchanged within each performance comparison, and do
+  not present a lower capture rate or dropped confirmed telemetry as a fix for
+  the underlying slowdown. Preserve ordinary manual YOLO collection for later
+  label work.
 - Bound JSONL and movie growth per fixed game minute, and validate the final
   replay flush and synchronized playback after a representative run beyond wave
   20. Do not prioritize the built-in AVI size boundary based on file size alone:

@@ -12,16 +12,20 @@ unless an explicit project decision says so.
 
 ### Use Revealed Natural Cave Rewards
 
-- Extend the supported rule-teacher loop to use the confirmed target-version
-  natural Cave rewards: `MushroomCave` for the temporary movement-speed buff,
-  `PortalCave` for passive resource delivery, `IronTreeCave` for renewable iron,
-  `HelmetCave` for the mine camera extension, `DroneCave` for the water-funded
-  Squidley helper, `ScannerCave` for the two-iron permanent reveal-distance
-  increase, `CobaltCave` for its two one-time cobalt resources, and `WaterCave`
-  for renewable water. Inventory and validate each exact type's required input,
-  resource cost, carried-object behavior, planner or map effects, persistence,
-  cooldown, success evidence, and wave interruption behavior before claiming
-  support.
+- `ScannerCave` and `DroneCave` are implemented in the supported rule-teacher
+  loop and validated in representative recordings. The Scanner task spends two
+  physical iron Drops and incorporates reveal distance two into fishbone branch
+  spacing. The Drone task spends one physical water Drop and confirms the exact
+  owned Squidley after asynchronous opening. Their binding behavior belongs in
+  [`teacher-controller.md`](teacher-controller.md).
+- Extend the remaining supported loop one exact target-version type at a time:
+  `MushroomCave` for the temporary movement-speed buff, `PortalCave` for passive
+  resource delivery, `IronTreeCave` for renewable iron, `HelmetCave` for the mine
+  camera extension, `CobaltCave` for its two one-time cobalt resources, and
+  `WaterCave` for renewable water. Inventory and validate each type's required
+  input, resource cost, carried-object behavior, planner or map effects,
+  persistence, cooldown, success evidence, and wave interruption behavior
+  before claiming support.
 - Leave `BombCave` and `SeedCave` outside the teacher allowlist. A Cave Bomb
   requires selecting a safe, useful blast location before its release commits
   the explosion. A mineral-tree seed requires selecting a planting site with
@@ -33,12 +37,12 @@ unless an explicit project decision says so.
   inspect hidden map data or choose an unexplored frontier to look for a Cave.
   The teacher may freeze its current work and perform Cave-specific navigation,
   resource acquisition, activation, interruption, and recovery comparable to a
-  Gadget or Power Core Chamber task. A claimed `DroneCave` may fetch an additional
-  physical water Drop. A claimed `ScannerCave` may reserve and fetch two physical
-  iron Drops under the existing resource-reservation rules while preserving
-  partial receiver progress across interruption. Validate per-type arbitration
-  against waves, return deadlines, Gadget delivery, and Power Core work instead
-  of assigning every Cave one priority.
+  Gadget or Power Core Chamber task. The implemented `DroneCave` may fetch an
+  additional physical water Drop. The implemented `ScannerCave` may reserve and
+  fetch two physical iron Drops under the existing resource-reservation rules
+  while preserving partial receiver progress across interruption. Validate each
+  remaining type's arbitration against waves, return deadlines, Gadget delivery,
+  and Power Core work instead of assigning every Cave one priority.
 - After the initial Cave-specific task completes, never retain a recurring Cave
   task, estimate or poll its cooldown, add a Cave waypoint, or change a later
   route solely to collect a renewable reward. If an already-selected ordinary

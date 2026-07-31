@@ -15,6 +15,7 @@ enum CacheCleanupMode { NONE, PENDING_DEFENSE, ACTIVE }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 enum MobilityArm { SPEED, STRENGTH }
 enum ArtifactTransport { GADGET, POWER_CORE }
+enum CaveTaskKind { NONE, SCANNER, DRONE }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const STATUS_FILE := "airi-dome-keeper-status.json"
@@ -30,12 +31,16 @@ const CARRY_PREVIEW_INTERVAL := 1.0
 const ARTIFACT_UI_STEP_LIMIT := 40
 const GADGET_TASK_WAIT_LIMIT := 100
 const GADGET_RECOVERY_LIMIT := 3
+const CAVE_TASK_WAIT_LIMIT := 150
 const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
 const CACHE_CLEANUP_LOAD_MULTIPLIER := 2
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
-const REVEAL_TILES := 1
-const BRANCH_ROW_STEP := 1 + REVEAL_TILES * 2
+const DEFAULT_REVEAL_DISTANCE := 1
+const SCANNER_REVEAL_DISTANCE := 2
+const SCANNER_CAVE_SCRIPT := "res://content/caves/scannercave/ScannerCave.gd"
+const DRONE_CAVE_SCRIPT := "res://content/caves/dronecave/DroneCave.gd"
+const SQUIDLEY_SCRIPT := "res://content/gadgets/droneyard/Squidley.gd"
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
 const REPAIR_HEALTH_RESERVE_RATIO := 0.4
@@ -128,6 +133,12 @@ var power_core_chamber: Chamber
 var power_core_water: Drop
 var power_core_activation_pending := false
 var power_core_delivery_approach := NO_COORD
+var cave_task_kind := CaveTaskKind.NONE
+var cave_task: Cave
+var cave_resource: Drop
+var cave_receiver: ResourceGrabber
+var cave_activation_pending := false
+var cave_task_wait_steps := 0
 var branch_row := -1000000
 var branch_side := 1
 var branch_entry_coord := NO_COORD
@@ -195,6 +206,7 @@ func start() -> bool:
 	_reset_artifact_choice()
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
+	_reset_cave_task()
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
 	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
@@ -214,6 +226,7 @@ func start() -> bool:
 		keeper.teamId + ".laser.movespeedwhilefiring",
 		keeper.playerId + ".keeper1.maxSpeed", keeper.playerId + ".keeper1.speedLossPerCarry",
 		keeper.playerId + ".keeper1.drillStrength",
+		"map.revealdistance",
 	])
 	for property in observed_properties:
 		Data.listen(self, property)
@@ -277,6 +290,7 @@ func stop() -> bool:
 	_reset_artifact_choice()
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
+	_reset_cave_task()
 	carry_preview_extra_site = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
@@ -358,6 +372,10 @@ func _process(delta: float) -> void:
 	_claim_power_core_chamber()
 	if _power_core_task_active() and not _gadget_handoff_in_flight():
 		_run_power_core_task()
+		return
+	var cave_suspended_for_gadget := _cave_task_active() and _claim_gadget_chamber()
+	if _cave_task_active() and not cave_suspended_for_gadget and not _gadget_handoff_in_flight():
+		_run_cave_task()
 		return
 
 	match state:
@@ -675,7 +693,13 @@ func _preflight() -> String:
 		return "Engineer carry slowdown does not produce a bounded supported load"
 	if not is_finite(_planning_base_speed()) or _planning_base_speed() <= 0.0:
 		return "Engineer movement speed must be positive and finite"
+	var reveal_distance := int(Data.ofOr("map.revealdistance", DEFAULT_REVEAL_DISTANCE))
+	if reveal_distance != DEFAULT_REVEAL_DISTANCE and reveal_distance != SCANNER_REVEAL_DISTANCE:
+		return "Teacher supports map reveal distance 1 or 2"
 	return ""
+
+func _branch_row_step() -> int:
+	return 1 + int(Data.ofOr("map.revealdistance", DEFAULT_REVEAL_DISTANCE)) * 2
 
 func _load_bindings() -> String:
 	bindings.clear(); var actions := ACTIONS.duplicate()
@@ -689,17 +713,20 @@ func _load_bindings() -> String:
 	return ""
 
 func _explore() -> void:
-	var water_search: bool = _power_core_status() == "SEARCH_WATER"
-	if not water_search and _claim_gadget_chamber():
+	var resource_search_type := _exclusive_resource_search_type()
+	var exclusive_resource_search := not resource_search_type.is_empty()
+	if not exclusive_resource_search and _claim_gadget_chamber():
 		if _wave("wavepresent"):
 			_change(State.RETURN, "The active monster wave interrupted gadget chamber excavation")
 		else:
 			_change(State.MINE, "A revealed gadget chamber takes priority over ordinary exploration")
 		return
+	if not exclusive_resource_search and _claim_supported_cave():
+		return
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
 		return
-	if not water_search and cache_cleanup_mode == CacheCleanupMode.ACTIVE:
+	if not exclusive_resource_search and cache_cleanup_mode == CacheCleanupMode.ACTIVE:
 		if keeper.isInsideStation or _leaf() != "Keeper1InputProcessor":
 			_change(State.RETURN, "The active cache cleanup must finish leaving the station")
 			return
@@ -724,7 +751,7 @@ func _explore() -> void:
 	if mining_outcome == MiningOutcome.BACKTRACK_PENDING or mining_outcome == MiningOutcome.WAITING_WAVE:
 		var target := _next_upgrade_target()
 		var id: String = target.get("id", "")
-		if _wave_needed() or (not water_search and not id.is_empty() and _upgrade_ready(id)):
+		if _wave_needed() or (not exclusive_resource_search and not id.is_empty() and _upgrade_ready(id)):
 			_change(State.RETURN, "A station task takes priority over descent backtracking")
 			return
 		var search := _find_backtrack_frontier()
@@ -732,7 +759,7 @@ func _explore() -> void:
 		if search_status == FrontierSearch.READY:
 			_adopt_descent_frontier(
 				Vector2i(search["coord"]),
-				int(search["row"]) + BRANCH_ROW_STEP,
+				int(search["row"]) + _branch_row_step(),
 				"The nearest untried descent frontier on a completed branch corridor was selected"
 			)
 			return
@@ -751,8 +778,8 @@ func _explore() -> void:
 		_release_all()
 		return
 	if mining_outcome == MiningOutcome.BLOCKED:
-		if water_search:
-			_fail("No reachable physical water remains for the active Power Core chamber")
+		if exclusive_resource_search:
+			_fail("No reachable physical %s remains for the active side task" % resource_search_type)
 			return
 		var blocked_target := _next_upgrade_target()
 		var blocked_id: String = blocked_target.get("id", "")
@@ -761,7 +788,7 @@ func _explore() -> void:
 			return
 		_release_all()
 		return
-	if not water_search and keeper.isInsideDome and _must_return_now():
+	if not exclusive_resource_search and keeper.isInsideDome and _must_return_now():
 		var waiting_target := _next_upgrade_target()
 		var waiting_id: String = waiting_target.get("id", "")
 		if not waiting_id.is_empty() and _upgrade_ready(waiting_id):
@@ -772,7 +799,7 @@ func _explore() -> void:
 			return
 		_release_all()
 		return
-	if not water_search:
+	if not exclusive_resource_search:
 		var carry_preview := _carry_window_plan()
 		if not carry_preview.is_empty():
 			if _begin_carry("The planned carry window has opened", carry_preview):
@@ -805,16 +832,19 @@ func _explore() -> void:
 		_fail("No open path remains to the saved navigation target")
 		return
 
-	ore = _nearest_ore(water_search)
+	ore = _nearest_ore(resource_search_type)
 	if ore != NO_COORD:
 		ore_approach_coord = _faster_open_ore_approach(ore)
 		vein = [ore]
-		_change(State.MINE, "A revealed water deposit can supply the Power Core" if water_search else "A revealed ore vein is in view")
+		var reason := "A revealed ore vein is in view"
+		if exclusive_resource_search:
+			reason = "A revealed %s deposit can supply the active side task" % resource_search_type
+		_change(State.MINE, reason)
 		return
 
 	if explore_mode == ExploreMode.DESCEND:
 		if branch_row < -1000:
-			branch_row = maxi(cell.y + BRANCH_ROW_STEP, 1)
+			branch_row = maxi(cell.y + _branch_row_step(), 1)
 		if cell.y < branch_row:
 			var below = Level.map.getTile(cell + Vector2i.DOWN)
 			if below is Tile and below.type == CONST.BORDER:
@@ -866,7 +896,7 @@ func _explore() -> void:
 		if branch_side > 0:
 			_record_completed_corridor(branch_row)
 			attempted_descent_origins[branch_entry_coord] = true
-			branch_row += BRANCH_ROW_STEP
+			branch_row += _branch_row_step()
 			explore_resume_mode = ExploreMode.DESCEND
 		_reset_progress()
 		delay = 0.2
@@ -1315,6 +1345,11 @@ func _claim_power_core_chamber() -> bool:
 			continue
 		if not candidate.is_visible_in_tree():
 			continue
+		if (
+			candidate.currentState == Chamber.State.REVEALED
+			and _chamber_cover_plan(candidate, CONST.POWERCORE).is_empty()
+		):
+			continue
 		var distance := keeper.global_position.distance_squared_to(candidate.global_position)
 		if distance < best_distance:
 			best = candidate
@@ -1403,7 +1438,7 @@ func _run_power_core_task() -> void:
 		gadget_task_wait_steps = 0
 	if not bool(grabber.spent):
 		if state == State.MINE and ore != NO_COORD:
-			_mine_power_core_water()
+			_mine_exclusive_resource(CONST.WATER, "the Power Core chamber")
 			return
 		if _select_power_core_water():
 			if state != State.CARRY:
@@ -1520,6 +1555,367 @@ func _reset_power_core_retrieval() -> void:
 	if artifact_transport == ArtifactTransport.POWER_CORE:
 		_reset_artifact_transport()
 
+func _claim_supported_cave() -> bool:
+	if _cave_task_active():
+		return true
+
+	var best: Cave
+	var best_kind := CaveTaskKind.NONE
+	var best_distance := INF
+	for candidate in get_tree().get_nodes_in_group("cave"):
+		if not candidate is Cave or candidate.currentState != Cave.State.REVEALED:
+			continue
+		if not candidate.is_visible_in_tree():
+			continue
+		var candidate_kind := _supported_cave_kind(candidate)
+		if candidate_kind == CaveTaskKind.NONE or not _cave_is_unfinished(candidate, candidate_kind):
+			continue
+		var interaction_target := _cave_open_interaction_target(candidate, candidate_kind)
+		if (
+			is_instance_valid(interaction_target)
+			and not is_finite(_path_distance(keeper.global_position, interaction_target.global_position))
+		):
+			continue
+		var distance := keeper.global_position.distance_squared_to(candidate.global_position)
+		if distance >= best_distance:
+			continue
+		best = candidate
+		best_kind = candidate_kind
+		best_distance = distance
+
+	if not is_instance_valid(best):
+		return false
+	if not vein.is_empty():
+		_record_cache()
+	cave_task = best
+	cave_task_kind = best_kind
+	cave_task_wait_steps = 0
+	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower()
+	_record("cave_claimed", "Claimed revealed %s cave for an exact side task" % label, null)
+	ModLoaderLog.info("Claimed revealed %s cave" % label, LOG_NAME)
+	return true
+
+func _supported_cave_kind(candidate: Cave) -> CaveTaskKind:
+	var script = candidate.get_script()
+	if not script is Script:
+		return CaveTaskKind.NONE
+	match script.resource_path:
+		SCANNER_CAVE_SCRIPT:
+			return CaveTaskKind.SCANNER
+		DRONE_CAVE_SCRIPT:
+			return CaveTaskKind.DRONE
+	return CaveTaskKind.NONE
+
+func _cave_is_unfinished(candidate: Cave, kind: CaveTaskKind) -> bool:
+	match kind:
+		CaveTaskKind.SCANNER:
+			return bool(candidate.get("hasScanner"))
+		CaveTaskKind.DRONE:
+			return bool(candidate.get("hasDrone"))
+	return false
+
+func _cave_open_interaction_target(candidate: Cave, kind: CaveTaskKind) -> Node2D:
+	match kind:
+		CaveTaskKind.SCANNER:
+			if bool(candidate.get("activated")):
+				return candidate.get_node_or_null("Usable") as Node2D
+			var left := candidate.get("leftRes") as ResourceGrabber
+			var right := candidate.get("rightRes") as ResourceGrabber
+			if is_instance_valid(left) and not bool(left.spent):
+				return left
+			if is_instance_valid(right) and not bool(right.spent):
+				return right
+		CaveTaskKind.DRONE:
+			var receiver := candidate.get_node_or_null("ResourceGrabber") as ResourceGrabber
+			if is_instance_valid(receiver) and not bool(receiver.spent):
+				return receiver
+	return null
+
+func _cave_task_active() -> bool:
+	return cave_task_kind != CaveTaskKind.NONE
+
+func _run_cave_task() -> void:
+	if not is_instance_valid(cave_task):
+		_fail("The active natural cave disappeared")
+		return
+	var return_due := _wave_needed() or _wave("wavepresent") or _must_return_now()
+	if state == State.RECOVER:
+		if return_due:
+			if (
+				interrupted == State.EXPLORE
+				and nav_travel_coord == NO_COORD
+				and (explore_mode == ExploreMode.DESCEND or explore_mode == ExploreMode.BRANCH)
+			):
+				nav_travel_coord = Level.map.getTileCoord(keeper.global_position)
+				explore_resume_mode = explore_mode
+			_interrupt_cave_for_wave()
+			return
+		_recover()
+		return
+	if return_due:
+		_interrupt_cave_for_wave()
+		return
+	if state == State.DEFEND:
+		_defend()
+		return
+	var leaf := _leaf()
+	if leaf == "UpgradesInputProcessor" or leaf == "StationInputProcessor" or leaf == "BattleInputProcessor":
+		_release_all()
+		_tap(&"ui_cancel")
+		delay = 0.5
+		return
+	match cave_task_kind:
+		CaveTaskKind.SCANNER:
+			_run_scanner_cave_task()
+		CaveTaskKind.DRONE:
+			_run_drone_cave_task()
+		_:
+			_fail("The active natural cave kind is unsupported")
+
+func _run_scanner_cave_task() -> void:
+	if not bool(cave_task.get("hasScanner")):
+		if int(Data.of("map.revealdistance")) != SCANNER_REVEAL_DISTANCE:
+			_wait_for_cave_task("Scanner cave released its scanner without applying reveal distance 2")
+			return
+		_finish_cave_task("Scanner cave applied reveal distance 2")
+		return
+
+	var left := cave_task.get("leftRes") as ResourceGrabber
+	var right := cave_task.get("rightRes") as ResourceGrabber
+	if not is_instance_valid(left) or not is_instance_valid(right):
+		_fail("Scanner cave does not expose both exact iron receivers")
+		return
+	var committed := int(bool(left.spent)) + int(bool(right.spent))
+	var grabs := int(cave_task.get("grabs"))
+	if grabs > committed:
+		_fail("Scanner cave reports more arrivals than committed receivers")
+		return
+	if bool(cave_task.get("activated")):
+		_activate_scanner_cave()
+		return
+	if grabs < committed:
+		cave_resource = null
+		cave_receiver = null
+		_wait_for_cave_task("Scanner cave receiver did not finish accepting its physical iron")
+		return
+	if committed >= 2:
+		_wait_for_cave_task("Scanner cave did not finish its activation animation")
+		return
+	if not is_instance_valid(cave_receiver) or bool(cave_receiver.spent):
+		cave_receiver = left if not bool(left.spent) else right
+		cave_resource = null
+	_run_cave_resource_delivery(CONST.IRON, "Scanner cave")
+
+func _run_drone_cave_task() -> void:
+	if not bool(cave_task.get("hasDrone")):
+		if bool(cave_task.get("opening")) or not _drone_cave_has_owned_squidley():
+			_wait_for_cave_task("Drone cave finished opening without an owned Squidley")
+			return
+		_finish_cave_task("Drone cave spawned its owned Squidley")
+		return
+	var receiver := cave_task.get_node_or_null("ResourceGrabber") as ResourceGrabber
+	if not is_instance_valid(receiver):
+		_fail("Drone cave does not expose its exact water receiver")
+		return
+	if bool(receiver.spent):
+		cave_resource = null
+		cave_receiver = null
+		_wait_for_cave_task("Drone cave did not finish spawning its Squidley")
+		return
+	cave_receiver = receiver
+	_run_cave_resource_delivery(CONST.WATER, "Drone cave")
+
+func _run_cave_resource_delivery(required_type: String, owner_label: String) -> void:
+	if not is_instance_valid(cave_receiver) or bool(cave_receiver.spent):
+		_wait_for_cave_task("%s lost its unspent physical-resource receiver" % owner_label)
+		return
+	if state == State.MINE and ore != NO_COORD:
+		_mine_exclusive_resource(required_type, owner_label)
+		return
+	if _select_cave_resource(required_type):
+		if state != State.CARRY:
+			_change(State.CARRY, "Known cached %s can activate the %s" % [required_type, owner_label])
+		elif keeper.carriedCarryables.has(cave_resource):
+			_deliver_cave_resource(owner_label)
+		else:
+			_fetch_cave_resource(owner_label)
+		return
+	if state != State.EXPLORE:
+		_change(State.EXPLORE, "No cached %s remains; search for the exact cave input" % required_type)
+		return
+	_explore()
+
+func _select_cave_resource(required_type: String) -> bool:
+	if (
+		is_instance_valid(cave_resource)
+		and cave_resource.type == required_type
+		and not cave_resource.absorbed
+		and not cave_resource.independent
+		and not _drop_targeted_by_transport(cave_resource)
+	):
+		return true
+	cave_resource = null
+	var best: Drop
+	for candidate in _cached_resources():
+		if candidate.type != required_type:
+			continue
+		if not is_finite(_path_distance(keeper.global_position, candidate.global_position)):
+			continue
+		if not is_instance_valid(best) or candidate.get_instance_id() < best.get_instance_id():
+			best = candidate
+	cave_resource = best
+	if is_instance_valid(cave_resource):
+		cave_task_wait_steps = 0
+		_record("cave_resource_reserved", "Reserved exact physical %s for the active cave" % required_type, null)
+	return is_instance_valid(cave_resource)
+
+func _fetch_cave_resource(owner_label: String) -> void:
+	if not keeper.carriedCarryables.is_empty():
+		_drop_cargo_for_artifact()
+		return
+	if keeper.focussedCarryable == cave_resource and _leaf() == "Keeper1InputProcessor":
+		if pickup_failures >= 3:
+			_fail("Repeated exact %s resource pickup attempts failed" % owner_label)
+			return
+		pickup_failures += 1
+		_release_all()
+		_tap(&"keeper1_pickup")
+		delay = CARRY_PICKUP_SECONDS
+		return
+	if _move_open(cave_resource.global_position):
+		cave_task_wait_steps = 0
+		return
+	_wait_for_cave_task("No open path reaches the reserved %s resource" % owner_label)
+
+func _deliver_cave_resource(owner_label: String) -> void:
+	if not keeper.carriedCarryables.has(cave_resource):
+		cave_resource = null
+		_wait_for_cave_task("The reserved %s resource attached to an unexpected carrier" % owner_label)
+		return
+	var receiver_coord: Vector2i = Level.map.getTileCoord(cave_receiver.global_position)
+	if Level.map.getTileCoord(keeper.global_position) != receiver_coord:
+		if _move_open(cave_receiver.global_position):
+			cave_task_wait_steps = 0
+			return
+		_wait_for_cave_task("No open path reaches the %s resource receiver" % owner_label)
+		return
+	var actions := _axis(cave_receiver.global_position)
+	if not actions.is_empty():
+		_hold(actions)
+		cave_task_wait_steps = 0
+		return
+	_wait_for_cave_task("The %s receiver did not accept its exact physical resource" % owner_label)
+
+func _activate_scanner_cave() -> void:
+	if cave_activation_pending:
+		_wait_for_cave_task("Activated Scanner cave did not confirm scanner use")
+		return
+	if not keeper.carriedCarryables.is_empty():
+		_drop_cargo_for_artifact()
+		return
+	var usable := cave_task.get_node_or_null("Usable") as Node2D
+	if not is_instance_valid(usable) or not cave_task.canFocusUse(keeper):
+		_wait_for_cave_task("Activated Scanner cave did not expose its exact usable")
+		return
+	if keeper.focussedUsable == usable and _leaf() == "Keeper1InputProcessor":
+		_release_all()
+		_tap(&"ui_select")
+		cave_activation_pending = true
+		cave_task_wait_steps = 0
+		delay = 0.2
+		return
+	if Level.map.getTileCoord(keeper.global_position) == Level.map.getTileCoord(usable.global_position):
+		var actions := _axis(usable.global_position)
+		if not actions.is_empty():
+			_hold(actions)
+			cave_task_wait_steps = 0
+			return
+		_wait_for_cave_task("Activated Scanner cave did not receive exact usable focus")
+		return
+	if _move_open(usable.global_position):
+		cave_task_wait_steps = 0
+		return
+	_fail("No open path reaches the Scanner cave usable")
+
+func _drone_cave_has_owned_squidley() -> bool:
+	var dispatcher = cave_task.get_node_or_null("DroneDispatcher")
+	if not is_instance_valid(dispatcher):
+		return false
+	var drones = dispatcher.get("drones")
+	if not drones is Dictionary:
+		return false
+	for drone in drones.values():
+		if not is_instance_valid(drone) or drone.get("teamId") != keeper.teamId:
+			continue
+		if drone.get("dispatcherId") != "dronecave":
+			continue
+		var script = drone.get_script()
+		if script is Script and script.resource_path == SQUIDLEY_SCRIPT:
+			return true
+	return false
+
+func _exclusive_resource_search_type() -> String:
+	if _power_core_status() == "SEARCH_WATER":
+		return CONST.WATER
+	if not _cave_task_active() or not is_instance_valid(cave_task):
+		return ""
+	match cave_task_kind:
+		CaveTaskKind.SCANNER:
+			var left := cave_task.get("leftRes") as ResourceGrabber
+			var right := cave_task.get("rightRes") as ResourceGrabber
+			if is_instance_valid(left) and is_instance_valid(right):
+				var committed := int(bool(left.spent)) + int(bool(right.spent))
+				if committed == int(cave_task.get("grabs")) and committed < 2:
+					return CONST.IRON
+		CaveTaskKind.DRONE:
+			var receiver := cave_task.get_node_or_null("ResourceGrabber") as ResourceGrabber
+			if is_instance_valid(receiver) and not bool(receiver.spent):
+				return CONST.WATER
+	return ""
+
+func _interrupt_cave_for_wave() -> void:
+	if is_instance_valid(cave_resource) and keeper.carriedCarryables.has(cave_resource):
+		_record_cache_site(keeper.global_position)
+		_release_all()
+		_tap(&"keeper1_drop")
+		delay = CARRY_PICKUP_SECONDS
+	if state == State.DEFEND:
+		_defend()
+		return
+	if keeper.isInsideStation:
+		_change(State.DEFEND, "The monster wave interrupted the natural cave side task")
+		return
+	if state != State.RETURN:
+		_change(State.RETURN, "The monster wave interrupted the natural cave side task")
+		return
+	_travel_to_station()
+
+func _finish_cave_task(reason: String) -> void:
+	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower()
+	_record("cave_completed", reason, null)
+	ModLoaderLog.info("Completed %s cave side task: %s" % [label, reason], LOG_NAME)
+	_reset_cave_task()
+	if state != State.EXPLORE:
+		_change(State.EXPLORE, reason + "; resume the saved ordinary path")
+	else:
+		_release_all()
+		delay = 0.2
+
+func _wait_for_cave_task(reason: String) -> void:
+	_release_all()
+	cave_task_wait_steps += 1
+	if cave_task_wait_steps <= CAVE_TASK_WAIT_LIMIT:
+		return
+	_fail(reason)
+
+func _reset_cave_task() -> void:
+	cave_task_kind = CaveTaskKind.NONE
+	cave_task = null
+	cave_resource = null
+	cave_receiver = null
+	cave_activation_pending = false
+	cave_task_wait_steps = 0
+
 func _claim_gadget_chamber() -> bool:
 	if gadget_activation_pending:
 		return true
@@ -1540,6 +1936,11 @@ func _claim_gadget_chamber() -> bool:
 		if candidate.currentState == Chamber.State.HIDDEN or candidate.currentState == Chamber.State.EMPTY:
 			continue
 		if not candidate.is_visible_in_tree():
+			continue
+		if (
+			candidate.currentState == Chamber.State.REVEALED
+			and _chamber_cover_plan(candidate, CONST.GADGET).is_empty()
+		):
 			continue
 		var distance := keeper.global_position.distance_squared_to(candidate.global_position)
 		var candidate_coord := Vector2i(candidate.coord)
@@ -1903,11 +2304,11 @@ func _recover() -> void:
 		action = DIRECTIONS[probe_index]
 	_hold([action])
 
-func _nearest_ore(water_only := false) -> Vector2i:
+func _nearest_ore(required_type := "") -> Vector2i:
 	var best := NO_COORD
 	var best_distance := INF
 	for type in ORE_TYPES:
-		if water_only and type != CONST.WATER:
+		if not required_type.is_empty() and type != required_type:
 			continue
 		for tile in Level.map.tilesByType.get(type, []):
 			if not is_instance_valid(tile) or not tile.is_visible_in_tree():
@@ -1918,7 +2319,7 @@ func _nearest_ore(water_only := false) -> Vector2i:
 				best_distance = distance
 	return best
 
-func _mine_power_core_water() -> void:
+func _mine_exclusive_resource(required_type: String, owner_label: String) -> void:
 	var tile = Level.map.getTile(ore)
 	if not tile is Tile:
 		var site: Vector2 = Level.map.getTilePos(vein.front()) if not vein.is_empty() else keeper.global_position
@@ -1926,10 +2327,10 @@ func _mine_power_core_water() -> void:
 		vein.clear()
 		ore = NO_COORD
 		ore_approach_coord = NO_COORD
-		_change(State.EXPLORE, "The discovered water deposit was mined for the Power Core")
+		_change(State.EXPLORE, "The discovered %s deposit was mined for %s" % [required_type, owner_label])
 		return
-	if tile.type != CONST.WATER:
-		_fail("Exclusive Power Core water search targeted a non-water tile")
+	if tile.type != required_type:
+		_fail("Exclusive %s search targeted a %s tile" % [required_type, tile.type])
 		return
 	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	if ore_approach_coord != NO_COORD and absi(current_coord.x - ore.x) + absi(current_coord.y - ore.y) > 1:
@@ -2025,6 +2426,8 @@ func _cached_resources(extra_cache_site = null) -> Array[Drop]:
 			continue
 		if candidate.carryableType != "resource" or candidate.absorbed or candidate.independent or candidate.isCarried():
 			continue
+		if _drop_targeted_by_transport(candidate):
+			continue
 		if ignored_cache_drop_ids.has(candidate.get_instance_id()):
 			continue
 		var near_cache := caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0)
@@ -2033,6 +2436,34 @@ func _cached_resources(extra_cache_site = null) -> Array[Drop]:
 		if near_cache:
 			result.append(candidate)
 	return result
+
+func _drop_targeted_by_transport(drop: Drop) -> bool:
+	if not is_instance_valid(drop) or not is_instance_valid(keeper):
+		return false
+	for drone in get_tree().get_nodes_in_group(keeper.teamId + "-transport_drones"):
+		if not _is_cave_squidley(drone):
+			continue
+		if drone.get("targettedDrop") == drop:
+			return true
+	return false
+
+func _is_cave_squidley(drone) -> bool:
+	if not is_instance_valid(drone):
+		return false
+	if drone.get("teamId") != keeper.teamId or drone.get("dispatcherId") != "dronecave":
+		return false
+	var script = drone.get_script()
+	return script is Script and script.resource_path == SQUIDLEY_SCRIPT
+
+func _transport_pipeline_resources() -> Dictionary:
+	var resources := {}
+	for drone in get_tree().get_nodes_in_group(keeper.teamId + "-transport_drones"):
+		if not _is_cave_squidley(drone):
+			continue
+		var carried_resource := str(drone.get("carriedResource"))
+		if not carried_resource.is_empty():
+			resources[carried_resource] = int(resources.get(carried_resource, 0)) + 1
+	return resources
 
 func _reachable_cached_resource_count() -> int:
 	var reachable := 0
@@ -2236,6 +2667,9 @@ func _reserved_resource_deficits(extra_resources := {}) -> Dictionary:
 	for drop in keeper.carriedCarryables:
 		if drop is Drop and available.has(drop.type):
 			available[drop.type] += 1
+	var pipeline_resources := _transport_pipeline_resources()
+	for resource in pipeline_resources:
+		available[resource] = int(available.get(resource, 0)) + int(pipeline_resources[resource])
 	for resource in extra_resources:
 		available[resource] = int(available.get(resource, 0)) + int(extra_resources[resource])
 	var excluded_intents := {}
@@ -3018,6 +3452,10 @@ func _on_drop_picked_up(drop, carrier) -> void:
 			gadget_task_wait_steps = 0
 			_queue_record("Keeper picked up the reserved physical water for the Power Core chamber")
 			return
+		if drop == cave_resource:
+			cave_task_wait_steps = 0
+			_queue_record("Keeper picked up the exact reserved physical cave input")
+			return
 		if state == State.CARRY and drop is Drop:
 			var counts: Dictionary = carry_plan.get("counts", {})
 			if int(counts.get(drop.type, 0)) > 0:
@@ -3246,7 +3684,7 @@ func _finish_terminal_descent(reason: String) -> void:
 	explore_resume_mode = -1
 	branch_entry_coord = NO_COORD
 	active_corridor_cells.clear()
-	if _power_core_status() == "SEARCH_WATER":
+	if not _exclusive_resource_search_type().is_empty():
 		_release_all()
 		return
 	_change_cache_cleanup(CacheCleanupMode.ACTIVE, reason + "; activate persistent cache cleanup")
