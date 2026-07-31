@@ -10,6 +10,67 @@ unless an explicit project decision says so.
 
 ## Planned Milestones
 
+### Use Revealed Natural Cave Rewards
+
+- Extend the supported rule-teacher loop to use the confirmed target-version
+  natural Cave rewards: `MushroomCave` for the temporary movement-speed buff,
+  `PortalCave` for passive resource delivery, `IronTreeCave` for renewable iron,
+  `HelmetCave` for the mine camera extension, `DroneCave` for the water-funded
+  Squidley helper, `ScannerCave` for the two-iron permanent reveal-distance
+  increase, `CobaltCave` for its two one-time cobalt resources, and `WaterCave`
+  for renewable water. Inventory and validate each exact type's required input,
+  resource cost, carried-object behavior, planner or map effects, persistence,
+  cooldown, success evidence, and wave interruption behavior before claiming
+  support.
+- Leave `BombCave` and `SeedCave` outside the teacher allowlist. A Cave Bomb
+  requires selecting a safe, useful blast location before its release commits
+  the explosion. A mineral-tree seed requires selecting a planting site with
+  sufficient space plus persistent memory, revisit, and harvest behavior. Do
+  not claim or interact with either excluded Cave, and do not add either
+  location policy or recurring task solely to support its reward.
+- Treat a reachable allowlisted Cave newly revealed by ordinary exploration as
+  a potential bounded side task rather than a Cave-search objective. Do not
+  inspect hidden map data or choose an unexplored frontier to look for a Cave.
+  The teacher may freeze its current work and perform Cave-specific navigation,
+  resource acquisition, activation, interruption, and recovery comparable to a
+  Gadget or Power Core Chamber task. A claimed `DroneCave` may fetch an additional
+  physical water Drop. A claimed `ScannerCave` may reserve and fetch two physical
+  iron Drops under the existing resource-reservation rules while preserving
+  partial receiver progress across interruption. Validate per-type arbitration
+  against waves, return deadlines, Gadget delivery, and Power Core work instead
+  of assigning every Cave one priority.
+- After the initial Cave-specific task completes, never retain a recurring Cave
+  task, estimate or poll its cooldown, add a Cave waypoint, or change a later
+  route solely to collect a renewable reward. If an already-selected ordinary
+  task path later enters the validated interaction area of `MushroomCave`,
+  `IronTreeCave`, or `WaterCave`, snapshot the exact rewards authoritatively
+  available at that moment, handle each snapshot member at most once with
+  bounded local positioning, and immediately resume the same task. Do not wait
+  for another reward, infer availability from elapsed time, or preserve
+  unfinished opportunistic Cave work across an interruption. If no later
+  ordinary path encounters the Cave, leave its renewed rewards unused.
+- For `IronTreeCave`, enter fruit activation without unrelated cargo. After each
+  currently available fruit spawns an attached iron Drop, issue the normal
+  configured drop action and confirm the new iron is loose before activating
+  another fruit. Record the released physical iron Drops together as one
+  ordinary cache site, then resume ordinary work after the bounded harvest. The
+  existing resource planner and cache-cleanup flow own later collection and
+  delivery, with no Iron Tree direct-return path. An interrupted initial harvest
+  may resume only the fruit identities that were available in its original
+  snapshot; newly regrown fruit never extends that task.
+- Share only revealed-and-reachable discovery, navigation, interruption, focus,
+  and bounded normal-input infrastructure. Implement and validate one exact Cave
+  type at a time: some require focused use, `PortalCave` is passive and needs
+  resource routing, and `DroneCave` changes resource ownership and movement
+  asynchronously after consuming water. Do not add a generic "activate Cave"
+  fallback or claim Cave types outside the exact allowlist. Define bounded
+  retry, abandonment, and failure behavior from each allowlisted type's validated
+  lifecycle instead of imposing one generic Cave-task failure policy.
+- Complete support for one Cave type only after its resulting buff, reveal
+  change, resource source, passive transport, or autonomous helper is
+  incorporated into each behavior-relevant current planner path identified by
+  its lifecycle validation and confirmed in a representative recording.
+
 ### Complete Relic Hunt
 
 - After the supported rule-teacher loop is proven, extend the manually started,

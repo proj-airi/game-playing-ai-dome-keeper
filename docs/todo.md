@@ -72,24 +72,3 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   from the current recording, not as a permanent level-based rule. Do not alter
   collision masks, tether distance, pull impulses, or resource positions, and
   do not treat another carry-strength purchase as a fix for rigid-body loss.
-
-## Natural Cave Interaction Inventory
-
-- Inventory and validate the complete target-version lifecycles for the
-  confirmed requested natural Cave rewards: `MushroomCave` for the temporary
-  movement-speed buff, `PortalCave` for the passive portal or black-hole-like
-  resource route, `IronTreeCave` for renewable iron, `HelmetCave` for the mine
-  view extension, and `DroneCave` for the water-funded Squidley helper. Record
-  each type's required input, resource cost, carried-object behavior, planner or
-  map effects, persistence, cooldown, success evidence, and wave interruption
-  behavior.
-- Share only revealed-and-reachable discovery, navigation, interruption, focus,
-  and bounded normal-input infrastructure. Implement and validate one exact
-  Cave type at a time: some require a focused use, `PortalCave` is passive and
-  needs resource routing, and `DroneCave` consumes one physical water Drop and
-  then changes resource ownership and movement asynchronously. Do not add a
-  generic "activate Cave" fallback.
-- Keep unvalidated Cave scenes explicitly unsupported and fail closed. Per-type
-  support is complete only after the resulting buff, reveal change, resource
-  source, passive transport, or autonomous helper is incorporated into every
-  affected teacher planner and confirmed in a representative recording.
