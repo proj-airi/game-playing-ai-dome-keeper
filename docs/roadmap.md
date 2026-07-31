@@ -28,6 +28,43 @@ unless an explicit project decision says so.
   the dome drop point, and terminal win/loss state. Keep them out of the current
   ore/enemy dataset until annotation and evaluation contracts are decided.
 
+### Complete the Teacher Code-Cleanliness Challenge
+
+- After the rule teacher can complete Relic Hunt reliably, freeze representative
+  successful-run outcomes and use the accelerated recording and telemetry loop
+  to remove code and simplify architecture without losing supported behavior.
+  Treat this as an evidence-driven deletion and responsibility-boundary
+  challenge, not a minimum-line-count contest.
+- Run small, independently reviewable deletion and restructuring experiments.
+  Retain a change only after focused scenarios and fresh complete runs show that
+  declared gameplay outcomes and telemetry contracts remain intact. Use runtime
+  failures to uncover hidden responsibilities instead of preserving every
+  historical branch defensively.
+- Establish clear state ownership, explicit transition reasons, and separable
+  control, planning, observation, and recording responsibilities before adding
+  the more complex whole-run optimization policies in the next milestone.
+  Detailed cleanup and behavior-correction work remains owned by the Teacher
+  Controller Cleanup item in [`todo.md`](todo.md).
+
+### Complete the Minimum-Wave Challenge
+
+- After the code-cleanliness challenge, optimize the proven rule teacher to win
+  Relic Hunt in as few waves as practical while preserving reliable completion
+  across newly generated runs. Use repeated random runs rather than a fixed seed
+  suite; begin with three-run average wave count for rapid candidate comparison
+  and increase the sample count when confirming a new best policy.
+- Develop whole-run strategy instead of relying only on stronger combat
+  execution. Evaluate mining and return routing, upgrade timing and resource
+  reservation, natural Cave rewards, Gadgets, Supply Drops, Supplements, and
+  Relic progress by their contribution to earlier reliable completion. Do not
+  require meaningless per-run interaction with every system merely to satisfy a
+  feature checklist.
+- Count failed runs explicitly and penalize them strongly rather than excluding
+  them from the average. Record enough run provenance and strategic telemetry to
+  distinguish a generally better policy from favorable random generation, while
+  leaving the exact scoring formula and statistical promotion rule open until
+  this milestone begins.
+
 ### Expand the YOLO Dataset
 
 - Expand the detector beyond the current MVP classes as later gameplay
