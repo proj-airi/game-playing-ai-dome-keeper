@@ -4,6 +4,7 @@ const MOD_DIR := "LemonNekoGH-YoloDataCollector"
 const LOG_NAME := "LemonNekoGH-YoloDataCollector:Main"
 const GAME_SCENE_PATH := "res://game/Game.tscn"
 const GAME_SCRIPT_PATH := "res://game/Game.gd"
+const CHECKPOINT_LOAD_ARG := "--airi-checkpoint-load="
 
 var mod_dir_path := ""
 var extensions_dir_path := ""
@@ -15,12 +16,16 @@ var launch_config: DomeEditorConf
 func _init() -> void:
 	ModLoaderLog.info("Init", LOG_NAME)
 	mod_dir_path = ModLoaderMod.get_unpacked_dir().path_join(MOD_DIR)
-
 	ModLoaderMod.extend_scene(GAME_SCENE_PATH, _configure_direct_normal_run)
 	install_script_extensions()
 
 
 func _configure_direct_normal_run(scene: Node) -> Node:
+	var loading := false
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with(CHECKPOINT_LOAD_ARG):
+			loading = true
+			break
 	if not OS.has_feature("editor"):
 		return scene
 	if FileAccess.file_exists("user://dev-mode"):
@@ -45,7 +50,11 @@ func _configure_direct_normal_run(scene: Node) -> Node:
 	launch_config = config_resource
 
 	launch_config.custom_play_pressed = true
-	launch_config.play_mode = Const.ENTER_PLAY_MODE.Level
+	launch_config.play_mode = (
+		Const.ENTER_PLAY_MODE.Title
+		if loading
+		else Const.ENTER_PLAY_MODE.Level
+	)
 	scene.set(&"devMode", false)
 	ModLoaderLog.info("Configured a direct level launch with normal run rules", LOG_NAME)
 	return scene

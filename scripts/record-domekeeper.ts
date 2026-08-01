@@ -4,14 +4,19 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
+import { parseArgs } from 'node:util'
 import { customAlphabet } from 'nanoid'
 import { x } from 'tinyexec'
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 6)
-const args = process.argv.slice(2)
-const fps = args.length ? Number(args[1]) : 10
-if ((args.length && (args.length !== 2 || args[0] !== '--fps')) || !Number.isInteger(fps) || fps <= 0)
-  fail('Usage: mise run godot:record -- --fps <positive integer>')
+const { values } = parseArgs({
+  args: process.argv.slice(2),
+  options: { fps: { type: 'string' }, load: { type: 'string' }, save: { type: 'boolean' } },
+  strict: true,
+})
+const fps = Number(values.fps ?? 10)
+if (!Number.isInteger(fps) || fps <= 0)
+  fail('--fps must be a positive integer')
 const godot = import.meta.env.GODOT_BIN
 const version = import.meta.env.DOMEKEEPER_VERSION
 if (!godot || !version)
@@ -25,6 +30,7 @@ if (!existsSync(path.join(project, 'project.godot')))
   fail(`Decompiled project does not exist: ${project}`)
 const timestamp = new Date().toISOString().slice(2, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '_')
 const sessionDir = path.join(process.cwd(), 'recordings', `session_${timestamp}_${nanoid()}`)
+const sessionId = path.basename(sessionDir)
 const avi = path.join(sessionDir, 'recording.avi')
 const mp4 = path.join(sessionDir, 'recording.mp4')
 const replay = path.join(sessionDir, 'recording.jsonl')
@@ -47,6 +53,9 @@ await run(godot, [
   '--',
   `--airi-recording-dir=${sessionDir}`,
   `--airi-recording-fps=${fps}`,
+  `--airi-checkpoint-session=${sessionId}`,
+  ...(values.save ? ['--airi-checkpoint-save'] : []),
+  ...(values.load == null ? [] : [`--airi-checkpoint-load=${values.load}`]),
 ], 'Godot recording failed; the incomplete session was kept')
 
 if (!existsSync(replay))

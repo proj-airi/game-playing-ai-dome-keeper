@@ -21,8 +21,31 @@ const LOG_NAME := "YoloDataCollector:Teacher"
 const STATUS_FILE := "airi-dome-keeper-status.json"
 const RECORDING_ARG := "--airi-recording-dir="
 const RECORDING_FPS_ARG := "--airi-recording-fps="
+const CHECKPOINT_SESSION_ARG := "--airi-checkpoint-session="
+const CHECKPOINT_LOAD_ARG := "--airi-checkpoint-load="
+const CHECKPOINT_SAVE_ARG := "--airi-checkpoint-save"
 const RECORDING_MOVIE := "recording.avi"
 const RECORDING_RESOLUTION := Vector2i(1280, 720)
+const CHECKPOINT_SIDECAR := "teacher.json"
+const CHECKPOINT_FIELDS := [
+	"state", "explore_mode", "pending_intents", "active_upgrade_intent", "active_upgrade_id",
+	"active_upgrade_fulfills", "active_upgrade_arm", "combat_attack_next", "mobility_arm",
+	"drill_hits_by_coord", "wave_start_missing_health", "wave_start_max_health",
+	"last_wave_health_loss", "wave_health_tracking", "repair_target_health", "caches", "vein",
+	"ore", "ore_approach_coord", "nav_travel_coord", "explore_resume_mode", "cache_cleanup_mode",
+	"gadget_activation_pending", "gadget_delivery_pending", "gadget_task_wait_steps", "gadget_recovery_coord",
+	"gadget_recovery_attempts", "gadget_recovery_cache_recorded", "artifact_transport",
+	"power_core_activation_pending", "power_core_delivery_approach", "cave_task_kind",
+	"cave_activation_pending", "cave_task_wait_steps", "branch_row", "branch_side",
+	"branch_entry_coord", "bypass_side", "bypass_reversed", "mining_outcome",
+	"mining_outcome_reason", "completed_corridors", "active_corridor_cells",
+	"attempted_descent_origins",
+]
+const CHECKPOINT_REFS := [
+	"carry", "gadget_chamber", "gadget_drop", "power_core_chamber", "power_core_water",
+	"cave_task", "cave_resource", "cave_receiver",
+]
+const CHECKPOINT_REF_SETS := ["gadget_prior_drops", "ignored_cache_drops"]
 const TICK := 0.1
 const MOBILITY_RETURN_TARGET_SECONDS := 15.0
 const STATION_ENTRY_SECONDS := 2.0
@@ -99,7 +122,7 @@ var active_upgrade_fulfills := false
 var active_upgrade_arm := -1
 var combat_attack_next := true
 var mobility_arm := MobilityArm.SPEED
-var drill_hits_by_tile := {}
+var drill_hits_by_coord := {}
 var wave_start_missing_health := 0.0
 var wave_start_max_health := 0.0
 var last_wave_health_loss := 0.0
@@ -113,7 +136,7 @@ var ore_approach_coord := NO_COORD
 var nav_travel_coord := NO_COORD
 var explore_resume_mode := -1
 var cache_cleanup_mode := CacheCleanupMode.NONE
-var ignored_cache_drop_ids := {}
+var ignored_cache_drops := {}
 var carry: Drop
 var carry_plan := {}
 var carry_preview_cache := {}
@@ -122,8 +145,8 @@ var carry_preview_extra_site = null
 var gadget_chamber: Chamber
 var gadget_activation_pending := false
 var gadget_delivery_pending := false
-var gadget_drop_instance_id := 0
-var gadget_prior_drop_ids := {}
+var gadget_drop: Drop
+var gadget_prior_drops := {}
 var gadget_task_wait_steps := 0
 var gadget_recovery_coord := NO_COORD
 var gadget_recovery_attempts := 0
@@ -167,14 +190,21 @@ var probe_index := 0
 var probe_count := 0
 var probe_time := 0.0
 var probe_origin := Vector2.ZERO
+var checkpoint_session_id := ""
+var checkpoint_save_enabled := false
+var checkpoint_load_pending := false
+var checkpoint_state := {}
 
 func _init() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 func _ready() -> void:
 	status_path = _temp_dir().path_join(STATUS_FILE)
-	_configure_recording()
+	_configure_runtime()
 	_write_status()
+
+func is_checkpoint_load_pending() -> bool:
+	return checkpoint_load_pending
 
 func start() -> bool:
 	if running:
@@ -200,9 +230,9 @@ func start() -> bool:
 	active_upgrade_intent = -1; active_upgrade_id = ""
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
-	drill_hits_by_tile.clear(); carry_plan.clear(); carry_preview_cache.clear()
+	drill_hits_by_coord.clear(); carry_plan.clear(); carry_preview_cache.clear()
 	ore_approach_coord = NO_COORD; nav_travel_coord = NO_COORD; explore_resume_mode = -1
-	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
+	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drops.clear()
 	_reset_artifact_choice()
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
@@ -248,6 +278,13 @@ func start() -> bool:
 	attempted_descent_origins[nav_travel_coord] = true
 	caches.clear()
 	_reset_progress()
+	if not checkpoint_state.is_empty():
+		error = _restore_checkpoint(checkpoint_state)
+		checkpoint_state.clear()
+		if not error.is_empty():
+			ModLoaderLog.error(error, LOG_NAME)
+			stop()
+			return false
 	keeper.mined.connect(_on_mined)
 	Level.drops.synchronizer.drop_picked_up.connect(_on_drop_picked_up)
 	Level.monstersByTeamId[keeper.teamId].monsterSynchronizer.spawned.connect(_on_monster_spawned)
@@ -286,7 +323,7 @@ func stop() -> bool:
 		recording_file = null
 	running = false; keeper = null; carry = null; carry_plan.clear(); carry_preview_cache.clear()
 	_reset_laser_aim()
-	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drop_ids.clear()
+	cache_cleanup_mode = CacheCleanupMode.NONE; ignored_cache_drops.clear()
 	_reset_artifact_choice()
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
@@ -335,7 +372,7 @@ func _process(delta: float) -> void:
 		if activation_pending and chamber.currentState != Chamber.State.EMPTY:
 			_wait_for_gadget_task("The active %s chamber did not confirm artifact release" % label)
 			return
-		gadget_drop_instance_id = carried_artifact.get_instance_id()
+		gadget_drop = carried_artifact
 		if gadget_delivery_pending:
 			if state != State.RETURN:
 				var reason := "The %s requires an exclusive direct return" % label
@@ -412,7 +449,7 @@ func _physics_process(_delta: float) -> void:
 		return
 	_aim()
 
-func _configure_recording() -> void:
+func _configure_runtime() -> void:
 	var directory := ""
 	var recording_requested := false
 	for argument in OS.get_cmdline_user_args():
@@ -422,6 +459,13 @@ func _configure_recording() -> void:
 		elif argument.begins_with(RECORDING_FPS_ARG):
 			recording_requested = true
 			recording_fps = int(argument.trim_prefix(RECORDING_FPS_ARG))
+		elif argument == CHECKPOINT_SAVE_ARG:
+			checkpoint_save_enabled = true
+		elif argument.begins_with(CHECKPOINT_SESSION_ARG):
+			checkpoint_session_id = argument.trim_prefix(CHECKPOINT_SESSION_ARG)
+		elif argument.begins_with(CHECKPOINT_LOAD_ARG):
+			checkpoint_load_pending = true
+			call_deferred(&"_load_checkpoint", argument.trim_prefix(CHECKPOINT_LOAD_ARG))
 	if not recording_requested:
 		return
 	var movie := ProjectSettings.globalize_path(Engine.get_write_movie_path()).simplify_path()
@@ -445,6 +489,31 @@ func _configure_recording() -> void:
 	else:
 		recording_path = directory.path_join("recording.jsonl")
 
+func _load_checkpoint(checkpoint_id: String) -> void:
+	var result = await SaveGame.loadGame(checkpoint_id, 0)
+	var error := ""
+	if result != OK:
+		error = "Official save load failed for checkpoint " + checkpoint_id
+	else:
+		var file := FileAccess.open(
+			"user://%s/%s" % [checkpoint_id, CHECKPOINT_SIDECAR],
+			FileAccess.READ
+		)
+		if file == null:
+			error = "Failed to open teacher checkpoint: " + error_string(FileAccess.get_open_error())
+		else:
+			var parsed = JSON.parse_string(file.get_as_text())
+			if not parsed is Dictionary or int(parsed.get("version", 0)) != 1:
+				error = "Teacher checkpoint is malformed or has an unsupported version"
+			else:
+				checkpoint_state = parsed
+	if error.is_empty():
+		checkpoint_load_pending = false
+		return
+	push_error(error)
+	ModLoaderLog.error(error, LOG_NAME)
+	get_tree().quit(1)
+
 func is_recording_configured() -> bool:
 	return not recording_path.is_empty()
 
@@ -465,6 +534,107 @@ func _open_recording() -> String:
 	recording_file.close()
 	recording_file = null
 	return error
+
+func _checkpoint_snapshot() -> Dictionary:
+	var values := {}
+	for field in CHECKPOINT_FIELDS:
+		values[field] = var_to_str(get(field))
+	var refs := {}
+	for field in CHECKPOINT_REFS:
+		refs[field] = _checkpoint_ref(get(field))
+	for field in CHECKPOINT_REF_SETS:
+		refs[field] = []
+		for value in get(field):
+			var ref = _checkpoint_ref(value)
+			if ref != null:
+				refs[field].append(ref)
+	return {"version": 1, "values": values, "refs": refs}
+
+func _restore_checkpoint(data: Dictionary) -> String:
+	var values: Dictionary = data.get("values", {})
+	for field in CHECKPOINT_FIELDS:
+		if not values.has(field):
+			return "Teacher checkpoint is missing state field: " + field
+		set(field, str_to_var(values[field]))
+	if not data.get("refs") is Dictionary:
+		return "Teacher checkpoint references are missing"
+	var refs: Dictionary = data["refs"]
+	for field in CHECKPOINT_REFS:
+		if not refs.has(field):
+			return "Teacher checkpoint is missing reference field: " + field
+		var encoded = refs.get(field)
+		var restored = _restore_checkpoint_ref(encoded)
+		if encoded != null and not is_instance_valid(restored):
+			return "Official save did not restore teacher reference: " + field
+		set(field, restored)
+	for field in CHECKPOINT_REF_SETS:
+		if not refs.has(field):
+			return "Teacher checkpoint is missing reference field: " + field
+		if not refs[field] is Array:
+			return "Teacher checkpoint reference set is malformed: " + field
+		var restored := {}
+		for encoded in refs[field]:
+			var object = _restore_checkpoint_ref(encoded)
+			if not is_instance_valid(object):
+				return "Official save did not restore teacher reference set: " + field
+			restored[object] = true
+		set(field, restored)
+	carry_preview_cache.clear()
+	carry_preview_refresh_at = 0.0
+	carry_preview_extra_site = null
+	return ""
+
+func _checkpoint_ref(value):
+	if not is_instance_valid(value):
+		return null
+	if value is ResourceGrabber and is_instance_valid(cave_task):
+		return ["cave_receiver", _checkpoint_ref(cave_task), str(cave_task.get_path_to(value))]
+	if value is Drop:
+		return ["drop", value.UID]
+	if value is Chamber:
+		return ["chamber", var_to_str(value.coord)]
+	if value is Cave:
+		return ["cave", var_to_str(value.coord)]
+	return null
+
+func _restore_checkpoint_ref(value):
+	if value is Array and value.size() == 3 and value[0] == "cave_receiver":
+		var cave = _restore_checkpoint_ref(value[1])
+		return cave.get_node_or_null(NodePath(value[2])) if is_instance_valid(cave) else null
+	if not value is Array or value.size() != 2:
+		return null
+	if value[0] == "drop":
+		return Level.drops.get_drop(int(value[1])) if Level.drops.has_drop(int(value[1])) else null
+	var group := str(value[0])
+	var coord = str_to_var(value[1])
+	for candidate in get_tree().get_nodes_in_group(group):
+		if candidate.get("coord") == coord:
+			return candidate
+	return null
+
+func _save_checkpoint(completed_waves: int) -> void:
+	var checkpoint_id := "%s_wave_%d" % [checkpoint_session_id, completed_waves]
+	SaveGame.saveGame(checkpoint_id, 0, true)
+	for template in [
+		SaveGame.SAVE_SLOT_FILE_TEMPLATE,
+		SaveGame.SAVE_TILE_FILE_TEMPLATE,
+		SaveGame.SAVE_TILE_FILE_REPLAY_TEMPLATE,
+	]:
+		if not FileAccess.file_exists(template % [checkpoint_id, 0]):
+			_fail("Official save failed for checkpoint " + checkpoint_id)
+			return
+	var file := FileAccess.open("user://%s/%s" % [checkpoint_id, CHECKPOINT_SIDECAR], FileAccess.WRITE)
+	if file == null:
+		_fail("Failed to open teacher checkpoint: " + error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(JSON.stringify(_checkpoint_snapshot(), "\t"))
+	file.flush()
+	var error := file.get_error()
+	file.close()
+	if error != OK:
+		_fail("Failed to write teacher checkpoint: " + error_string(error))
+		return
+	ModLoaderLog.info("Saved debug checkpoint " + checkpoint_id, LOG_NAME)
 
 func _temp_dir() -> String:
 	for variable in ["TMPDIR", "TEMP", "TMP"]:
@@ -674,15 +844,17 @@ func _status_pending_intents() -> Array[String]:
 	return intents
 
 func _preflight() -> String:
+	if checkpoint_save_enabled and checkpoint_session_id.is_empty():
+		return "Checkpoint saving requires a recording session ID"
 	if not StageManager.isInLevel() or not Level.initialized or Level.map == null:
 		return "Start a run before starting teacher collection"
 	if GameWorld.gameover:
 		return "Teacher cannot start after the run has ended"
-	if Level.isMultiplayer() or Keepers.local.getCount() != 1 or Options.useGamepad(0):
-		return "Teacher requires one offline keyboard keeper"
-	keeper = Keepers.getLocalKeeperByDeviceId(0)
-	if not is_instance_valid(keeper) or keeper.techId != "keeper1":
-		return "Teacher requires Engineer on keyboard device 0"
+	if Level.isMultiplayer() or Keepers.local.getCount() != 1:
+		return "Teacher requires one offline keeper"
+	keeper = Keepers.local.first()
+	if not is_instance_valid(keeper) or keeper.techId != "keeper1" or Options.useGamepad(keeper.deviceId):
+		return "Teacher requires one local keyboard Engineer"
 	if keeper.isInsideStation and _leaf() != "StationInputProcessor" and _leaf() != "BattleInputProcessor":
 		return "Close station modals before starting teacher collection"
 	dome = Level.getDome(keeper.teamId)
@@ -1000,7 +1172,7 @@ func _carry() -> void:
 
 func _return() -> void:
 	if gadget_delivery_pending and not is_instance_valid(_carried_gadget()):
-		var tracked_gadget := _tracked_gadget()
+		var tracked_gadget := gadget_drop
 		if (
 			is_instance_valid(tracked_gadget)
 			and not tracked_gadget.absorbed
@@ -2040,7 +2212,7 @@ func _mine_gadget_recovery() -> void:
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave interrupted detached gadget clearance")
 		return
-	var gadget := _tracked_gadget()
+	var gadget := gadget_drop
 	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
 		gadget_recovery_coord = NO_COORD
 		_change(State.RETURN, "The tracked gadget entered authoritative handoff during clearance")
@@ -2102,7 +2274,7 @@ func _artifact_recovery_clearance_plan(recovery_coord: Vector2i) -> Dictionary:
 	return result
 
 func _reattach_detached_gadget() -> void:
-	var gadget := _tracked_gadget()
+	var gadget := gadget_drop
 	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
 		gadget_recovery_coord = NO_COORD
 		_change(State.RETURN, "The tracked gadget entered authoritative handoff before reattachment")
@@ -2168,7 +2340,7 @@ func _prepare_artifact_transport(owner: ArtifactTransport) -> void:
 	var type := CONST.POWERCORE if owner == ArtifactTransport.POWER_CORE else CONST.GADGET
 	for candidate in Level.drops.get_all_drops().values():
 		if candidate is Drop and candidate.type == type:
-			gadget_prior_drop_ids[candidate.get_instance_id()] = true
+			gadget_prior_drops[candidate] = true
 
 func _drop_cargo_for_artifact() -> void:
 	if _leaf() != "Keeper1InputProcessor":
@@ -2198,20 +2370,11 @@ func _carried_gadget() -> Drop:
 	for carried in keeper.carriedCarryables:
 		if not carried is Drop or carried.type != expected_type or carried.carryableType != "gadget":
 			continue
-		var instance_id: int = carried.get_instance_id()
-		if gadget_drop_instance_id != 0 and instance_id != gadget_drop_instance_id:
+		if is_instance_valid(gadget_drop) and carried != gadget_drop:
 			continue
-		if gadget_prior_drop_ids.has(instance_id):
+		if gadget_prior_drops.has(carried):
 			continue
 		return carried
-	return null
-
-func _tracked_gadget() -> Drop:
-	if gadget_drop_instance_id == 0:
-		return null
-	for candidate in Level.drops.get_all_drops().values():
-		if candidate is Drop and candidate.get_instance_id() == gadget_drop_instance_id:
-			return candidate
 	return null
 
 func _reset_gadget_retrieval() -> void:
@@ -2222,8 +2385,8 @@ func _reset_gadget_retrieval() -> void:
 func _reset_artifact_transport() -> void:
 	artifact_transport = ArtifactTransport.GADGET
 	gadget_delivery_pending = false
-	gadget_drop_instance_id = 0
-	gadget_prior_drop_ids.clear()
+	gadget_drop = null
+	gadget_prior_drops.clear()
 	gadget_task_wait_steps = 0
 	gadget_recovery_coord = NO_COORD
 	gadget_recovery_attempts = 0
@@ -2428,7 +2591,7 @@ func _cached_resources(extra_cache_site = null) -> Array[Drop]:
 			continue
 		if _drop_targeted_by_transport(candidate):
 			continue
-		if ignored_cache_drop_ids.has(candidate.get_instance_id()):
+		if ignored_cache_drops.has(candidate):
 			continue
 		var near_cache := caches.any(func(site): return site.distance_to(candidate.global_position) <= GameWorld.TILE_SIZE * 3.0)
 		if not near_cache and extra_cache_site is Vector2:
@@ -2489,7 +2652,7 @@ func _maybe_request_cache_cleanup() -> void:
 func _ignore_failed_cleanup_drop() -> void:
 	if cache_cleanup_mode != CacheCleanupMode.ACTIVE or not is_instance_valid(carry):
 		return
-	ignored_cache_drop_ids[carry.get_instance_id()] = true
+	ignored_cache_drops[carry] = true
 	ModLoaderLog.info("A repeatedly failing resource was excluded from the active cache cleanup", LOG_NAME)
 
 func _begin_carry(reason: String, preview := {}) -> bool:
@@ -3252,7 +3415,7 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 		if active_upgrade_intent == UpgradeIntent.COMBAT:
 			combat_attack_next = active_upgrade_arm != 0
 		elif active_upgrade_intent == UpgradeIntent.DRILL:
-			drill_hits_by_tile.clear()
+			drill_hits_by_coord.clear()
 	_clear_active_upgrade()
 	_sync_repair_intent()
 	ui_steps = 0
@@ -3368,7 +3531,7 @@ func _change_cache_cleanup(next: CacheCleanupMode, reason: String) -> void:
 	var previous := cache_cleanup_mode
 	cache_cleanup_mode = next
 	if next == CacheCleanupMode.NONE:
-		ignored_cache_drop_ids.clear()
+		ignored_cache_drops.clear()
 	var previous_name := str(CacheCleanupMode.keys()[previous])
 	var current_name := str(CacheCleanupMode.keys()[next])
 	ModLoaderLog.info("CACHE_CLEANUP " + previous_name + " -> " + current_name + ": " + reason, LOG_NAME)
@@ -3394,17 +3557,17 @@ func _track_progress(delta: float) -> void:
 func _on_mined(_amount = 0.0) -> void:
 	var tile := keeper.drill_hit_test_ray.get_collider() as Tile
 	if is_instance_valid(tile):
-		var tile_id := tile.get_instance_id()
-		var hits := int(drill_hits_by_tile.get(tile_id, 0)) + 1
+		var tile_coord := Vector2i(tile.coord)
+		var hits := int(drill_hits_by_coord.get(tile_coord, 0)) + 1
 		if hits >= DRILL_HIT_INTENT_THRESHOLD:
 			var was_pending := pending_intents.has(UpgradeIntent.DRILL)
 			pending_intents[UpgradeIntent.DRILL] = true
 			if not was_pending:
 				_queue_record("Drill upgrade requested after repeated hits")
 		if tile.health <= 0.0:
-			drill_hits_by_tile.erase(tile_id)
+			drill_hits_by_coord.erase(tile_coord)
 		else:
-			drill_hits_by_tile[tile_id] = hits
+			drill_hits_by_coord[tile_coord] = hits
 	if state == State.RECOVER:
 		probe_time = 0.0
 	else:
@@ -3443,9 +3606,8 @@ func _on_drop_picked_up(drop, carrier) -> void:
 		_invalidate_carry_preview()
 		var expected_type := CONST.POWERCORE if artifact_transport == ArtifactTransport.POWER_CORE else CONST.GADGET
 		if drop is Drop and drop.type == expected_type and drop.carryableType == "gadget":
-			var instance_id: int = drop.get_instance_id()
-			if not gadget_prior_drop_ids.has(instance_id):
-				gadget_drop_instance_id = instance_id
+			if not gadget_prior_drops.has(drop):
+				gadget_drop = drop
 				_queue_record("Keeper picked up the exact activated artifact")
 			return
 		if drop == power_core_water:
@@ -3496,9 +3658,16 @@ func propertyChanged(property: String, old_value, new_value) -> void:
 		wave_health_tracking = false
 		if cache_cleanup_mode == CacheCleanupMode.PENDING_DEFENSE:
 			_change_cache_cleanup(CacheCleanupMode.ACTIVE, "The next monster wave settled after cache cleanup was requested")
+		if checkpoint_save_enabled:
+			call_deferred(&"_commit_checkpoint")
 	if property.ends_with(".dome.health") or property.ends_with(".dome.maxhealth"):
 		_sync_repair_intent()
 	_queue_record("Game data changed: " + property.get_slice(".", property.get_slice_count(".") - 1))
+
+func _commit_checkpoint() -> void:
+	if not running or _wave("wavepresent") or _wave("wavebattle"):
+		return
+	_save_checkpoint(int(Data.of(keeper.teamId + ".monsters.cycle")))
 
 func _sync_repair_intent() -> void:
 	var target_health := repair_target_health

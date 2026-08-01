@@ -29,6 +29,8 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 ### General
 
+- Architectural change size is not a constraint; broad refactors are allowed when they produce a smaller, clearer result.
+- Keep the final code volume small and easy to understand. Prefer deletion, consolidation, and replacement over adding layers or parallel paths.
 - Prefer early returns and early `continue` statements; keep control flow flat.
 - Do not add one-line helpers solely to reduce arguments or standardize a log prefix.
 - Do not suppress compiler, linter, deprecation, or parse warnings unless a confirmed compatibility target temporarily requires an older API and the modern path is already used where available.

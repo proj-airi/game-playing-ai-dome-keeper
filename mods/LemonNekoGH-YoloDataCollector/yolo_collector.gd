@@ -49,6 +49,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if recording_lifecycle != RecordingLifecycle.WAITING_FOR_RUN:
 		return
+	if teacher != null and bool(teacher.call(&"is_checkpoint_load_pending")):
+		return
 	if not is_instance_valid(StageManager.currentStage):
 		return
 	if not StageManager.currentStage is LandingStage and not StageManager.currentStage is LevelStage:

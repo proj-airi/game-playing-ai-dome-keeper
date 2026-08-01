@@ -20,8 +20,9 @@ to weaken the policy.
   choice, opportunistic `ScannerCave` and `DroneCave` side tasks, return,
   upgrades, simple Laser defense, and bounded stuck recovery while the collector
   produces ore/enemy YOLO image-label pairs.
-- The user starts the run. Automated loadout or menu navigation and restart
-  after death are not supported.
+- The user starts a fresh run. An explicit recording-time debug checkpoint may
+  instead restore a previously supported run; automated loadout or menu
+  navigation and restart after death are not supported.
 - Starting collection inside a station supports only the normal
   `StationInputProcessor` or `BattleInputProcessor`. Startup while an upgrade or
   another station modal remains open must be rejected.
@@ -283,6 +284,10 @@ continuation when no saved target exists.
   the exact resulting reveal distance or owned helper.
 - Event-driven wave-health tracking preserves the inputs intended for post-wave
   combat and repair decisions across state changes.
+- Debug checkpoints preserve these same teacher decisions across processes.
+  Runtime object identity is stable only through saved Drop UIDs and restored
+  Chamber/Cave coordinates; input bindings, held actions, replay buffers,
+  pathfinding previews, and live Laser observations are rebuilt after load.
 
 ## Supported Natural Cave Tasks
 
