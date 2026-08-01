@@ -4,8 +4,10 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
+import { customAlphabet } from 'nanoid'
 import { x } from 'tinyexec'
 
+const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 6)
 const args = process.argv.slice(2)
 const fps = args.length ? Number(args[1]) : 10
 if ((args.length && (args.length !== 2 || args[0] !== '--fps')) || !Number.isInteger(fps) || fps <= 0)
@@ -21,8 +23,8 @@ if (!existsSync(godot))
   fail(`Godot binary does not exist: ${godot}`)
 if (!existsSync(path.join(project, 'project.godot')))
   fail(`Decompiled project does not exist: ${project}`)
-const timestamp = new Date().toISOString().replaceAll(':', '-').replace('.', '-')
-const sessionDir = path.join(process.cwd(), 'recordings', `session_${timestamp}_${crypto.randomUUID()}`)
+const timestamp = new Date().toISOString().slice(2, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '_')
+const sessionDir = path.join(process.cwd(), 'recordings', `session_${timestamp}_${nanoid()}`)
 const avi = path.join(sessionDir, 'recording.avi')
 const mp4 = path.join(sessionDir, 'recording.mp4')
 const replay = path.join(sessionDir, 'recording.jsonl')

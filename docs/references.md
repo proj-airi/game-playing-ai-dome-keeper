@@ -104,3 +104,4 @@ This page collects external resources useful for understanding and maintaining t
 - [MDN: `HTMLMediaElement.currentTime`](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime) — The media position and seeking API used to align replay video with fixed-frame snapshots.
 - [MDN: `requestAnimationFrame`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame) — The browser frame scheduling API used to queue the next video inference after the current inference completes.
 - [MDN: `Date.toISOString`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString) — The UTC ISO timestamp API used to create readable, sortable recording session directories.
+- [Nano ID](https://github.com/ai/nanoid) — The URL-friendly random ID generator used for compact recording session directory suffixes.
