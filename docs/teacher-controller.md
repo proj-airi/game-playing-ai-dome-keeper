@@ -17,9 +17,11 @@ to weaken the policy.
 - The teacher currently covers fishbone exploration, revealed ore mining,
   resource pickup and delivery, supported Gadget Chamber retrieval and choice,
   artifact-choice water rerolls, Power Core Chamber activation and Supplement
-  choice, opportunistic `ScannerCave` and `DroneCave` side tasks, return,
-  upgrades, simple Laser defense, and bounded stuck recovery while the collector
-  produces ore/enemy YOLO image-label pairs.
+  choice, opportunistic `ScannerCave`, `DroneCave`, `IronTreeCave`, and
+  `WaterCave` side tasks, return, upgrades, simple Laser defense, and bounded
+  stuck recovery while the collector produces ore/enemy YOLO image-label pairs.
+  The shared `CobaltCave` implementation remains provisional until its deep,
+  rare spawn is confirmed in a representative recording.
 - The user starts a fresh run. An explicit recording-time debug checkpoint may
   instead restore a previously supported run; automated loadout or menu
   navigation and restart after death are not supported.
@@ -278,10 +280,11 @@ continuation when no saved target exists.
 - The claimed Power Core Chamber and selected physical water survive wave
   interruptions. After attachment, the Power Core uses the same exact-Drop
   transport and bounded recovery state as a chamber Gadget.
-- A claimed Scanner or Drone Cave, its exact reserved physical input, receiver
-  progress, and Scanner activation state survive wave interruption. The teacher
-  resumes the bounded side task after defense and clears it only after checking
-  the exact resulting reveal distance or owned helper.
+- A claimed supported Cave, its unfinished exact input or initial reward
+  snapshot, and its authoritative progress survive wave interruption. The
+  teacher resumes the bounded side task after defense and clears it only after
+  checking its exact resulting state. A newly released resource reward is
+  dropped into the ordinary cache before returning to defend.
 - Event-driven wave-health tracking preserves the inputs intended for post-wave
   combat and repair decisions across state changes.
 - Debug checkpoints preserve these same teacher decisions across processes.
@@ -291,9 +294,10 @@ continuation when no saved target exists.
 
 ## Supported Natural Cave Tasks
 
-- Claim only a revealed and reachable `ScannerCave` or `DroneCave` encountered
-  during ordinary exploration. Never inspect hidden map data, select a frontier
-  to search for a Cave, or retain a completed Cave as a revisit waypoint.
+- Claim only a revealed and reachable `ScannerCave`, `DroneCave`,
+  `IronTreeCave`, `CobaltCave`, or `WaterCave` encountered during ordinary
+  exploration. Never inspect hidden map data, select a frontier to search for a
+  Cave, or retain a completed Cave as a revisit waypoint.
 - A Scanner task reserves and carries two exact loose iron Drops, one to each
   unspent receiver, activates the exact focused `Usable` through configured
   input, and succeeds only after the Cave consumes its scanner and
@@ -301,11 +305,26 @@ continuation when no saved target exists.
 - A Drone task reserves and carries one exact loose water Drop to its receiver.
   It succeeds only after opening finishes and the Cave's dispatcher owns a
   team-matching Squidley created by the exact target-version script.
-- Gadget acquisition may suspend either Cave task. Active or imminent waves and
-  hard return deadlines drop any attached Cave input into the ordinary cache,
-  preserve authoritative receiver progress, and resume the same task after
-  defense. Missing exact nodes, inconsistent lifecycle state, or exhausted
-  bounded interaction retries fail closed.
+- An Iron Tree, Cobalt, or Water task snapshots only the exact untaken reward
+  nodes present when the revealed Cave is claimed. The teacher enters each
+  focused `Usable` without unrelated cargo, activates it through configured
+  input, confirms both that the snapshotted node became taken and that exactly
+  one new Drop of the expected type appeared, then confirms exclusive carry and
+  uses the configured drop action to turn it into an ordinary cache. Iron Tree
+  snapshots at most five iron rewards, Cobalt at most two cobalt rewards, and
+  Water at most three water rewards.
+- Iron Tree and Water are runtime-validated supported tasks. Cobalt uses the
+  same target-version reward contract but remains provisional until a
+  representative run confirms its complete two-reward path.
+- Completing the initial snapshot marks that Cave complete for the run. Iron
+  Tree and Water regrowth does not extend the task and is not revisited by the
+  current teacher; opportunistic renewable revisits remain roadmap work.
+- Gadget acquisition may suspend any Cave task. Active or imminent waves and
+  hard return deadlines drop any attached Cave input or reward into the
+  ordinary cache, preserve authoritative receiver or snapshot progress, and
+  resume the same task after defense. Missing exact nodes, inconsistent
+  lifecycle state, ambiguous reward creation, or exhausted bounded interaction
+  retries fail closed.
 
 ## Exploration and Mining Policy
 

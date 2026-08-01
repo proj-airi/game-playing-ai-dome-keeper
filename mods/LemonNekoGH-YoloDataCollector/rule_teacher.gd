@@ -15,7 +15,7 @@ enum CacheCleanupMode { NONE, PENDING_DEFENSE, ACTIVE }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 enum MobilityArm { SPEED, STRENGTH }
 enum ArtifactTransport { GADGET, POWER_CORE }
-enum CaveTaskKind { NONE, SCANNER, DRONE }
+enum CaveTaskKind { NONE, SCANNER, DRONE, IRON_TREE, COBALT, WATER }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const STATUS_FILE := "airi-dome-keeper-status.json"
@@ -36,10 +36,15 @@ const CHECKPOINT_FIELDS := [
 	"gadget_activation_pending", "gadget_delivery_pending", "gadget_task_wait_steps", "gadget_recovery_coord",
 	"gadget_recovery_attempts", "gadget_recovery_cache_recorded", "artifact_transport",
 	"power_core_activation_pending", "power_core_delivery_approach", "cave_task_kind",
-	"cave_activation_pending", "cave_task_wait_steps", "branch_row", "branch_side",
+	"cave_activation_pending", "cave_task_wait_steps", "cave_approach_coord",
+	"cave_harvest_targets", "cave_prior_drop_uids",
+	"completed_resource_caves", "branch_row", "branch_side",
 	"branch_entry_coord", "bypass_side", "bypass_reversed", "mining_outcome",
 	"mining_outcome_reason", "completed_corridors", "active_corridor_cells",
 	"attempted_descent_origins",
+]
+const CHECKPOINT_V1_ADDED_FIELDS := [
+	"cave_approach_coord", "cave_harvest_targets", "cave_prior_drop_uids", "completed_resource_caves",
 ]
 const CHECKPOINT_REFS := [
 	"carry", "gadget_chamber", "gadget_drop", "power_core_chamber", "power_core_water",
@@ -63,6 +68,31 @@ const DEFAULT_REVEAL_DISTANCE := 1
 const SCANNER_REVEAL_DISTANCE := 2
 const SCANNER_CAVE_SCRIPT := "res://content/caves/scannercave/ScannerCave.gd"
 const DRONE_CAVE_SCRIPT := "res://content/caves/dronecave/DroneCave.gd"
+const IRON_TREE_CAVE_SCRIPT := "res://content/caves/treecave/IronTreeCave.gd"
+const COBALT_CAVE_SCRIPT := "res://content/caves/cobaltcave/CobaltCave.gd"
+const WATER_CAVE_SCRIPT := "res://content/caves/watercave/WaterCave.gd"
+const CAVE_KINDS_BY_SCRIPT := {
+	SCANNER_CAVE_SCRIPT: CaveTaskKind.SCANNER,
+	DRONE_CAVE_SCRIPT: CaveTaskKind.DRONE,
+	IRON_TREE_CAVE_SCRIPT: CaveTaskKind.IRON_TREE,
+	COBALT_CAVE_SCRIPT: CaveTaskKind.COBALT,
+	WATER_CAVE_SCRIPT: CaveTaskKind.WATER,
+}
+const RESOURCE_CAVE_REWARD_PATHS := {
+	CaveTaskKind.IRON_TREE: [
+		^"Sprites/Sprite4/Iron1", ^"Sprites/Sprite4/Iron2", ^"Sprites/Sprite4/Iron3",
+		^"Sprites/Sprite4/Iron4", ^"Sprites/Sprite4/Iron5",
+	],
+	CaveTaskKind.COBALT: [^"Sprites/Sprite4/Cobalt1", ^"Sprites/Sprite4/Cobalt2"],
+	CaveTaskKind.WATER: [
+		^"Sprites/Sprite4/Water1", ^"Sprites/Sprite4/Water2", ^"Sprites/Sprite4/Water3",
+	],
+}
+const RESOURCE_CAVE_DROP_TYPES := {
+	CaveTaskKind.IRON_TREE: CONST.IRON,
+	CaveTaskKind.COBALT: CONST.SAND,
+	CaveTaskKind.WATER: CONST.WATER,
+}
 const SQUIDLEY_SCRIPT := "res://content/gadgets/droneyard/Squidley.gd"
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
@@ -162,6 +192,11 @@ var cave_resource: Drop
 var cave_receiver: ResourceGrabber
 var cave_activation_pending := false
 var cave_task_wait_steps := 0
+var cave_approach_coord := NO_COORD
+var cave_harvest_targets: Array[NodePath] = []
+var cave_prior_drop_uids := {}
+var cave_resource_type := ""
+var completed_resource_caves := {}
 var branch_row := -1000000
 var branch_side := 1
 var branch_entry_coord := NO_COORD
@@ -237,6 +272,7 @@ func start() -> bool:
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
 	_reset_cave_task()
+	completed_resource_caves.clear()
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
 	wave_health_tracking = _wave("wavepresent") or _wave("wavebattle")
@@ -328,6 +364,7 @@ func stop() -> bool:
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
 	_reset_cave_task()
+	completed_resource_caves.clear()
 	carry_preview_extra_site = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
 	Options.useMouseDomeGameplay = previous_use_mouse_dome_gameplay
@@ -503,7 +540,7 @@ func _load_checkpoint(checkpoint_id: String) -> void:
 			error = "Failed to open teacher checkpoint: " + error_string(FileAccess.get_open_error())
 		else:
 			var parsed = JSON.parse_string(file.get_as_text())
-			if not parsed is Dictionary or int(parsed.get("version", 0)) != 1:
+			if not parsed is Dictionary or int(parsed.get("version", 0)) not in [1, 2]:
 				error = "Teacher checkpoint is malformed or has an unsupported version"
 			else:
 				checkpoint_state = parsed
@@ -548,12 +585,15 @@ func _checkpoint_snapshot() -> Dictionary:
 			var ref = _checkpoint_ref(value)
 			if ref != null:
 				refs[field].append(ref)
-	return {"version": 1, "values": values, "refs": refs}
+	return {"version": 2, "values": values, "refs": refs}
 
 func _restore_checkpoint(data: Dictionary) -> String:
+	var version := int(data.get("version", 0))
 	var values: Dictionary = data.get("values", {})
 	for field in CHECKPOINT_FIELDS:
 		if not values.has(field):
+			if version == 1 and field in CHECKPOINT_V1_ADDED_FIELDS:
+				continue
 			return "Teacher checkpoint is missing state field: " + field
 		set(field, str_to_var(values[field]))
 	if not data.get("refs") is Dictionary:
@@ -579,6 +619,7 @@ func _restore_checkpoint(data: Dictionary) -> String:
 				return "Official save did not restore teacher reference set: " + field
 			restored[object] = true
 		set(field, restored)
+	cave_resource_type = str(RESOURCE_CAVE_DROP_TYPES.get(cave_task_kind, ""))
 	carry_preview_cache.clear()
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
@@ -1798,6 +1839,20 @@ func _claim_supported_cave() -> bool:
 	cave_task = best
 	cave_task_kind = best_kind
 	cave_task_wait_steps = 0
+	if _is_resource_cave_kind(cave_task_kind):
+		cave_resource_type = RESOURCE_CAVE_DROP_TYPES[cave_task_kind]
+		cave_approach_coord = Level.map.getTileCoord(keeper.global_position)
+		cave_harvest_targets.clear()
+		for path in RESOURCE_CAVE_REWARD_PATHS[cave_task_kind]:
+			var reward := cave_task.get_node_or_null(path) as Node2D
+			if not is_instance_valid(reward) or reward.get("taken") == null:
+				_fail("The claimed resource cave does not expose its exact reward nodes")
+				return true
+			if not bool(reward.get("taken")):
+				cave_harvest_targets.append(path)
+		if cave_harvest_targets.is_empty():
+			_fail("The claimed resource cave has no available rewards to snapshot")
+			return true
 	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower()
 	_record("cave_claimed", "Claimed revealed %s cave for an exact side task" % label, null)
 	ModLoaderLog.info("Claimed revealed %s cave" % label, LOG_NAME)
@@ -1807,12 +1862,7 @@ func _supported_cave_kind(candidate: Cave) -> CaveTaskKind:
 	var script = candidate.get_script()
 	if not script is Script:
 		return CaveTaskKind.NONE
-	match script.resource_path:
-		SCANNER_CAVE_SCRIPT:
-			return CaveTaskKind.SCANNER
-		DRONE_CAVE_SCRIPT:
-			return CaveTaskKind.DRONE
-	return CaveTaskKind.NONE
+	return CAVE_KINDS_BY_SCRIPT.get(script.resource_path, CaveTaskKind.NONE)
 
 func _cave_is_unfinished(candidate: Cave, kind: CaveTaskKind) -> bool:
 	match kind:
@@ -1820,6 +1870,13 @@ func _cave_is_unfinished(candidate: Cave, kind: CaveTaskKind) -> bool:
 			return bool(candidate.get("hasScanner"))
 		CaveTaskKind.DRONE:
 			return bool(candidate.get("hasDrone"))
+		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
+			if completed_resource_caves.has(candidate.coord):
+				return false
+			for path in RESOURCE_CAVE_REWARD_PATHS[kind]:
+				var reward := candidate.get_node_or_null(path) as Node2D
+				if is_instance_valid(reward) and reward.get("taken") != null and not bool(reward.get("taken")):
+					return true
 	return false
 
 func _cave_open_interaction_target(candidate: Cave, kind: CaveTaskKind) -> Node2D:
@@ -1837,7 +1894,16 @@ func _cave_open_interaction_target(candidate: Cave, kind: CaveTaskKind) -> Node2
 			var receiver := candidate.get_node_or_null("ResourceGrabber") as ResourceGrabber
 			if is_instance_valid(receiver) and not bool(receiver.spent):
 				return receiver
+		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
+			for path in RESOURCE_CAVE_REWARD_PATHS[kind]:
+				var reward := candidate.get_node_or_null(path) as Node2D
+				if not is_instance_valid(reward) or bool(reward.get("taken")):
+					continue
+				return reward.get_node_or_null("Usable") as Node2D
 	return null
+
+func _is_resource_cave_kind(kind: CaveTaskKind) -> bool:
+	return RESOURCE_CAVE_DROP_TYPES.has(kind)
 
 func _cave_task_active() -> bool:
 	return cave_task_kind != CaveTaskKind.NONE
@@ -1877,6 +1943,8 @@ func _run_cave_task() -> void:
 			_run_scanner_cave_task()
 		CaveTaskKind.DRONE:
 			_run_drone_cave_task()
+		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
+			_run_resource_cave_task()
 		_:
 			_fail("The active natural cave kind is unsupported")
 
@@ -1932,6 +2000,147 @@ func _run_drone_cave_task() -> void:
 		return
 	cave_receiver = receiver
 	_run_cave_resource_delivery(CONST.WATER, "Drone cave")
+
+func _run_resource_cave_task() -> void:
+	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower().replace("_", " ")
+	if cave_resource_type.is_empty():
+		_fail("The active resource cave has no exact physical reward type")
+		return
+
+	if is_instance_valid(cave_resource):
+		if keeper.carriedCarryables.has(cave_resource):
+			if keeper.carriedCarryables.size() != 1:
+				_fail("The %s cave reward attached to a non-exclusive load" % label)
+				return
+			if cave_task_wait_steps >= GADGET_TASK_WAIT_LIMIT:
+				_fail("The %s cave reward did not detach through configured input" % label)
+				return
+			_release_all()
+			_tap(&"keeper1_drop")
+			cave_task_wait_steps += 1
+			delay = 0.2
+			return
+		if cave_resource.isCarried():
+			_fail("The %s cave reward attached to an unexpected carrier" % label)
+			return
+		if cave_resource.absorbed or cave_resource.independent:
+			_queue_record("The released resource cave reward entered ordinary resource routing")
+		else:
+			_record_cache_site(cave_resource.global_position)
+		cave_resource = null
+		cave_task_wait_steps = 0
+
+	if cave_harvest_targets.is_empty():
+		completed_resource_caves[cave_task.coord] = true
+		_finish_cave_task("%s cave released every reward in its initial snapshot" % label.capitalize())
+		return
+
+	if cave_activation_pending:
+		var spawned := _new_resource_cave_drop(cave_resource_type)
+		if is_instance_valid(spawned) and _accept_pending_resource_cave_drop(spawned):
+			return
+		if not running:
+			return
+		_wait_for_cave_task("The %s cave did not attach its exact physical reward" % label)
+		return
+
+	if not keeper.carriedCarryables.is_empty():
+		_drop_cargo_for_artifact()
+		return
+
+	var reward := cave_task.get_node_or_null(cave_harvest_targets.front()) as Node2D
+	if not is_instance_valid(reward) or reward.get("taken") == null:
+		_fail("The %s cave lost a snapshotted reward node" % label)
+		return
+	if bool(reward.get("taken")):
+		_fail("A snapshotted %s cave reward was consumed outside its exact interaction" % label)
+		return
+	var usable := reward.get_node_or_null("Usable") as Node2D
+	if not is_instance_valid(usable) or not reward.has_method(&"canFocusUse"):
+		_fail("The %s cave reward does not expose its exact usable" % label)
+		return
+	if is_instance_valid(keeper.focussedUsable):
+		for index in range(1, cave_harvest_targets.size()):
+			var focused_reward := cave_task.get_node_or_null(cave_harvest_targets[index]) as Node2D
+			if (
+				is_instance_valid(focused_reward)
+				and focused_reward.get_node_or_null("Usable") == keeper.focussedUsable
+			):
+				var focused_path: NodePath = cave_harvest_targets[index]
+				cave_harvest_targets.remove_at(index)
+				cave_harvest_targets.push_front(focused_path)
+				reward = focused_reward
+				usable = keeper.focussedUsable
+				break
+	if not bool(reward.call(&"canFocusUse", keeper)):
+		_wait_for_cave_task("The snapshotted %s cave reward is not usable" % label)
+		return
+	if keeper.focussedUsable == usable and _leaf() == "Keeper1InputProcessor":
+		_release_all()
+		cave_prior_drop_uids.clear()
+		for candidate in Level.drops.get_all_drops().values():
+			if candidate is Drop and candidate.type == cave_resource_type:
+				cave_prior_drop_uids[candidate.UID] = true
+		cave_activation_pending = true
+		cave_task_wait_steps = 0
+		_tap(&"ui_select")
+		delay = 0.2
+		return
+	if Level.map.getTileCoord(keeper.global_position) == Level.map.getTileCoord(usable.global_position):
+		var actions := _axis(usable.global_position)
+		if not actions.is_empty():
+			_hold(actions)
+			cave_task_wait_steps = 0
+			return
+		_wait_for_cave_task("The %s cave reward did not receive exact usable focus" % label)
+		return
+	if _move_open(usable.global_position):
+		cave_task_wait_steps = 0
+		return
+	if cave_approach_coord == NO_COORD:
+		_fail("The %s cave does not have a saved open interaction approach" % label)
+		return
+	if _move_open(Level.map.getTilePos(cave_approach_coord)):
+		cave_task_wait_steps = 0
+		return
+	_fail("No open path reaches the %s cave interaction approach" % label)
+
+func _new_resource_cave_drop(drop_type: String) -> Drop:
+	var spawned: Drop
+	for candidate in Level.drops.get_all_drops().values():
+		if (
+			candidate is Drop
+			and candidate.type == drop_type
+			and not cave_prior_drop_uids.has(candidate.UID)
+			and not candidate.absorbed
+			and not candidate.independent
+		):
+			if is_instance_valid(spawned):
+				_fail("The resource cave activation produced multiple exact reward candidates")
+				return null
+			spawned = candidate
+	return spawned
+
+func _accept_pending_resource_cave_drop(drop: Drop) -> bool:
+	if not _is_resource_cave_kind(cave_task_kind) or not cave_activation_pending:
+		return false
+	if (
+		cave_harvest_targets.is_empty()
+		or drop.type != cave_resource_type
+		or cave_prior_drop_uids.has(drop.UID)
+	):
+		return false
+	var reward := cave_task.get_node_or_null(cave_harvest_targets.front()) as Node2D
+	if not is_instance_valid(reward) or not bool(reward.get("taken")):
+		_fail("The resource cave attached a reward without consuming the exact snapshotted node")
+		return true
+	cave_resource = drop
+	cave_harvest_targets.pop_front()
+	cave_prior_drop_uids.clear()
+	cave_activation_pending = false
+	cave_task_wait_steps = 0
+	_queue_record("The resource cave attached its exact physical reward")
+	return true
 
 func _run_cave_resource_delivery(required_type: String, owner_label: String) -> void:
 	if not is_instance_valid(cave_receiver) or bool(cave_receiver.spent):
@@ -2082,11 +2291,33 @@ func _exclusive_resource_search_type() -> String:
 	return ""
 
 func _interrupt_cave_for_wave() -> void:
-	if is_instance_valid(cave_resource) and keeper.carriedCarryables.has(cave_resource):
-		_record_cache_site(keeper.global_position)
-		_release_all()
-		_tap(&"keeper1_drop")
-		delay = CARRY_PICKUP_SECONDS
+	if _is_resource_cave_kind(cave_task_kind) and cave_activation_pending and not is_instance_valid(cave_resource):
+		var spawned := _new_resource_cave_drop(cave_resource_type)
+		if is_instance_valid(spawned):
+			_accept_pending_resource_cave_drop(spawned)
+		if not running:
+			return
+	if is_instance_valid(cave_resource):
+		if keeper.carriedCarryables.has(cave_resource):
+			if keeper.carriedCarryables.size() != 1:
+				_fail("The resource cave reward attached to a non-exclusive load before defense")
+				return
+			if cave_task_wait_steps >= GADGET_TASK_WAIT_LIMIT:
+				_fail("The resource cave reward did not detach before defense")
+				return
+			_record_cache_site(keeper.global_position)
+			_release_all()
+			_tap(&"keeper1_drop")
+			cave_task_wait_steps += 1
+			delay = CARRY_PICKUP_SECONDS
+			return
+		if cave_resource.isCarried():
+			_fail("The resource cave reward attached to an unexpected carrier before defense")
+			return
+		if not cave_resource.absorbed and not cave_resource.independent:
+			_record_cache_site(cave_resource.global_position)
+		cave_resource = null
+		cave_task_wait_steps = 0
 	if state == State.DEFEND:
 		_defend()
 		return
@@ -2123,6 +2354,10 @@ func _reset_cave_task() -> void:
 	cave_receiver = null
 	cave_activation_pending = false
 	cave_task_wait_steps = 0
+	cave_approach_coord = NO_COORD
+	cave_harvest_targets.clear()
+	cave_prior_drop_uids.clear()
+	cave_resource_type = ""
 
 func _claim_gadget_chamber() -> bool:
 	if gadget_activation_pending:
@@ -3649,6 +3884,8 @@ func _on_drop_picked_up(drop, carrier) -> void:
 		if drop == power_core_water:
 			gadget_task_wait_steps = 0
 			_queue_record("Keeper picked up the reserved physical water for the Power Core chamber")
+			return
+		if drop is Drop and _accept_pending_resource_cave_drop(drop):
 			return
 		if drop == cave_resource:
 			cave_task_wait_steps = 0

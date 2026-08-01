@@ -12,20 +12,25 @@ unless an explicit project decision says so.
 
 ### Use Revealed Natural Cave Rewards
 
-- `ScannerCave` and `DroneCave` are implemented in the supported rule-teacher
-  loop and validated in representative recordings. The Scanner task spends two
+- `ScannerCave`, `DroneCave`, `IronTreeCave`, and `WaterCave` are implemented
+  and validated in the supported rule-teacher loop. The Scanner task spends two
   physical iron Drops and incorporates reveal distance two into fishbone branch
   spacing. The Drone task spends one physical water Drop and confirms the exact
-  owned Squidley after asynchronous opening. Their binding behavior belongs in
+  owned Squidley after asynchronous opening. The three resource Cave tasks use
+  one exact initial-snapshot lifecycle; Iron Tree and Water have representative
+  runtime recordings. `CobaltCave` shares the implemented initial-snapshot path
+  but remains provisional because fresh test maps did not expose its deep, rare
+  Cave before the run ended. Their binding behavior belongs in
   [`teacher-controller.md`](teacher-controller.md).
 - Extend the remaining supported loop one exact target-version type at a time:
   `MushroomCave` for the temporary movement-speed buff, `PortalCave` for passive
-  resource delivery, `IronTreeCave` for renewable iron, `HelmetCave` for the mine
-  camera extension, `CobaltCave` for its two one-time cobalt resources, and
-  `WaterCave` for renewable water. Inventory and validate each type's required
-  input, resource cost, carried-object behavior, planner or map effects,
-  persistence, cooldown, success evidence, and wave interruption behavior
-  before claiming support.
+  resource delivery, and `HelmetCave` for the mine camera extension. Separately
+  validate the implemented Cobalt initial-snapshot path in a representative
+  recording and add the already-specified opportunistic renewable revisit for
+  Iron Tree and Water. Inventory and validate each new type's required input,
+  resource cost, carried-object behavior, planner or map effects, persistence,
+  cooldown, success evidence, and wave interruption behavior before claiming
+  support.
 - Leave `BombCave` and `SeedCave` outside the teacher allowlist. A Cave Bomb
   requires selecting a safe, useful blast location before its release commits
   the explosion. A mineral-tree seed requires selecting a planting site with
