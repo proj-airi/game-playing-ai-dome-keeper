@@ -480,11 +480,13 @@ continuation when no saved target exists.
   discovered, excavating and activating it is exclusive except for a wave or an
   already attached/recovering Gadget handoff.
 - Excavate the chamber cover, then use a reachable physical water Drop from a
-  known cache immediately. If no cached water exists, continue the existing
+  known cache immediately. Before fetching water, clear the single revealed,
+  destructible ordinary tile directly above the chamber's top receiver and use
+  that open tile as the fixed delivery destination, so the carried Drop crosses
+  the receiver's `Area2D`. If no cached water exists, continue the existing
   fishbone exploration solely for water: remember revealed ore and Gadget
-  Chambers, but do not act on them until the core task completes. Carry the
-  selected water to the saved receiver approach and require authoritative
-  `ResourceGrabber.spent` before treating it as accepted.
+  Chambers, but do not act on them until the core task completes. Require
+  authoritative `ResourceGrabber.spent` before treating the water as accepted.
 - Wait for exact chamber `OPEN`, unload ordinary cargo, activate its focused
   `Usable`, and require chamber `EMPTY` plus a newly attached exact
   `Drop.type == CONST.POWERCORE`. From that point, use the existing Gadget

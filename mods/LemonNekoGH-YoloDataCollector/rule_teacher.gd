@@ -1609,6 +1609,8 @@ func _run_power_core_task() -> void:
 		power_core_water = null
 		gadget_task_wait_steps = 0
 	if not bool(grabber.spent):
+		if not _prepare_power_core_receiver(grabber):
+			return
 		if state == State.MINE and ore != NO_COORD:
 			_mine_exclusive_resource(CONST.WATER, "the Power Core chamber")
 			return
@@ -1648,21 +1650,55 @@ func _excavate_power_core_chamber() -> void:
 	gadget_task_wait_steps = 0
 	var approach: Vector2i = cover_plan["approach"]
 	var target: Vector2i = cover_plan["target"]
-	var grabber = power_core_chamber.find_child("ResourceGrabber")
-	if (
-		is_instance_valid(grabber)
-		and (
-			power_core_delivery_approach == NO_COORD
-			or Level.map.getTilePos(approach).distance_squared_to(grabber.global_position)
-			< Level.map.getTilePos(power_core_delivery_approach).distance_squared_to(grabber.global_position)
-		)
-	):
-		power_core_delivery_approach = approach
 	if Level.map.getTileCoord(keeper.global_position) != approach:
 		if not _move_open(Level.map.getTilePos(approach)):
 			_fail("The revealed Power Core cover approach became unreachable")
 		return
 	_hold(_axis(Level.map.getTilePos(target)))
+
+func _prepare_power_core_receiver(grabber: ResourceGrabber) -> bool:
+	var target: Vector2i = Level.map.getTileCoord(grabber.global_position) + Vector2i.UP
+	power_core_delivery_approach = target
+	var tile = Level.map.getTile(target)
+	if not tile is Tile:
+		if is_finite(_path_distance(keeper.global_position, Level.map.getTilePos(target))):
+			return true
+		_wait_for_gadget_task("The Power Core water receiver cap is not confirmed open")
+		return false
+	if (
+		not ARTIFACT_CLEARANCE_TILE_TYPES.has(tile.type)
+		or not tile.get_meta("destructable", false)
+	):
+		_fail("The Power Core water receiver is blocked by an unsupported tile")
+		return false
+	var target_position: Vector2 = Level.map.getTilePos(target)
+	if (
+		ORE_TYPES.has(tile.type)
+		and caches.all(func(existing): return existing.distance_to(target_position) > GameWorld.TILE_SIZE)
+	):
+		_record_cache_site(target_position)
+
+	var approach := NO_COORD
+	var best_distance := INF
+	for direction in CARDINAL_OFFSETS:
+		var candidate: Vector2i = target + direction
+		var distance := _path_distance(keeper.global_position, Level.map.getTilePos(candidate))
+		if is_finite(distance) and distance < best_distance:
+			approach = candidate
+			best_distance = distance
+	if approach == NO_COORD:
+		_wait_for_gadget_task("No open approach reaches the Power Core water receiver cap")
+		return false
+	if state != State.MINE:
+		_change(State.MINE, "The Power Core water receiver needs top clearance")
+		return false
+	gadget_task_wait_steps = 0
+	if Level.map.getTileCoord(keeper.global_position) != approach:
+		if not _move_open(Level.map.getTilePos(approach)):
+			_fail("The Power Core water receiver clearance approach became unreachable")
+		return false
+	_hold(_axis(Level.map.getTilePos(target)))
+	return false
 
 func _fetch_power_core_water() -> void:
 	if not keeper.carriedCarryables.is_empty():
