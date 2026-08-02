@@ -985,7 +985,11 @@ func _tick_tasks(delta: float) -> void:
 	if active_type == TaskType.CHOOSE_REWARD:
 		_choose_reward(tasks.back(), delta)
 		return
-	if active_type == TaskType.UPGRADE and (_wave("wavepresent") or _wave("wavebattle") or _defense_due()):
+	if active_type == TaskType.UPGRADE and (
+		_wave("wavepresent")
+		or _wave("wavebattle")
+		or (_defense_due() and not keeper.isInsideStation)
+	):
 		tasks.back().closing = true
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and (_wave("wavepresent") or _wave("wavebattle") or _defense_due()):
 		_push_task({"type": TaskType.DEFEND, "saw_wave": _wave("wavepresent") or _wave("wavebattle")}, "Defense requires the keeper at the dome")
@@ -2829,7 +2833,7 @@ func _defend(task: Dictionary) -> void:
 	if not keeper.isInsideStation:
 		_travel_to_station()
 		return
-	if not _wave("wavepresent") and not _wave("wavebattle") and not _defense_due() and leaf == "StationInputProcessor":
+	if not _wave("wavepresent") and not _wave("wavebattle") and leaf == "StationInputProcessor":
 		var upgrade := _next_upgrade_target()
 		var upgrade_id: String = upgrade.get("id", "")
 		if not upgrade_id.is_empty() and _upgrade_ready(upgrade_id):
