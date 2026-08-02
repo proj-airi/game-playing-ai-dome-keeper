@@ -41,6 +41,7 @@ const MIN_SPEED_RATIO := 0.55
 const WIDE_SHAFT_MIN_LOAD := 5
 const STALL_SECONDS := 4.0
 const INTERACTION_RADIUS_TILES := 10.0
+const RELIC_SWITCH_SEARCH_RADIUS := 14
 const DEFAULT_REVEAL_DISTANCE := 1
 const SCANNER_REVEAL_DISTANCE := 2
 const SCANNER_CAVE_SCRIPT := "res://content/caves/scannercave/ScannerCave.gd"
@@ -886,6 +887,8 @@ func _new_search_task(goal: String, minimum := 1) -> Dictionary:
 		"active_corridor_cells": {},
 		"attempted_descent_origins": {},
 		"resume_coord": NO_COORD,
+		"focus_coord": NO_COORD,
+		"focus_radius": 0,
 		"relic_chamber": null,
 		"shaft_phase": 0,
 		"shaft_col": -1,
@@ -1127,7 +1130,13 @@ func _search(task: Dictionary) -> void:
 		return
 	task.active_corridor_cells[cell] = true
 	var branch_next = Level.map.getTile(cell + Vector2i(int(task.branch_side), 0))
-	if branch_next is Tile and branch_next.type == CONST.BORDER:
+	var focus_coord := Vector2i(task.get("focus_coord", NO_COORD))
+	var focus_radius := int(task.get("focus_radius", 0))
+	var focus_edge_reached := focus_coord != NO_COORD and (
+		(int(task.branch_side) > 0 and cell.x >= focus_coord.x + focus_radius)
+		or (int(task.branch_side) < 0 and cell.x <= focus_coord.x - focus_radius)
+	)
+	if focus_edge_reached or (branch_next is Tile and branch_next.type == CONST.BORDER):
 		_release_all()
 		if Vector2i(task.branch_entry_coord) == NO_COORD:
 			_fail("The fishbone branch has no saved open shaft intersection")
@@ -1138,6 +1147,13 @@ func _search(task: Dictionary) -> void:
 			_record_completed_corridor(task, int(task.branch_row))
 			task.attempted_descent_origins[task.branch_entry_coord] = true
 			task.branch_row = int(task.branch_row) + _branch_row_step()
+			if focus_coord != NO_COORD and int(task.branch_row) > focus_coord.y + focus_radius:
+				task.focus_coord = NO_COORD
+				task.focus_radius = 0
+				task.resume_coord = NO_COORD
+				task.mining_outcome = MiningOutcome.BACKTRACK_PENDING
+				task.mining_outcome_reason = "The bounded relic switch search was exhausted"
+				return
 			task.mode = ExploreMode.DESCEND
 			_reset_progress()
 		delay = 0.2
@@ -1206,10 +1222,12 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 				revisit.approach_coord = _relic_chamber_revisit_coord(search, relic_chamber)
 				_push_task(revisit, "A relic switch was activated; revisit the excavated Relic Chamber")
 			else:
+				search.focus_coord = focus_coord
+				search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
 				_adopt_descent_frontier(
 					search,
 					focus_coord,
-					focus_coord.y + _branch_row_step(),
+					focus_coord.y,
 					"An activated relic switch focused the search on its surrounding mine"
 				)
 		_:
