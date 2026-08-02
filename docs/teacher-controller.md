@@ -17,11 +17,13 @@ to weaken the policy.
 - The teacher currently covers fishbone exploration, revealed ore mining,
   resource pickup and delivery, supported Gadget Chamber retrieval and choice,
   artifact-choice water rerolls, Power Core Chamber activation and Supplement
-  choice, opportunistic `ScannerCave`, `DroneCave`, `IronTreeCave`, and
-  `WaterCave` side tasks, return, upgrades, simple Laser defense, and bounded
-  stuck recovery while the collector produces ore/enemy YOLO image-label pairs.
-  The shared `CobaltCave` implementation remains provisional until its deep,
-  rare spawn is confirmed in a representative recording.
+  choice, the supported natural Cave side tasks and passive Portal delivery,
+  return, upgrades, simple Laser defense, and bounded stuck recovery while the
+  collector produces ore/enemy YOLO image-label pairs. `ScannerCave`,
+  `DroneCave`, `IronTreeCave`, `WaterCave`, `MushroomCave`, `PortalCave`, and
+  `HelmetCave` have been exercised in runtime recordings. The shared
+  `CobaltCave` implementation remains provisional until its deep, rare spawn is
+  confirmed in a representative recording.
 - The user starts a fresh run. An explicit recording-time debug checkpoint may
   instead restore a previously supported run; automated loadout or menu
   navigation and restart after death are not supported.
@@ -294,10 +296,12 @@ continuation when no saved target exists.
 
 ## Supported Natural Cave Tasks
 
-- Claim only a revealed and reachable `ScannerCave`, `DroneCave`,
-  `IronTreeCave`, `CobaltCave`, or `WaterCave` encountered during ordinary
-  exploration. Never inspect hidden map data, select a frontier to search for a
-  Cave, or retain a completed Cave as a revisit waypoint.
+- The shared encounter and routing contract is defined in
+  [`cave.md`](cave.md). During ordinary exploration, mining, carrying, or
+  return travel, consider only revealed allowlisted Caves within straight-line
+  distance `10`. Record the deviation decision before movement, then use the
+  faster estimate between A* travel to the Cave boundary and direct digging.
+  Never inspect hidden map data or select a frontier to search for a Cave.
 - A Scanner task reserves and carries two exact loose iron Drops, one to each
   unspent receiver, activates the exact focused `Usable` through configured
   input, and succeeds only after the Cave consumes its scanner and
@@ -316,9 +320,22 @@ continuation when no saved target exists.
 - Iron Tree and Water are runtime-validated supported tasks. Cobalt uses the
   same target-version reward contract but remains provisional until a
   representative run confirms its complete two-reward path.
+- Mushroom and Helmet each press the focused interaction once. Mushroom
+  succeeds when observed keeper speed increases; Helmet succeeds when observed
+  mine-camera zoom changes. Neither task validates the Cave's internal reward
+  state.
+- Portal first uses an ordinary ore already carried, or otherwise fetches the
+  nearest reachable ordinary ore from a known cache. It carries that resource
+  into the passive entrance without pressing interaction and succeeds when the
+  resource detaches and matching stored inventory increases. One successful
+  delivery marks that Portal complete for the run.
+- The decision and outcome are separate replay events:
+  `cave_interaction_decided` records why the teacher deviated and its selected
+  route; `cave_interaction_completed` or `cave_interaction_failed` records the
+  observed before/after result and reason.
 - Completing the initial snapshot marks that Cave complete for the run. Iron
   Tree and Water regrowth does not extend the task and is not revisited by the
-  current teacher; opportunistic renewable revisits remain roadmap work.
+  current teacher; their opportunistic renewable revisits remain roadmap work.
 - Gadget acquisition may suspend any Cave task. Active or imminent waves and
   hard return deadlines drop any attached Cave input or reward into the
   ordinary cache, preserve authoritative receiver or snapshot progress, and

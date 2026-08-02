@@ -15,7 +15,7 @@ enum CacheCleanupMode { NONE, PENDING_DEFENSE, ACTIVE }
 enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
 enum MobilityArm { SPEED, STRENGTH }
 enum ArtifactTransport { GADGET, POWER_CORE }
-enum CaveTaskKind { NONE, SCANNER, DRONE, IRON_TREE, COBALT, WATER }
+enum CaveTaskKind { NONE, SCANNER, DRONE, IRON_TREE, COBALT, WATER, MUSHROOM, PORTAL, HELMET }
 
 const LOG_NAME := "YoloDataCollector:Teacher"
 const STATUS_FILE := "airi-dome-keeper-status.json"
@@ -64,6 +64,7 @@ const MOBILITY_CAPACITY_RATIO_THRESHOLD := 0.75
 const CACHE_CLEANUP_LOAD_MULTIPLIER := 2
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
+const CAVE_PASSING_DISTANCE := 10.0
 const DEFAULT_REVEAL_DISTANCE := 1
 const SCANNER_REVEAL_DISTANCE := 2
 const SCANNER_CAVE_SCRIPT := "res://content/caves/scannercave/ScannerCave.gd"
@@ -71,12 +72,18 @@ const DRONE_CAVE_SCRIPT := "res://content/caves/dronecave/DroneCave.gd"
 const IRON_TREE_CAVE_SCRIPT := "res://content/caves/treecave/IronTreeCave.gd"
 const COBALT_CAVE_SCRIPT := "res://content/caves/cobaltcave/CobaltCave.gd"
 const WATER_CAVE_SCRIPT := "res://content/caves/watercave/WaterCave.gd"
+const MUSHROOM_CAVE_SCRIPT := "res://content/caves/mushroomcave/MushroomCave.gd"
+const PORTAL_CAVE_SCRIPT := "res://content/caves/portalcave/PortalCave.gd"
+const HELMET_CAVE_SCRIPT := "res://content/caves/helmetextensioncave/HelmetCave.gd"
 const CAVE_KINDS_BY_SCRIPT := {
 	SCANNER_CAVE_SCRIPT: CaveTaskKind.SCANNER,
 	DRONE_CAVE_SCRIPT: CaveTaskKind.DRONE,
 	IRON_TREE_CAVE_SCRIPT: CaveTaskKind.IRON_TREE,
 	COBALT_CAVE_SCRIPT: CaveTaskKind.COBALT,
 	WATER_CAVE_SCRIPT: CaveTaskKind.WATER,
+	MUSHROOM_CAVE_SCRIPT: CaveTaskKind.MUSHROOM,
+	PORTAL_CAVE_SCRIPT: CaveTaskKind.PORTAL,
+	HELMET_CAVE_SCRIPT: CaveTaskKind.HELMET,
 }
 const RESOURCE_CAVE_REWARD_PATHS := {
 	CaveTaskKind.IRON_TREE: [
@@ -196,6 +203,8 @@ var cave_approach_coord := NO_COORD
 var cave_harvest_targets: Array[NodePath] = []
 var cave_prior_drop_uids := {}
 var cave_resource_type := ""
+var cave_observed_value := 0.0
+var deferred_cave: Cave
 var completed_resource_caves := {}
 var branch_row := -1000000
 var branch_side := 1
@@ -272,6 +281,7 @@ func start() -> bool:
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
 	_reset_cave_task()
+	deferred_cave = null
 	completed_resource_caves.clear()
 	carry_preview_refresh_at = 0.0
 	carry_preview_extra_site = null
@@ -332,7 +342,6 @@ func start() -> bool:
 		record_pending = false
 		_record("session_started", "Teacher collection started", null)
 	return true
-
 func stop() -> bool:
 	if not running:
 		return not recording_write_failed
@@ -364,6 +373,7 @@ func stop() -> bool:
 	_reset_gadget_retrieval()
 	_reset_power_core_retrieval()
 	_reset_cave_task()
+	deferred_cave = null
 	completed_resource_caves.clear()
 	carry_preview_extra_site = null
 	Options.pauseWhenOutOfFocus = previous_pause_when_out_of_focus
@@ -448,6 +458,13 @@ func _process(delta: float) -> void:
 		_run_power_core_task()
 		return
 	var cave_suspended_for_gadget := _cave_task_active() and _claim_gadget_chamber()
+	if (
+		not _cave_task_active()
+		and state in [State.EXPLORE, State.MINE, State.CARRY, State.RETURN]
+		and not _gadget_handoff_in_flight()
+		and not _claim_gadget_chamber()
+	):
+		_claim_supported_cave()
 	if _cave_task_active() and not cave_suspended_for_gadget and not _gadget_handoff_in_flight():
 		_run_cave_task()
 		return
@@ -933,8 +950,6 @@ func _explore() -> void:
 			_change(State.RETURN, "The active monster wave interrupted gadget chamber excavation")
 		else:
 			_change(State.MINE, "A revealed gadget chamber takes priority over ordinary exploration")
-		return
-	if not exclusive_resource_search and _claim_supported_cave():
 		return
 	if _wave("wavepresent"):
 		_change(State.RETURN, "The monster wave has started")
@@ -1807,41 +1822,80 @@ func _reset_power_core_retrieval() -> void:
 func _claim_supported_cave() -> bool:
 	if _cave_task_active():
 		return true
+	if is_instance_valid(deferred_cave):
+		var deferred_distance := (
+			keeper.global_position.distance_to(deferred_cave.global_position)
+			/ GameWorld.TILE_SIZE
+		)
+		if deferred_distance >= CAVE_PASSING_DISTANCE:
+			deferred_cave = null
 
 	var best: Cave
 	var best_kind := CaveTaskKind.NONE
-	var best_distance := INF
+	var best_distance := CAVE_PASSING_DISTANCE
+	var best_astar_seconds := INF
+	var best_direct_seconds := INF
+	var best_approach_coord := NO_COORD
+	var speed := _effective_speed(
+		keeper.carriedCarryables.size(),
+		_planning_base_speed(),
+		_carry_loss()
+	)
 	for candidate in get_tree().get_nodes_in_group("cave"):
 		if not candidate is Cave or candidate.currentState != Cave.State.REVEALED:
+			continue
+		if candidate == deferred_cave:
 			continue
 		if not candidate.is_visible_in_tree():
 			continue
 		var candidate_kind := _supported_cave_kind(candidate)
 		if candidate_kind == CaveTaskKind.NONE or not _cave_is_unfinished(candidate, candidate_kind):
 			continue
-		var interaction_target := _cave_open_interaction_target(candidate, candidate_kind)
-		if (
-			is_instance_valid(interaction_target)
-			and not is_finite(_path_distance(keeper.global_position, interaction_target.global_position))
-		):
-			continue
-		var distance := keeper.global_position.distance_squared_to(candidate.global_position)
+		var distance := (
+			keeper.global_position.distance_to(candidate.global_position)
+			/ GameWorld.TILE_SIZE
+		)
 		if distance >= best_distance:
+			continue
+		var route := _cave_route(candidate, speed)
+		var astar_seconds: float = route.astar_seconds
+		var direct_seconds: float = route.direct_seconds
+		if not is_finite(astar_seconds) and not is_finite(direct_seconds):
 			continue
 		best = candidate
 		best_kind = candidate_kind
 		best_distance = distance
+		best_astar_seconds = astar_seconds
+		best_direct_seconds = direct_seconds
+		best_approach_coord = route.approach_coord
 
 	if not is_instance_valid(best):
 		return false
+	var label := str(CaveTaskKind.keys()[best_kind]).to_lower().replace("_", " ")
+	var dig_directly := best_astar_seconds > best_direct_seconds
+	var approach := "direct_dig" if dig_directly else "astar"
+	var reason := "A revealed %s cave is within passing distance; use %s because its estimate is no slower"
+	_record(
+		"cave_interaction_decided",
+		reason % [label, approach],
+		{
+			"approach": approach,
+			"astar_seconds": best_astar_seconds if is_finite(best_astar_seconds) else null,
+			"cave_type": label,
+			"coord": best.coord,
+			"direct_dig_seconds": best_direct_seconds if is_finite(best_direct_seconds) else null,
+			"passing_distance": CAVE_PASSING_DISTANCE,
+			"straight_distance": best_distance,
+		}
+	)
 	if not vein.is_empty():
 		_record_cache()
 	cave_task = best
 	cave_task_kind = best_kind
 	cave_task_wait_steps = 0
+	cave_approach_coord = NO_COORD if dig_directly else best_approach_coord
 	if _is_resource_cave_kind(cave_task_kind):
 		cave_resource_type = RESOURCE_CAVE_DROP_TYPES[cave_task_kind]
-		cave_approach_coord = Level.map.getTileCoord(keeper.global_position)
 		cave_harvest_targets.clear()
 		for path in RESOURCE_CAVE_REWARD_PATHS[cave_task_kind]:
 			var reward := cave_task.get_node_or_null(path) as Node2D
@@ -1853,10 +1907,38 @@ func _claim_supported_cave() -> bool:
 		if cave_harvest_targets.is_empty():
 			_fail("The claimed resource cave has no available rewards to snapshot")
 			return true
-	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower()
-	_record("cave_claimed", "Claimed revealed %s cave for an exact side task" % label, null)
-	ModLoaderLog.info("Claimed revealed %s cave" % label, LOG_NAME)
+	ModLoaderLog.info("Decided to interact with a passing %s cave" % label, LOG_NAME)
 	return true
+
+func _cave_route(candidate: Cave, speed: float) -> Dictionary:
+	var astar_seconds := INF
+	var approach_coord := NO_COORD
+	var footprint := {}
+	for offset in candidate.tileCoords:
+		footprint[Vector2i(candidate.coord + offset)] = true
+	for cell in footprint:
+		for offset in CARDINAL_OFFSETS:
+			var boundary: Vector2i = cell + offset
+			if footprint.has(boundary) or not Level.map.visibleTileCoords.has(boundary):
+				continue
+			var seconds := _path_distance(
+				keeper.global_position,
+				Level.map.getTilePos(boundary)
+			) / speed
+			if seconds < astar_seconds:
+				astar_seconds = seconds
+				approach_coord = boundary
+	var direct_seconds := INF
+	for cell in footprint:
+		direct_seconds = minf(
+			direct_seconds,
+			_direct_approach_seconds(cell, speed, 1)
+		)
+	return {
+		"approach_coord": approach_coord,
+		"astar_seconds": astar_seconds,
+		"direct_seconds": direct_seconds,
+	}
 
 func _supported_cave_kind(candidate: Cave) -> CaveTaskKind:
 	var script = candidate.get_script()
@@ -1870,6 +1952,10 @@ func _cave_is_unfinished(candidate: Cave, kind: CaveTaskKind) -> bool:
 			return bool(candidate.get("hasScanner"))
 		CaveTaskKind.DRONE:
 			return bool(candidate.get("hasDrone"))
+		CaveTaskKind.MUSHROOM, CaveTaskKind.HELMET:
+			return candidate.canFocusUse(keeper)
+		CaveTaskKind.PORTAL:
+			return not completed_resource_caves.has(candidate.coord)
 		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
 			if completed_resource_caves.has(candidate.coord):
 				return false
@@ -1878,29 +1964,6 @@ func _cave_is_unfinished(candidate: Cave, kind: CaveTaskKind) -> bool:
 				if is_instance_valid(reward) and reward.get("taken") != null and not bool(reward.get("taken")):
 					return true
 	return false
-
-func _cave_open_interaction_target(candidate: Cave, kind: CaveTaskKind) -> Node2D:
-	match kind:
-		CaveTaskKind.SCANNER:
-			if bool(candidate.get("activated")):
-				return candidate.get_node_or_null("Usable") as Node2D
-			var left := candidate.get("leftRes") as ResourceGrabber
-			var right := candidate.get("rightRes") as ResourceGrabber
-			if is_instance_valid(left) and not bool(left.spent):
-				return left
-			if is_instance_valid(right) and not bool(right.spent):
-				return right
-		CaveTaskKind.DRONE:
-			var receiver := candidate.get_node_or_null("ResourceGrabber") as ResourceGrabber
-			if is_instance_valid(receiver) and not bool(receiver.spent):
-				return receiver
-		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
-			for path in RESOURCE_CAVE_REWARD_PATHS[kind]:
-				var reward := candidate.get_node_or_null(path) as Node2D
-				if not is_instance_valid(reward) or bool(reward.get("taken")):
-					continue
-				return reward.get_node_or_null("Usable") as Node2D
-	return null
 
 func _is_resource_cave_kind(kind: CaveTaskKind) -> bool:
 	return RESOURCE_CAVE_DROP_TYPES.has(kind)
@@ -1943,6 +2006,12 @@ func _run_cave_task() -> void:
 			_run_scanner_cave_task()
 		CaveTaskKind.DRONE:
 			_run_drone_cave_task()
+		CaveTaskKind.MUSHROOM:
+			_run_mushroom_cave_task()
+		CaveTaskKind.PORTAL:
+			_run_portal_cave_task()
+		CaveTaskKind.HELMET:
+			_run_helmet_cave_task()
 		CaveTaskKind.IRON_TREE, CaveTaskKind.COBALT, CaveTaskKind.WATER:
 			_run_resource_cave_task()
 		_:
@@ -2000,6 +2069,169 @@ func _run_drone_cave_task() -> void:
 		return
 	cave_receiver = receiver
 	_run_cave_resource_delivery(CONST.WATER, "Drone cave")
+
+func _run_mushroom_cave_task() -> void:
+	var speed := _planning_base_speed()
+	_run_observed_cave_task(
+		speed,
+		speed > cave_observed_value,
+		"Mushroom",
+		"increase keeper movement speed"
+	)
+
+func _run_helmet_cave_task() -> void:
+	var zoom := float(Data.of(keeper.playerId + ".keeper.zoominmine"))
+	_run_observed_cave_task(
+		zoom,
+		not is_equal_approx(zoom, cave_observed_value),
+		"Helmet",
+		"change the mine camera zoom"
+	)
+
+func _run_observed_cave_task(
+	observed_value: float,
+	success: bool,
+	label: String,
+	change: String,
+) -> void:
+	if cave_activation_pending:
+		if success:
+			_finish_passing_cave_interaction(
+				"%s interaction did %s" % [label, change],
+				{"after": observed_value, "before": cave_observed_value}
+			)
+		else:
+			_abandon_cave_interaction(
+				"%s interaction did not %s" % [label, change],
+				observed_value
+			)
+		return
+	_activate_observed_cave(observed_value)
+
+func _activate_observed_cave(observed_value: float) -> void:
+	var usable := cave_task.get_node_or_null("Usable") as Node2D
+	if not is_instance_valid(usable) or not cave_task.canFocusUse(keeper):
+		_abandon_cave_interaction("The passing cave is no longer ready for interaction", observed_value)
+		return
+	if keeper.focussedUsable == usable and _leaf() == "Keeper1InputProcessor":
+		_release_all()
+		cave_observed_value = observed_value
+		cave_activation_pending = true
+		_tap(&"ui_select")
+		delay = 0.2
+		return
+	if not _move_to_cave(usable.global_position):
+		_abandon_cave_interaction("Neither approach can reach the passing cave", observed_value)
+
+func _run_portal_cave_task() -> void:
+	var target := cave_task.get_node_or_null("TeleportArea") as Node2D
+	if not is_instance_valid(target):
+		_abandon_cave_interaction("The passing Portal no longer exposes its passive entrance")
+		return
+	if cave_activation_pending:
+		var inventory := float(Data.getInventory(cave_resource_type, keeper.teamId))
+		var still_carried := (
+			is_instance_valid(cave_resource)
+			and keeper.carriedCarryables.has(cave_resource)
+		)
+		if not still_carried and inventory > cave_observed_value:
+			completed_resource_caves[cave_task.coord] = true
+			if carry == cave_resource:
+				carry = null
+			_finish_passing_cave_interaction(
+				"Portal interaction increased stored %s" % cave_resource_type,
+				{
+					"after": inventory,
+					"before": cave_observed_value,
+					"detached": true,
+					"resource_type": cave_resource_type,
+				}
+			)
+			return
+		if still_carried and _move_to_cave(target.global_position):
+			cave_task_wait_steps = 0
+			return
+		_release_all()
+		cave_task_wait_steps += 1
+		if cave_task_wait_steps > CAVE_TASK_WAIT_LIMIT:
+			_abandon_cave_interaction(
+				"Portal interaction did not increase stored %s" % cave_resource_type,
+				inventory
+			)
+		return
+	if not _select_portal_resource():
+		_abandon_cave_interaction("No reachable ordinary resource is available in a known cache")
+		return
+	if keeper.carriedCarryables.has(cave_resource):
+		cave_resource_type = cave_resource.type
+		cave_observed_value = float(Data.getInventory(cave_resource_type, keeper.teamId))
+		cave_activation_pending = true
+		cave_task_wait_steps = 0
+		return
+	_fetch_portal_resource()
+
+func _select_portal_resource() -> bool:
+	if (
+		is_instance_valid(cave_resource)
+		and cave_resource.type in ORE_TYPES
+		and not cave_resource.absorbed
+		and not cave_resource.independent
+	):
+		return true
+	cave_resource = null
+	for candidate in keeper.carriedCarryables:
+		if (
+			candidate is Drop
+			and candidate.type in ORE_TYPES
+			and not candidate.absorbed
+			and not candidate.independent
+		):
+			cave_resource = candidate
+			return true
+	var best_distance := INF
+	for candidate in _cached_resources():
+		if candidate.type not in ORE_TYPES:
+			continue
+		var distance := _path_distance(keeper.global_position, candidate.global_position)
+		if distance >= best_distance:
+			continue
+		cave_resource = candidate
+		best_distance = distance
+	return is_instance_valid(cave_resource)
+
+func _fetch_portal_resource() -> void:
+	if not keeper.carriedCarryables.is_empty():
+		_abandon_cave_interaction("Portal preparation found an unrelated carried object")
+		return
+	if keeper.focussedCarryable == cave_resource and _leaf() == "Keeper1InputProcessor":
+		if pickup_failures >= 3:
+			_abandon_cave_interaction("Portal preparation could not pick up its cached resource")
+			return
+		pickup_failures += 1
+		_release_all()
+		_tap(&"keeper1_pickup")
+		delay = CARRY_PICKUP_SECONDS
+		return
+	if not _move_open(cave_resource.global_position):
+		_abandon_cave_interaction("Portal preparation lost its open path to the cached resource")
+
+func _finish_passing_cave_interaction(reason: String, evidence: Dictionary) -> void:
+	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower()
+	_record("cave_interaction_completed", reason, evidence)
+	ModLoaderLog.info("Completed %s cave side task: %s" % [label, reason], LOG_NAME)
+	_reset_cave_task()
+	_release_all()
+	delay = 0.2
+
+func _abandon_cave_interaction(reason: String, observed_value = null) -> void:
+	var evidence = null
+	if observed_value != null:
+		evidence = {"after": observed_value, "before": cave_observed_value}
+	_record("cave_interaction_failed", reason, evidence)
+	deferred_cave = cave_task
+	_reset_cave_task()
+	_release_all()
+	delay = 0.2
 
 func _run_resource_cave_task() -> void:
 	var label := str(CaveTaskKind.keys()[cave_task_kind]).to_lower().replace("_", " ")
@@ -2094,7 +2326,7 @@ func _run_resource_cave_task() -> void:
 			return
 		_wait_for_cave_task("The %s cave reward did not receive exact usable focus" % label)
 		return
-	if _move_open(usable.global_position):
+	if _move_to_cave(usable.global_position):
 		cave_task_wait_steps = 0
 		return
 	if cave_approach_coord == NO_COORD:
@@ -2211,7 +2443,7 @@ func _deliver_cave_resource(owner_label: String) -> void:
 		return
 	var receiver_coord: Vector2i = Level.map.getTileCoord(cave_receiver.global_position)
 	if Level.map.getTileCoord(keeper.global_position) != receiver_coord:
-		if _move_open(cave_receiver.global_position):
+		if _move_to_cave(cave_receiver.global_position):
 			cave_task_wait_steps = 0
 			return
 		_wait_for_cave_task("No open path reaches the %s resource receiver" % owner_label)
@@ -2249,7 +2481,7 @@ func _activate_scanner_cave() -> void:
 			return
 		_wait_for_cave_task("Activated Scanner cave did not receive exact usable focus")
 		return
-	if _move_open(usable.global_position):
+	if _move_to_cave(usable.global_position):
 		cave_task_wait_steps = 0
 		return
 	_fail("No open path reaches the Scanner cave usable")
@@ -2291,6 +2523,14 @@ func _exclusive_resource_search_type() -> String:
 	return ""
 
 func _interrupt_cave_for_wave() -> void:
+	if cave_task_kind in [CaveTaskKind.MUSHROOM, CaveTaskKind.PORTAL, CaveTaskKind.HELMET]:
+		_record(
+			"cave_interaction_failed",
+			"The monster wave interrupted the passing cave interaction",
+			null
+		)
+		deferred_cave = cave_task
+		_reset_cave_task()
 	if _is_resource_cave_kind(cave_task_kind) and cave_activation_pending and not is_instance_valid(cave_resource):
 		var spawned := _new_resource_cave_drop(cave_resource_type)
 		if is_instance_valid(spawned):
@@ -2358,6 +2598,7 @@ func _reset_cave_task() -> void:
 	cave_harvest_targets.clear()
 	cave_prior_drop_uids.clear()
 	cave_resource_type = ""
+	cave_observed_value = 0.0
 
 func _claim_gadget_chamber() -> bool:
 	if gadget_activation_pending:
@@ -2787,14 +3028,14 @@ func _faster_open_ore_approach(target: Vector2i) -> Vector2i:
 	if best == NO_COORD:
 		return NO_COORD
 	var speed := _effective_speed(keeper.carriedCarryables.size(), _planning_base_speed(), _carry_loss())
-	if best_distance / speed >= _direct_ore_approach_seconds(target, speed):
+	if best_distance / speed >= _direct_approach_seconds(target, speed, 1):
 		return NO_COORD
 	return best
 
-func _direct_ore_approach_seconds(target: Vector2i, speed: float) -> float:
+func _direct_approach_seconds(target: Vector2i, speed: float, stop_tiles: int) -> float:
 	var cursor: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	var seconds := 0.0
-	while absi(cursor.x - target.x) + absi(cursor.y - target.y) > 1:
+	while absi(cursor.x - target.x) + absi(cursor.y - target.y) > stop_tiles:
 		var delta: Vector2i = target - cursor
 		if absi(delta.x) > absi(delta.y):
 			cursor.x += signi(delta.x)
@@ -3746,6 +3987,18 @@ func _move_open(target: Vector2) -> bool:
 	if points.is_empty():
 		return false
 	_hold(_axis(points[mini(1, points.size() - 1)]))
+	return true
+
+func _move_to_cave(target: Vector2) -> bool:
+	if (
+		cave_approach_coord != NO_COORD
+		and Level.map.getTileCoord(keeper.global_position) != cave_approach_coord
+	):
+		return _move_open(Level.map.getTilePos(cave_approach_coord))
+	var actions := _axis(target)
+	if actions.is_empty():
+		return false
+	_hold(actions)
 	return true
 
 func _change(next: State, reason: String) -> void:

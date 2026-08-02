@@ -12,42 +12,33 @@ unless an explicit project decision says so.
 
 ### Use Revealed Natural Cave Rewards
 
-- `ScannerCave`, `DroneCave`, `IronTreeCave`, and `WaterCave` are implemented
-  and validated in the supported rule-teacher loop. The Scanner task spends two
-  physical iron Drops and incorporates reveal distance two into fishbone branch
-  spacing. The Drone task spends one physical water Drop and confirms the exact
-  owned Squidley after asynchronous opening. The three resource Cave tasks use
-  one exact initial-snapshot lifecycle; Iron Tree and Water have representative
-  runtime recordings. `CobaltCave` shares the implemented initial-snapshot path
-  but remains provisional because fresh test maps did not expose its deep, rare
-  Cave before the run ended. Their binding behavior belongs in
-  [`teacher-controller.md`](teacher-controller.md).
-- Extend the remaining supported loop one exact target-version type at a time:
-  `MushroomCave` for the temporary movement-speed buff, `PortalCave` for passive
-  resource delivery, and `HelmetCave` for the mine camera extension. Separately
-  validate the implemented Cobalt initial-snapshot path in a representative
-  recording and add the already-specified opportunistic renewable revisit for
-  Iron Tree and Water. Inventory and validate each new type's required input,
-  resource cost, carried-object behavior, planner or map effects, persistence,
-  cooldown, success evidence, and wave interruption behavior before claiming
-  support.
+- `ScannerCave`, `DroneCave`, `IronTreeCave`, `WaterCave`, `MushroomCave`,
+  `PortalCave`, and `HelmetCave` are implemented and validated in the supported
+  rule-teacher loop. The Scanner task spends two physical iron Drops and
+  incorporates reveal distance two into fishbone branch spacing. The Drone task
+  spends one physical water Drop and confirms the exact owned Squidley after
+  asynchronous opening. The three resource Cave tasks use one exact
+  initial-snapshot lifecycle; Iron Tree and Water have representative runtime
+  recordings. Mushroom observes a movement-speed increase, Portal observes a
+  passive ore delivery and inventory increase, and Helmet observes a mine-camera
+  zoom change. Their shared behavior belongs in [`cave.md`](cave.md); current
+  controller details belong in [`teacher-controller.md`](teacher-controller.md).
+- `CobaltCave` shares the implemented initial-snapshot path but remains
+  provisional because fresh test maps did not expose its deep, rare Cave before
+  the run ended. Validate it in a representative recording and add the
+  already-specified opportunistic renewable revisit for Iron Tree and Water.
+  Validate only the behavior needed to demonstrate its player-visible result.
 - Leave `BombCave` and `SeedCave` outside the teacher allowlist. A Cave Bomb
   requires selecting a safe, useful blast location before its release commits
   the explosion. A mineral-tree seed requires selecting a planting site with
   sufficient space plus persistent memory, revisit, and harvest behavior. Do
   not claim or interact with either excluded Cave, and do not add either
   location policy or recurring task solely to support its reward.
-- Treat a reachable allowlisted Cave newly revealed by ordinary exploration as
-  a potential bounded side task rather than a Cave-search objective. Do not
-  inspect hidden map data or choose an unexplored frontier to look for a Cave.
-  The teacher may freeze its current work and perform Cave-specific navigation,
-  resource acquisition, activation, interruption, and recovery comparable to a
-  Gadget or Power Core Chamber task. The implemented `DroneCave` may fetch an
-  additional physical water Drop. The implemented `ScannerCave` may reserve and
-  fetch two physical iron Drops under the existing resource-reservation rules
-  while preserving partial receiver progress across interruption. Validate each
-  remaining type's arbitration against waves, return deadlines, Gadget delivery,
-  and Power Core work instead of assigning every Cave one priority.
+- Treat a revealed allowlisted Cave within the fixed passing distance as a short
+  deviation from an ordinary path, not as a Cave-search objective. Share
+  discovery, A*-versus-direct routing, decision recording, activation, outcome
+  recording, and task resumption. Keep only required preparation and one
+  player-visible success observation in each Cave-specific branch.
 - After the initial Cave-specific task completes, never retain a recurring Cave
   task, estimate or poll its cooldown, add a Cave waypoint, or change a later
   route solely to collect a renewable reward. If an already-selected ordinary
@@ -67,18 +58,9 @@ unless an explicit project decision says so.
   delivery, with no Iron Tree direct-return path. An interrupted initial harvest
   may resume only the fruit identities that were available in its original
   snapshot; newly regrown fruit never extends that task.
-- Share only revealed-and-reachable discovery, navigation, interruption, focus,
-  and bounded normal-input infrastructure. Implement and validate one exact Cave
-  type at a time: some require focused use, `PortalCave` is passive and needs
-  resource routing, and `DroneCave` changes resource ownership and movement
-  asynchronously after consuming water. Do not add a generic "activate Cave"
-  fallback or claim Cave types outside the exact allowlist. Define bounded
-  retry, abandonment, and failure behavior from each allowlisted type's validated
-  lifecycle instead of imposing one generic Cave-task failure policy.
-- Complete support for one Cave type only after its resulting buff, reveal
-  change, resource source, passive transport, or autonomous helper is
-  incorporated into each behavior-relevant current planner path identified by
-  its lifecycle validation and confirmed in a representative recording.
+- Do not inspect or persist receiver internals unless a runtime failure proves
+  that the shared observation cannot diagnose or resume the interaction. Add
+  only the narrow state required by that demonstrated failure.
 
 ### Complete Relic Hunt
 

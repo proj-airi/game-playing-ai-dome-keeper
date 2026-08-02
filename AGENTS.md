@@ -67,6 +67,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 - Architecture, Agent roles, and runtime boundaries: [`docs/architecture.md`](docs/architecture.md).
 - Current rule-teacher behavior and supported gameplay: [`docs/teacher-controller.md`](docs/teacher-controller.md).
+- Intended shared natural Cave interaction behavior: [`docs/cave.md`](docs/cave.md).
 - Confirmed maintenance and behavior-correction tasks: [`docs/todo.md`](docs/todo.md).
 - Capability milestones, sequencing, and open design decisions: [`docs/roadmap.md`](docs/roadmap.md).
 - Detection, datasets, training, inference, playground, and Electron vision integration: [`docs/vision.md`](docs/vision.md).
