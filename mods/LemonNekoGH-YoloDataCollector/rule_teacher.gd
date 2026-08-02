@@ -3890,12 +3890,14 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 	var saw_unsupported := false
 	var saw_wave_unsafe := false
 	var keeper_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	var best_coord := NO_COORD
+	var best_distance := INF
+	var best_row := -1
+	var best_spread := -1
 	for corridor_index in range(task.completed_corridors.size() - 1, -1, -1):
 		var corridor: Dictionary = task.completed_corridors[corridor_index]
 		var cells: Dictionary = corridor.get("cells", {})
-		var best_coord := NO_COORD
-		var best_distance := INF
-		var best_spread := -1
+		var row := int(corridor.get("row", -1))
 		for raw_coord in cells:
 			var coord := Vector2i(raw_coord)
 			if task.attempted_descent_origins.has(coord):
@@ -3918,19 +3920,22 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 			var spread := absi(coord.x - keeper_coord.x)
 			if spread < best_spread:
 				continue
-			if spread == best_spread and outward_distance > best_distance:
+			if spread == best_spread and row < best_row:
 				continue
-			if spread == best_spread and is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
+			if spread == best_spread and row == best_row and outward_distance > best_distance:
+				continue
+			if spread == best_spread and row == best_row and is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
 				continue
 			best_coord = coord
 			best_distance = outward_distance
+			best_row = row
 			best_spread = spread
-		if best_coord != NO_COORD:
-			return {
-				"status": FrontierSearch.READY,
-				"coord": best_coord,
-				"row": int(corridor.get("row", best_coord.y)),
-			}
+	if best_coord != NO_COORD:
+		return {
+			"status": FrontierSearch.READY,
+			"coord": best_coord,
+			"row": best_row,
+		}
 	if saw_wave_unsafe:
 		return {"status": FrontierSearch.WAITING_WAVE}
 	if saw_unreachable:
