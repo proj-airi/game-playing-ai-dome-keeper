@@ -3557,11 +3557,15 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 	if task.is_empty() or id != str(task.get("active_id", "")):
 		return
 	if bool(task.get("active_fulfills", false)):
-		pending_intents.erase(int(task.active_intent))
 		if int(task.active_intent) == UpgradeIntent.COMBAT:
 			combat_attack_next = int(task.active_arm) != 0
+			if not combat_attack_next:
+				pending_intents.erase(UpgradeIntent.COMBAT)
 		elif int(task.active_intent) == UpgradeIntent.DRILL:
 			drill_hits_by_coord.clear()
+			pending_intents.erase(UpgradeIntent.DRILL)
+		else:
+			pending_intents.erase(int(task.active_intent))
 	_clear_active_upgrade(task)
 	_sync_repair_intent()
 	task.ui_steps = 0

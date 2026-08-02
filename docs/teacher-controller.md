@@ -226,7 +226,9 @@ target pushes `UPGRADE`. The task freezes one exact target while navigating the
 UI so new observations cannot redirect a purchase mid-popup. Confirmed purchase
 removes a fulfilled intent and immediately re-evaluates the next affordable
 target. Within the combat intent class, attack, health, and laser movement
-targets rotate by affordability and total resource cost. A wave closes the
+targets rotate by affordability and total resource cost. A combat request that
+reaches its defensive arm stays pending until the following attack arm is also
+purchased, so health does not consume the weapon reserve. A wave closes the
 menu and then pushes defense.
 
 ## Defense and recovery
