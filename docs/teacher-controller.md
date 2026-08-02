@@ -139,7 +139,9 @@ invalidates this context.
 - Gadget Chambers and Power Core Chambers excavate revealed cover, activate
   the normal usable, carry the exact artifact directly to the dome, recover a
   detached artifact by clearing its neighboring tiles, and wait for the
-  mandatory choice popup.
+  mandatory choice popup. A finite open A* path is sufficient for a cover
+  approach, including Chamber-cleared empty cells outside the revealed-tile
+  registry.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to

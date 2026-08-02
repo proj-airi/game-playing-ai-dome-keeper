@@ -2658,8 +2658,6 @@ func _tile_interaction_route(target: Vector2i) -> Dictionary:
 	var approach_coord := NO_COORD
 	for offset in CARDINAL_OFFSETS:
 		var candidate: Vector2i = target + offset
-		if not Level.map.visibleTileCoords.has(candidate):
-			continue
 		var seconds := _path_distance(
 			keeper.global_position,
 			Level.map.getTilePos(candidate)
