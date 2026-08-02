@@ -178,6 +178,8 @@ invalidates this context.
   observe whether it opened. Revisit navigation first targets the nearest
   registered corridor cell as the saved approach and only then performs the
   open check, because the Chamber scene node itself sits between A* cells.
+  Without a remembered chamber, the root fishbone search restarts from the
+  Engineer's open tile beside the switch, prioritizing its surrounding mine.
 - A Relic Chamber is excavated and remembered when it remains locked. Once it
   opens, the teacher activates the normal usable with no unrelated cargo, carries
   the exact attached Relic to the dome, and recovers it through the shared

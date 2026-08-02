@@ -148,8 +148,8 @@ A revealed Relic Switch Chamber is excavated and activated through its exact
 usable. It completes when its live Chamber state becomes `EMPTY` and the
 activation animation removes that usable. If the root search already remembers
 an excavated Relic Chamber, completing a switch immediately revisits that chamber
-to observe whether it opened; otherwise the teacher resumes the interrupted
-search.
+to observe whether it opened; otherwise the root fishbone search restarts from
+the Engineer's open tile beside the switch and explores its surrounding mine.
 
 A revealed Relic Chamber is excavated and observed after one bounded state
 settling interval. If it remains locked, the root relic search remembers the

@@ -1197,11 +1197,19 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 				return
 			var search := _root_relic_search()
 			var relic_chamber = search.get("relic_chamber")
+			var focus_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
 			_pop_task("The revealed relic switch was activated")
 			if is_instance_valid(relic_chamber):
 				var revisit := _new_chamber_interaction_task(relic_chamber, "relic chamber")
 				revisit.approach_coord = _relic_chamber_revisit_coord(search, relic_chamber)
 				_push_task(revisit, "A relic switch was activated; revisit the excavated Relic Chamber")
+			else:
+				_adopt_descent_frontier(
+					search,
+					focus_coord,
+					focus_coord.y + _branch_row_step(),
+					"An activated relic switch focused the search on its surrounding mine"
+				)
 		_:
 			_fail("Relic switch returned to an unsupported state")
 
