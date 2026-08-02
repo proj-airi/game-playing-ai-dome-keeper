@@ -2829,6 +2829,12 @@ func _defend(task: Dictionary) -> void:
 	if not keeper.isInsideStation:
 		_travel_to_station()
 		return
+	if not _wave("wavepresent") and not _wave("wavebattle") and leaf == "StationInputProcessor":
+		var upgrade := _next_upgrade_target()
+		var upgrade_id: String = upgrade.get("id", "")
+		if not upgrade_id.is_empty() and _upgrade_ready(upgrade_id):
+			_push_task({"type": TaskType.UPGRADE}, "An affordable upgrade is available before battle")
+			return
 	if _wave("wavepresent") or _wave("wavebattle"):
 		task.saw_wave = true
 	if bool(task.get("saw_wave", false)) and not _wave("wavepresent") and not _wave("wavebattle"):
