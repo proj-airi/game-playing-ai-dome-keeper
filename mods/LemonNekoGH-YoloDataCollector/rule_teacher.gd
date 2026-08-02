@@ -1209,7 +1209,7 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 				_adopt_descent_frontier(
 					search,
 					focus_coord,
-					focus_coord.y,
+					focus_coord.y + _branch_row_step(),
 					"An activated relic switch focused the search on its surrounding mine"
 				)
 		_:
