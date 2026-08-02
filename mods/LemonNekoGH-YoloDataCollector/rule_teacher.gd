@@ -3889,11 +3889,9 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 	var saw_unreachable := false
 	var saw_unsupported := false
 	var saw_wave_unsafe := false
+	var candidates: Array[Dictionary] = []
+	var deepest_row := -1
 	var keeper_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
-	var best_coord := NO_COORD
-	var best_distance := INF
-	var best_row := -1
-	var best_spread := -1
 	for corridor_index in range(task.completed_corridors.size() - 1, -1, -1):
 		var corridor: Dictionary = task.completed_corridors[corridor_index]
 		var cells: Dictionary = corridor.get("cells", {})
@@ -3917,19 +3915,35 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 			if not _descent_frontier_trip_is_safe(outward_distance, return_distance):
 				saw_wave_unsafe = true
 				continue
-			var spread := absi(coord.x - keeper_coord.x)
-			if spread < best_spread:
-				continue
-			if spread == best_spread and row < best_row:
-				continue
-			if spread == best_spread and row == best_row and outward_distance > best_distance:
-				continue
-			if spread == best_spread and row == best_row and is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
-				continue
-			best_coord = coord
-			best_distance = outward_distance
-			best_row = row
-			best_spread = spread
+			candidates.append({
+				"coord": coord,
+				"distance": outward_distance,
+				"row": row,
+			})
+			deepest_row = maxi(deepest_row, row)
+	var best_coord := NO_COORD
+	var best_distance := INF
+	var best_row := -1
+	var best_spread := -1
+	for candidate in candidates:
+		var row := int(candidate.row)
+		if row < deepest_row - _branch_row_step():
+			continue
+		var coord := Vector2i(candidate.coord)
+		var outward_distance := float(candidate.distance)
+		var spread := absi(coord.x - keeper_coord.x)
+		if spread < best_spread:
+			continue
+		if spread == best_spread and row < best_row:
+			continue
+		if spread == best_spread and row == best_row and outward_distance > best_distance:
+			continue
+		if spread == best_spread and row == best_row and is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
+			continue
+		best_coord = coord
+		best_distance = outward_distance
+		best_row = row
+		best_spread = spread
 	if best_coord != NO_COORD:
 		return {
 			"status": FrontierSearch.READY,
