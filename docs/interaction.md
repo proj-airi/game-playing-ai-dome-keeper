@@ -23,7 +23,8 @@ interaction-type state machine.
    game state says work remains and the teacher supports that subtype.
 3. Select one target in priority order: Relic Switch Chamber, Relic Chamber,
    Supply Chamber, Gadget Chamber, supported Cave, then ordinary ore. Within a
-   category choose the nearest target.
+   category choose the nearest target. A requested-resource search considers
+   only relic-critical chambers and the requested ore type.
 4. Lock that target until completion or invalidation. A wave suspends rather
    than discards the task. Do not rerank while the interaction remains active.
 5. Estimate the travel time of the shortest A* route to a reachable interaction

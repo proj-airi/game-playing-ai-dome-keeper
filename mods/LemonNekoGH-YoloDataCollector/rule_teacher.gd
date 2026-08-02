@@ -1858,14 +1858,11 @@ func _finish_artifact_choice(task: Dictionary) -> void:
 		_pop_task("The artifact was delivered and installed")
 
 func _scan_interaction(required_ore_type := "") -> bool:
-	var claimed := (
+	var relic_claimed := (
 		_claim_relic_switch_interaction()
 		or _claim_chamber_interaction(CONST.RELIC)
-		or _claim_chamber_interaction(CONST.POWERCORE)
-		or _claim_chamber_interaction(CONST.GADGET)
-		or _claim_cave_interaction()
 	)
-	if claimed:
+	if relic_claimed:
 		return true
 	var relic_search := _root_relic_search()
 	if (
@@ -1874,6 +1871,15 @@ func _scan_interaction(required_ore_type := "") -> bool:
 		and Vector2i(relic_search.get("focus_coord", NO_COORD)) != NO_COORD
 	):
 		return false
+	if not required_ore_type.is_empty() and required_ore_type != "relic":
+		return _claim_ore_interaction(required_ore_type)
+	var optional_claimed := (
+		_claim_chamber_interaction(CONST.POWERCORE)
+		or _claim_chamber_interaction(CONST.GADGET)
+		or _claim_cave_interaction()
+	)
+	if optional_claimed:
+		return true
 	return _claim_ore_interaction("" if required_ore_type == "relic" else required_ore_type)
 
 func _target_is_claimed(target: Variant) -> bool:
@@ -2914,6 +2920,7 @@ func _finish_defense() -> void:
 	)
 	if (
 		not relic_search_focused
+		and tasks.size() == 1
 		and _find_task(TaskType.CLEANUP_RESOURCES).is_empty()
 		and _reachable_cached_resource_count() >= full_load
 	):

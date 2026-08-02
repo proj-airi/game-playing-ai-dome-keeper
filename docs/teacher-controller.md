@@ -61,11 +61,13 @@ Each fixed control tick applies these rules in order:
    `UPGRADE` from any ordinary task.
 4. `SEARCH` and `ACQUIRE_RESOURCE` scan for nearby interactables, prioritizing
    revealed Relic Switch and Relic Chambers before optional side interactions.
+   Resource searches skip optional interactions and scan only relic-critical
+   chambers plus their requested ore type.
    `CLEANUP_RESOURCES` does not scan: a full return haul must not be suspended
    by a side interaction, which would force-drop the carried load at the target.
 5. The active task performs one normal-input step.
 
-Consequently a resource search may be interrupted by another interaction, and
+Consequently a resource search may be interrupted by a relic interaction, and
 any of those tasks may be interrupted by defense. Popping defense resumes the
 exact interaction, acquisition, or search task underneath without a separate
 "resume" state.
@@ -142,8 +144,9 @@ resource. Pickup and delivery always use physical Drops and normal input.
 Ordinary return-to-dome behavior does not collect resources. After a wave
 settles, the controller counts currently reachable cached Drops. It pushes
 `CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
-full-load count. Cleanup fills a supported load, or returns early once its load
-makes the current planned upgrade affordable, then repeats until no reachable
+full-load count and the root search has no active side task. Cleanup fills a
+supported load, or returns early once its load makes the current planned upgrade
+affordable, then repeats until no reachable
 cached Drop remains. An upgrade-funded return continues into the station after
 automatic resource deposit and ends only after a confirmed purchase. Its
 reserved Drop guides navigation; inside pickup range
