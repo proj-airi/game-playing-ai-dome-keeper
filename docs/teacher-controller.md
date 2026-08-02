@@ -86,12 +86,12 @@ without adding top-level states.
 
 | State | Owns | Possible next states |
 | --- | --- | --- |
-| `EXPLORE` | Saved-work travel and the fishbone mining pattern | `MINE`, `CARRY`, `RETURN`, `RECOVER` |
-| `MINE` | Ore and chamber excavation, chamber opening, and detached-artifact clearance | `EXPLORE`, `CARRY`, `RETURN`, `RECOVER` |
-| `CARRY` | Resource pickup plans, physical chamber or Cave input delivery, artifact activation, and exact reattachment | `MINE`, `RETURN`, `RECOVER` |
-| `RETURN` | Travel to the main Laser station and station task arbitration | `EXPLORE`, `MINE`, `CARRY`, `UPGRADE`, `DEFEND`, `RECOVER` |
+| `EXPLORE` | Saved-work travel, local interaction scanning, and the fishbone mining pattern | `INTERACTION`, `CARRY`, `RETURN`, `RECOVER` |
+| `INTERACTION` | One locked ore, Chamber, or Cave lifecycle, including preparation, activation, and outcome | `EXPLORE`, `RETURN`, `RECOVER` |
+| `CARRY` | Ordinary known-cache resource pickup plans | `RETURN`, `RECOVER` |
+| `RETURN` | Travel to the main Laser station and station task arbitration | `EXPLORE`, `INTERACTION`, `UPGRADE`, `DEFEND`, `RECOVER` |
 | `UPGRADE` | Normal-input TechTree navigation and confirmed purchases | `RETURN`, `DEFEND` |
-| `DEFEND` | Battle-input entry, Laser aiming and firing, and wave settlement | `EXPLORE`, `MINE`, `CARRY`, `RETURN` |
+| `DEFEND` | Battle-input entry, Laser aiming and firing, and wave settlement | `EXPLORE`, `RETURN` |
 | `RECOVER` | Bounded movement probes after a directed-action stall | The interrupted state or `RETURN` |
 
 Failure is not an eighth state. Mandatory modal or UI failures and unsupported
@@ -120,13 +120,13 @@ or leave mining blocked inside `EXPLORE`.
   exact Gadget and Power Core Drops. It temporarily owns input without changing
   the top-level state, dispatches policy by exact popup `droptype`, then restores
   that state after authoritative popup closure.
-- Detecting the exact carried chamber Gadget outside acquisition forces
-  `RETURN`; it must be transported alone. Unsupported modal/input state blocks
-  action emission without inventing another teacher state.
+- Acquiring or reattaching the exact chamber artifact completes the active
+  acquisition step and enters `RETURN` for its direct handoff.
 - Open-map A* is shared by several states, with a normal-input dome-departure
   bridge when travel starts inside the dome. Each state owns its reason and
-  target: `EXPLORE` restores saved work, `MINE` reaches excavation approaches,
-  `CARRY` reaches pickups or Usables, and `RETURN` reaches the dome and station.
+  target: `EXPLORE` restores saved work, `INTERACTION` reaches interaction
+  approaches and inputs, `CARRY` reaches ordinary cache pickups, and `RETURN`
+  reaches the dome and station.
 - The binding recovery policy enters `RECOVER` after four seconds of held
   directional input without a one-tile directed move or effective drill hit in
   states other than `UPGRADE`, `DEFEND`, and `RECOVER`.
@@ -136,21 +136,21 @@ or leave mining blocked inside `EXPLORE`.
 `EXPLORE` owns saved-work navigation, new fishbone tunneling, descent
 backtracking, and safe idle waiting. It never picks up resources.
 
-It is entered when collection starts outside a station; `MINE` clears its ore
+It is entered when collection starts outside a station; `INTERACTION` clears its locked
 task; `RETURN` closes a station with no task; `DEFEND` settles with keeper input
 already active; or `RECOVER` completes a probe for interrupted exploration.
 
 Its priority order is:
 
-1. claim a revealed, visible-in-tree Gadget Chamber and enter `MINE`, or
-   `RETURN` if an active wave preempts it;
-2. respond to an active wave, active cache cleanup, descent backtracking, or a
+1. respond to an active wave;
+2. scan the radius of ten tiles for revealed eligible Supply Chambers, Gadget
+   Chambers, supported Caves, and ore; lock one target and enter `INTERACTION`;
+3. respond to active cache cleanup, descent backtracking, or a
    station task while mining is blocked;
-3. enter `CARRY` when a dynamically safe resource plan opens;
-4. enter `RETURN` when the current position and load exhaust the wave-safe
+4. enter `CARRY` when a dynamically safe resource plan opens;
+5. enter `RETURN` when the current position and load exhaust the wave-safe
    return budget;
-5. use open-map A* to restore a saved work coordinate and continuation;
-6. enter `MINE` for the nearest currently visible revealed ore vein; and
+6. use open-map A* to restore a saved work coordinate and continuation; and
 7. continue the current fishbone mode.
 
 The fishbone modes remain inside `EXPLORE`:
@@ -171,36 +171,37 @@ The fishbone modes remain inside `EXPLORE`:
 wave-unsafe backtracking, dome-waiting, and fishbone mode changes remain within
 `EXPLORE`.
 
-### `MINE`
+### `INTERACTION`
 
-`MINE` owns destructive work: clearing an ordinary revealed ore vein without
-pickup, excavating a claimed Gadget Chamber and waiting for it to open, or
-clearing allowed revealed neighbors around a detached Gadget's fixed recovery
-coordinate.
+`INTERACTION` owns one locked local target from approach through completion. The
+existing ore, Chamber, and Cave target references identify the handler without
+a parallel interaction-kind state. Chamber and Cave preparation uses one shared
+reserved-resource reference and one shared wait counter. Game-object state
+identifies the current phase; the teacher does not persist duplicate phase flags
+when the phase can be derived. The shared scan, route choice, decision event,
+and subtype contracts are defined in [the local interaction model](interaction.md).
 
-It enters `EXPLORE` when the ordinary vein is clear; `CARRY` when a safe resource
-window opens, a chamber reaches `OPEN`, or detached-Gadget clearance completes;
-`RETURN` when a wave, return deadline, unsafe carry opening, or authoritative
-Gadget handoff preempts it; and `RECOVER` under the shared stall condition.
+It enters `EXPLORE` when the interaction completes; `RETURN` when a wave or
+direct-return deadline preempts it or an acquired chamber artifact needs direct
+handoff; and `RECOVER` under the shared stall condition. A wave expires an
+unfinished local target. After defense, `EXPLORE` scans again from the keeper's
+current position instead of resuming a distant target.
 
-Temporary `RECOVER` interruption preserves the active mining task. Ordinary ore
-completion or preemption records the active vein as a cache site before clearing
-its live target.
+Temporary `RECOVER` interruption preserves the active interaction task.
+Ordinary ore completion or preemption records the active vein as a cache site
+before clearing its live target.
 
 ### `CARRY`
 
-`CARRY` owns acquisition rather than delivery. Resource work executes a bounded
+`CARRY` owns ordinary cache collection only. Resource work executes a bounded
 quota, reselects interchangeable Drops by unmet demand and then open-path travel,
 rechecks the real next leg against wave safety, and uses the configured pickup
 action. It stores resource-type counts rather than a route of Drop identities.
 
-Gadget work unloads resource cargo, activates the exact focused chamber
-`Usable`, waits for the newly spawned exact Gadget to attach, and reacquires the
-same Gadget after bounded detachment clearance.
-
-It enters `MINE` when the chamber still needs excavation; `RETURN` when a wave
-starts, the plan ends, the next pickup becomes unsafe, bounded pickup/path
-failures are exhausted, or the exact Gadget attaches; and `RECOVER` under the
+Chamber and Cave resource preparation, activation, and detached-artifact
+recovery remain in `INTERACTION`; they never borrow `CARRY`. `CARRY` enters
+`RETURN` when a wave starts, the plan ends, the next pickup becomes unsafe, or
+bounded pickup/path failures are exhausted, and enters `RECOVER` under the
 shared stall condition.
 
 ### `RETURN`
@@ -213,17 +214,15 @@ station.
 
 Inside the station, it resolves tasks in this order:
 
-1. finish mandatory exact-Gadget delivery, handoff, or detachment recovery;
-2. for a saved Gadget Chamber task, enter `DEFEND` while a wave is active or
-   settling, and otherwise close the station and resume `MINE` or `CARRY`;
-3. absent Gadget preemption, enter `UPGRADE` for the affordable selected target
+1. finish mandatory artifact delivery, handoff, or detachment recovery;
+2. absent Gadget preemption, enter `UPGRADE` for the affordable selected target
    from the highest nonempty intent class;
-4. enter `DEFEND` for any other active or imminent wave; and
-5. otherwise issue the normal station-close action while entering `EXPLORE`, so
+3. enter `DEFEND` for any other active or imminent wave; and
+4. otherwise issue the normal station-close action while entering `EXPLORE`, so
    the still-focused computer cannot be entered again.
 
 If the exact Gadget detaches before authoritative handoff, `RETURN` freezes its
-coordinate and enters `MINE` for bounded clearance. Ordinary outside-station
+coordinate and enters `INTERACTION` for bounded clearance. Ordinary outside-station
 navigation can enter `RECOVER` under the shared stall condition.
 
 ### `UPGRADE`
@@ -247,9 +246,8 @@ in-station path it does not leave merely because `wavepresent` ended; it waits
 for `wavebattle` settlement.
 
 It enters `RETURN` if the keeper leaves the station, settlement restores station
-input, or a settled Gadget interruption needs station arbitration; `EXPLORE` if
-settlement already restored keeper input; and `MINE` or `CARRY` when keeper input
-can immediately resume the saved Gadget phase.
+input, or a settled interaction still needs arbitration. Without an interrupted
+interaction it may enter `EXPLORE` when settlement already restored keeper input.
 
 ### `RECOVER`
 
@@ -276,36 +274,32 @@ continuation when no saved target exists.
   satisfaction of the health-reserve condition.
 - Cache sites and cleanup state survive waves and repeated `CARRY`/`RETURN`
   trips until no known reachable cached resource remains.
-- Claimed chamber identity, exact Gadget identity, delivery flag, recovery
-  coordinate, and bounded recovery count survive wave and station interruption
-  until authoritative delivery and choice complete.
-- The claimed Power Core Chamber and selected physical water survive wave
-  interruptions. After attachment, the Power Core uses the same exact-Drop
-  transport and bounded recovery state as a chamber Gadget.
-- A claimed supported Cave, its unfinished exact input or initial reward
-  snapshot, and its authoritative progress survive wave interruption. The
-  teacher resumes the bounded side task after defense and clears it only after
-  checking its exact resulting state. A newly released resource reward is
-  dropped into the ordinary cache before returning to defend.
+- An unfinished local ore, Chamber, or Cave target does not survive a wave. The
+  prior scan expires; post-defense exploration may claim it again only if a new
+  radius-ten scan sees it.
+- Once an exact chamber artifact has attached or detached during mandatory
+  delivery, its identity, recovery coordinate, and bounded recovery count
+  survive wave and station interruption until authoritative handoff and choice
+  complete. Power Cores use the same transport rule.
 - Event-driven wave-health tracking preserves the inputs intended for post-wave
   combat and repair decisions across state changes.
 - Debug checkpoints preserve these same teacher decisions across processes.
   Runtime object identity is stable only through saved Drop UIDs and restored
-  Chamber/Cave coordinates; input bindings, held actions, replay buffers,
+  Chamber/Cave coordinates. Input bindings, held actions, replay buffers,
   pathfinding previews, and live Laser observations are rebuilt after load.
 
 ## Supported Natural Cave Tasks
 
 - The shared encounter and routing contract is defined in
-  [`cave.md`](cave.md). During ordinary exploration, mining, carrying, or
-  return travel, consider only revealed allowlisted Caves within straight-line
-  distance `10`. Record the deviation decision before movement, then use the
-  faster estimate between A* travel to the Cave boundary and direct digging.
-  Never inspect hidden map data or select a frontier to search for a Cave.
-- A Scanner task reserves and carries two exact loose iron Drops, one to each
-  unspent receiver, activates the exact focused `Usable` through configured
-  input, and succeeds only after the Cave consumes its scanner and
-  `map.revealdistance` authoritatively becomes `2`.
+  [`interaction.md`](interaction.md). Scan only during ordinary exploration and
+  consider only revealed allowlisted Caves within straight-line distance `10`.
+  Record the deviation decision before movement, then use the faster estimate
+  between A* travel to the Cave boundary and direct digging. Never inspect
+  hidden map data or select a frontier to search for a Cave.
+- A Scanner task chooses the nearest known cache that had more than two iron
+  resources when preparation began, carries two iron Drops back, activates the
+  focused `Usable` through configured input, and succeeds when
+  `map.revealdistance` increases. It does not model receiver internals.
 - A Drone task reserves and carries one exact loose water Drop to its receiver.
   It succeeds only after opening finishes and the Cave's dispatcher owns a
   team-matching Squidley created by the exact target-version script.
@@ -330,16 +324,14 @@ continuation when no saved target exists.
   resource detaches and matching stored inventory increases. One successful
   delivery marks that Portal complete for the run.
 - The decision and outcome are separate replay events:
-  `cave_interaction_decided` records why the teacher deviated and its selected
-  route; `cave_interaction_completed` or `cave_interaction_failed` records the
+  `interaction_decided` records why the teacher deviated and its selected
+  route; `cave_completed` or `cave_interaction_failed` records the
   observed before/after result and reason.
 - Completing the initial snapshot marks that Cave complete for the run. Iron
   Tree and Water regrowth does not extend the task and is not revisited by the
   current teacher; their opportunistic renewable revisits remain roadmap work.
-- Gadget acquisition may suspend any Cave task. Active or imminent waves and
-  hard return deadlines drop any attached Cave input or reward into the
-  ordinary cache, preserve authoritative receiver or snapshot progress, and
-  resume the same task after defense. Missing exact nodes, inconsistent
+- Active or imminent waves and hard return deadlines expire the locked Cave
+  task; later work requires a fresh local scan. Missing exact nodes, inconsistent
   lifecycle state, ambiguous reward creation, or exhausted bounded interaction
   retries fail closed.
 
@@ -363,15 +355,15 @@ continuation when no saved target exists.
   completion from one terminal pocket or an exhausted recorded frontier set.
 - Before `DESCEND` or `BRANCH` is preempted, freeze the exact open work coordinate,
   mode, and branch direction. A newly claimed Gadget Chamber must freeze this
-  continuation before `MINE` moves the keeper. Return by open A* and resume only
+  continuation before `INTERACTION` moves the keeper. Return by open A* and resume only
   after reaching the exact saved coordinate.
 - For non-adjacent revealed ore, compare the shortest open-approach ETA with
   direct cardinal tunneling. The tunneling ETA may use movement time and only
   revealed intervening Tiles' remaining health, runtime drill strength,
   hard-tile modifier, per-hit cap, drill buff, and hit cooldown. Use open travel
-  only when strictly faster; direct tunneling wins ties or the absence of an open
-  approach.
-- Ordinary `MINE` clears the connected revealed vein without pickup, records its
+  unless it is slower; direct tunneling is selected only when the A* estimate is
+  longer.
+- Ordinary `INTERACTION` mining clears the connected revealed vein without pickup, records its
   loose resources as a cache site, and resumes `EXPLORE` absent preemption. A
   revealed adjacent border is a known branch endpoint: return to the exact shaft
   intersection, do the other side, then advance the branch row. Do not enter
@@ -407,8 +399,8 @@ continuation when no saved target exists.
   time. The margin represents the observed 1.6–2.0 seconds from dome entrance to
   main-station task selection.
 - Refresh the pathfinding-heavy preview at most once per second and invalidate it
-  immediately after cache, pickup, or upgrade changes. While mining, include the
-  active vein as a temporary cache so existing loose Drops can participate.
+  immediately after cache, pickup, or upgrade changes. Start ordinary cache
+  collection only from `EXPLORE`, after the locked interaction has completed.
 - On resource `CARRY` entry, diagnose mobility from the preview and rebuild the
   bounded plan once so a new mobility intent affects current-trip reservation.
 - Plan across all reachable known cache sites. Rank the next pickup by earliest
@@ -457,7 +449,9 @@ continuation when no saved target exists.
 - Treat a revealed Gadget Chamber as part of the current teacher loop, distinct
   from the final Relic Hunt relic. It preempts ordinary ore, resource collection,
   affordable upgrades, and merely imminent waves; only an already-active monster
-  wave and its settlement may interrupt excavation or activation.
+  wave and its settlement may interrupt excavation or activation. Such an
+  interruption expires the local Chamber target unless exact artifact transport
+  has already begun.
 - Keep the target-version Gadget inventory and compatibility policy in the
   standalone data-only `gadget_catalog.gd`. List every canonical base Gadget ID,
   document what it does and why it is supported or rejected, store only facts not
@@ -492,11 +486,11 @@ continuation when no saved target exists.
   authoritative `OPENING`, and activate the exact focused `Usable`. Require an
   empty load; when carrying resources, use the configured drop action, record
   them as a cache, and resume the chamber instead of making an unloading trip.
-- Keep Gadget Drops outside the resource quota planner. Confirm both chamber
-  `EMPTY` and deferred attachment of a newly spawned exact
-  `Drop.type == CONST.GADGET`; the broader `carryableType == "gadget"` category
-  is insufficient. Freeze delivery until the exact Gadget popup completes and
-  operate only a popup whose `droptype == CONST.GADGET`.
+- Keep Gadget Drops outside the resource quota planner. A newly attached exact
+  `Drop.type == CONST.GADGET` that was absent before activation confirms
+  acquisition; the broader `carryableType == "gadget"` category is insufficient.
+  Freeze delivery until the exact Gadget popup completes and operate only a
+  popup whose `droptype == CONST.GADGET`.
 - Treat disappearance of the exact carried Gadget as delivery only after
   authoritative handoff makes it independent or absorbed, or removes it while
   opening the choice flow. If the same live Drop detaches first, freeze its map
@@ -505,16 +499,17 @@ continuation when no saved target exists.
   resource Tiles in the eight neighboring cells around that fixed coordinate.
   Skip the center, border, chambers, relic structures, nests, and every other
   special Tile type; record mined resource areas as caches, then reacquire only
-  the exact Drop through `CARRY`.
+  the exact Drop within `INTERACTION`.
 - Permit three complete detachment recoveries and fail closed on the fourth. Do
   not recenter the clearance window as the rigid body drifts, add a top-level
   state, teleport the Gadget, or alter collision masks.
 
 ## Power Core Chamber and Supplement Policy
 
-- Identify a Power Core Chamber by exact `drop_type == CONST.POWERCORE`. Once
-  discovered, excavating and activating it is exclusive except for a wave or an
-  already attached/recovering Gadget handoff.
+- Identify a Power Core Chamber by exact `drop_type == CONST.POWERCORE`. While
+  its local interaction remains active, excavating and activating it is
+  exclusive except for a wave or an already attached/recovering Gadget handoff.
+  A wave expires the Chamber target unless exact Power Core transport has begun.
 - Excavate the chamber cover, then use a reachable physical water Drop from a
   known cache immediately. Before fetching water, clear the single revealed,
   destructible ordinary tile directly above the chamber's top receiver and use
@@ -524,7 +519,7 @@ continuation when no saved target exists.
   Chambers, but do not act on them until the core task completes. Require
   authoritative `ResourceGrabber.spent` before treating the water as accepted.
 - Wait for exact chamber `OPEN`, unload ordinary cargo, activate its focused
-  `Usable`, and require chamber `EMPTY` plus a newly attached exact
+  `Usable`, and require a newly attached exact
   `Drop.type == CONST.POWERCORE`. From that point, use the existing Gadget
   exact-Drop transport, detachment recovery, wave interruption, and dome handoff
   mechanics, parameterized by the Power Core type.

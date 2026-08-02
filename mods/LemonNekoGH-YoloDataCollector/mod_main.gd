@@ -5,6 +5,7 @@ const LOG_NAME := "LemonNekoGH-YoloDataCollector:Main"
 const GAME_SCENE_PATH := "res://game/Game.tscn"
 const GAME_SCRIPT_PATH := "res://game/Game.gd"
 const CHECKPOINT_LOAD_ARG := "--airi-checkpoint-load="
+const LEVEL_SEED_ARG := "--airi-level-seed="
 
 var mod_dir_path := ""
 var extensions_dir_path := ""
@@ -22,10 +23,12 @@ func _init() -> void:
 
 func _configure_direct_normal_run(scene: Node) -> Node:
 	var loading := false
+	var level_seed := ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with(CHECKPOINT_LOAD_ARG):
 			loading = true
-			break
+		elif argument.begins_with(LEVEL_SEED_ARG):
+			level_seed = argument.trim_prefix(LEVEL_SEED_ARG)
 	if not OS.has_feature("editor"):
 		return scene
 	if FileAccess.file_exists("user://dev-mode"):
@@ -56,6 +59,14 @@ func _configure_direct_normal_run(scene: Node) -> Node:
 		else Const.ENTER_PLAY_MODE.Level
 	)
 	scene.set(&"devMode", false)
+	if not level_seed.is_empty():
+		if not level_seed.is_valid_int():
+			ModLoaderLog.error("Invalid level seed: " + level_seed, LOG_NAME)
+			return null
+		var seed_setter = load(mod_dir_path.path_join("level_seed.gd")).new()
+		seed_setter.level_seed = int(level_seed)
+		scene.add_child(seed_setter)
+		seed_setter.owner = scene
 	ModLoaderLog.info("Configured a direct level launch with normal run rules", LOG_NAME)
 	return scene
 

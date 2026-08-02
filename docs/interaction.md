@@ -1,64 +1,56 @@
-# Natural Cave Interaction Design
+# Local Interaction Model
 
-This document defines the intended behavior for opportunistic natural Cave
-interaction. It is a design contract for simplifying the current rule teacher;
-it does not claim that every current implementation path already follows this
-model.
+This document defines the shared discovery and approach behavior for nearby
+interactable objects in the mine. Ordinary ore, Gadget Chambers, Supply
+Chambers, and supported natural Caves use the same local scan. Relic Chambers
+are classified by the same model but remain ineligible until Relic Hunt behavior
+is supported.
 
-The teacher should treat a Cave as a short deviation from its current mining
-path, not as a separate system with a full defensive state machine. Cave types
-share encounter selection, approach choice, activation, outcome recording, and
-return to the previous task. A Cave-specific branch supplies only preparation
-that the game requires and the observable result that demonstrates success.
+The teacher treats an interaction as a locked, short deviation from ordinary
+exploration, not as a separate defensive state machine. Interaction types share
+discovery, approach choice, decision recording, and return to the saved path.
+A subtype supplies only the preparation and observable result required by that
+game object.
+
+The scan claims one target, records `interaction_decided`, and enters
+`INTERACTION`. The locked ore, Chamber, or Cave target identifies the handler;
+there is no parallel interaction-type state.
 
 ## Shared Interaction Flow
 
-1. Consider only Caves in the currently observed mine.
-2. Ignore a Cave until the game has revealed it.
-3. Treat a revealed Cave as being passed only when its straight-line map
-   distance from the keeper is less than the fixed threshold `10`.
-4. Estimate the travel time of the shortest A* route to a reachable cell on the
-   Cave boundary from path length and current movement speed.
-5. Estimate the time to reach the Cave directly from the intervening tiles,
+1. On the controller's existing fixed tick, scan eligible objects whose
+   straight-line map distance from the keeper is less than `10` tiles.
+2. Ignore unrevealed objects. A scan result is eligible only when its public
+   game state says work remains and the teacher supports that subtype.
+3. Select one target in priority order: Supply Chamber, Gadget Chamber,
+   supported Cave, then ordinary ore. Within a category choose the nearest
+   target.
+4. Lock that target until completion, invalidation, or a mandatory wave
+   interruption. Do not rerank while the local interaction remains active.
+5. Estimate the travel time of the shortest A* route to a reachable interaction
+   boundary from path length and current movement speed.
+6. Estimate the time to reach the target directly from the intervening tiles,
    current drilling strength, and movement time.
-6. Use the A* route when it is no slower. Dig directly toward the Cave when the
+7. Use the A* route when it is no slower. Dig directly toward the target when the
    A* estimate is longer.
-7. Identify the Cave type and record the decision before leaving the current
-   path. The event must explain why the teacher deviated and which approach it
-   chose.
-8. Perform only the preparation required by that Cave type.
-9. Press the configured interaction input once when the Cave is ready and
-   focused. Skip the press only when the Cave's game interaction is passive.
-10. Judge success from the smallest player-visible capability change for that
-    Cave type.
-11. Record completion or failure, including the observed state change and
+8. Identify the interaction type and subtype and record the decision before
+   leaving the current path. The event must explain why the teacher deviated
+   and which approach it chose.
+9. Enter `INTERACTION` and approach the locked target by the selected route.
+10. Perform only the preparation required by that subtype.
+11. Activate the object through configured normal input when its subtype
+    requires activation. Enter the target area without pressing interaction
+    when the game's interaction is passive.
+12. Judge success from the smallest public state or player-visible capability
+    change for that subtype.
+13. Record completion or failure, including the observed state change and
     reason, then resume the path and task that were active before the deviation.
 
-```mermaid
-flowchart TD
-    A["Continue the current mining path"] --> B{"Cave in the observed mine?"}
-    B -- "No" --> A
-    B -- "Yes" --> C{"Revealed?"}
-    C -- "No" --> A
-    C -- "Yes" --> D{"Straight-line distance < 10?"}
-    D -- "No" --> A
-    D -- "Yes" --> E["Estimate A* travel time and direct-dig time"]
-    E --> F{"A* takes longer?"}
-    F -- "Yes" --> G["Dig directly"]
-    F -- "No" --> H["Follow the A* route"]
-    G --> I["Identify Cave type and record the deviation decision"]
-    H --> I
-    I --> J["Run the Cave-specific preparation"]
-    J --> K{"Passive interaction?"}
-    K -- "No" --> P["Press interaction once"]
-    K -- "Yes" --> Q["Enter the passive interaction area"]
-    P --> L{"Observable capability changed?"}
-    Q --> L
-    L -- "Yes" --> M["Record completion and reason"]
-    L -- "No" --> N["Record failure and reason"]
-    M --> O["Resume the previous path and task"]
-    N --> O
-```
+A mandatory wave expires the local scan and clears its unfinished target. After
+defense, ordinary exploration resumes and scans again from the keeper's current
+position. A distant ore, Chamber, or Cave does not become a cross-map mission
+merely because it was once within radius `10`. Exact artifact transport that has
+already begun remains mandatory and is not a local scan target.
 
 The estimators are decision aids, not independent correctness proofs. They need
 only enough fidelity to choose between the two available approaches. Add more
@@ -68,12 +60,12 @@ The open-route estimate follows the project's existing A* path query; see the
 
 ## Decision Event
 
-Choosing to interact is itself an event. Record `cave_interaction_decided`
+Choosing to interact is itself an event. Record `interaction_decided`
 before changing movement. Its evidence should be limited to what explains the
 decision:
 
-- Cave type and map position;
-- straight-line distance and passing threshold;
+- interaction type, subtype, and map position;
+- straight-line distance;
 - estimated A* and direct-dig times;
 - selected approach;
 - the reason for leaving the previous path.
@@ -148,4 +140,4 @@ Keep the shared flow unchanged. Add only:
 
 Do not introduce Cave-specific routing, checkpoint fields, validation layers,
 or interruption machinery unless an observed failure cannot be handled by the
-shared mining, carrying, recording, and resume behavior.
+shared mining, carrying, recording, and local rediscovery behavior.

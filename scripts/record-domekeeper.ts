@@ -11,7 +11,12 @@ import { x } from 'tinyexec'
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 6)
 const { values } = parseArgs({
   args: process.argv.slice(2),
-  options: { fps: { type: 'string' }, load: { type: 'string' }, save: { type: 'boolean' } },
+  options: {
+    fps: { type: 'string' },
+    load: { type: 'string' },
+    save: { type: 'boolean' },
+    seed: { type: 'string' },
+  },
   strict: true,
 })
 const fps = Number(values.fps ?? 10)
@@ -56,6 +61,7 @@ await run(godot, [
   `--airi-checkpoint-session=${sessionId}`,
   ...(values.save ? ['--airi-checkpoint-save'] : []),
   ...(values.load == null ? [] : [`--airi-checkpoint-load=${values.load}`]),
+  ...(values.seed == null ? [] : [`--airi-level-seed=${values.seed}`]),
 ], 'Godot recording failed; the incomplete session was kept')
 
 if (!existsSync(replay))

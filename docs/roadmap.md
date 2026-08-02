@@ -21,7 +21,7 @@ unless an explicit project decision says so.
   initial-snapshot lifecycle; Iron Tree and Water have representative runtime
   recordings. Mushroom observes a movement-speed increase, Portal observes a
   passive ore delivery and inventory increase, and Helmet observes a mine-camera
-  zoom change. Their shared behavior belongs in [`cave.md`](cave.md); current
+  zoom change. Their shared behavior belongs in [`interaction.md`](interaction.md); current
   controller details belong in [`teacher-controller.md`](teacher-controller.md).
 - `CobaltCave` shares the implemented initial-snapshot path but remains
   provisional because fresh test maps did not expose its deep, rare Cave before
@@ -34,7 +34,7 @@ unless an explicit project decision says so.
   sufficient space plus persistent memory, revisit, and harvest behavior. Do
   not claim or interact with either excluded Cave, and do not add either
   location policy or recurring task solely to support its reward.
-- Treat a revealed allowlisted Cave within the fixed passing distance as a short
+- Treat a revealed allowlisted Cave found by the shared radius-ten scan as a short
   deviation from an ordinary path, not as a Cave-search objective. Share
   discovery, A*-versus-direct routing, decision recording, activation, outcome
   recording, and task resumption. Keep only required preparation and one
@@ -55,9 +55,8 @@ unless an explicit project decision says so.
   another fruit. Record the released physical iron Drops together as one
   ordinary cache site, then resume ordinary work after the bounded harvest. The
   existing resource planner and cache-cleanup flow own later collection and
-  delivery, with no Iron Tree direct-return path. An interrupted initial harvest
-  may resume only the fruit identities that were available in its original
-  snapshot; newly regrown fruit never extends that task.
+  delivery, with no Iron Tree direct-return path. An interruption expires the
+  local harvest; a later ordinary encounter starts a fresh bounded snapshot.
 - Do not inspect or persist receiver internals unless a runtime failure proves
   that the shared observation cannot diagnose or resume the interaction. Add
   only the narrow state required by that demonstrated failure.
