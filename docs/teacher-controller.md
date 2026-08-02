@@ -129,7 +129,9 @@ full-load count. Cleanup fills a supported load, delivers it, and repeats until
 no reachable cached Drop remains. Its reserved Drop guides navigation; inside
 pickup range it collects whichever eligible cached Drop the game currently
 focuses. A Drop that leaves every recorded cache loses its reservation, and
-repeatedly unreachable Drops are ignored only by that cleanup task.
+repeatedly unreachable Drops are ignored only by that cleanup task. Cleanup
+also abandons a Drop when its path distance stops decreasing before pickup,
+which covers Drops wedged into or physically blocked inside narrow pockets.
 
 ## Chambers, Caves, and rewards
 

@@ -1283,6 +1283,24 @@ func _cleanup_resources(task: Dictionary) -> void:
 	if _available_resource(focused) and cached_resources.has(focused) and not ignored.has(focused):
 		target = focused
 		task.target = focused
+	if int(task.get("approach_uid", -1)) != target.UID:
+		task.approach_uid = target.UID
+		task.closest_path_distance = INF
+		task.unfocusable_time = 0.0
+	var path_distance := _path_distance(keeper.global_position, target.global_position)
+	if not keeper.carryables.has(target):
+		if path_distance + 2.0 < float(task.closest_path_distance):
+			task.closest_path_distance = path_distance
+			task.unfocusable_time = 0.0
+		else:
+			task.unfocusable_time = float(task.unfocusable_time) + TICK
+		if float(task.unfocusable_time) >= STALL_SECONDS:
+			ignored[target] = true
+			task.target = null
+			return
+	else:
+		task.closest_path_distance = path_distance
+		task.unfocusable_time = 0.0
 	if keeper.focussedCarryable == target and _leaf() == "Keeper1InputProcessor":
 		if pickup_failures >= 3:
 			ignored[target] = true
