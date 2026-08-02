@@ -1011,6 +1011,8 @@ func _tick_tasks(delta: float) -> void:
 		_push_task({"type": TaskType.WIDEN_SHAFT, "main_col": -1, "entry_coord": NO_COORD, "widen_phase": 0, "widen_row": -1, "descending": false}, "The carry load reached the shaft-widening threshold")
 		return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and keeper.isInsideStation:
+		if active_type == TaskType.CLEANUP_RESOURCES:
+			tasks.back().returning_for_upgrade = false
 		_release_all()
 		if _leaf() == "StationInputProcessor":
 			_tap(&"ui_cancel")
