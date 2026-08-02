@@ -46,17 +46,18 @@ unless an explicit project decision says so.
   `IronTreeCave`, or `WaterCave`, snapshot the exact rewards authoritatively
   available at that moment, handle each snapshot member at most once with
   bounded local positioning, and immediately resume the same task. Do not wait
-  for another reward, infer availability from elapsed time, or preserve
-  unfinished opportunistic Cave work across an interruption. If no later
-  ordinary path encounters the Cave, leave its renewed rewards unused.
+  for another reward or infer availability from elapsed time. A pushed defense
+  or resource-acquisition task suspends the exact interaction snapshot; it does
+  not create a recurring Cave task. If no later ordinary path encounters the
+  Cave, leave its renewed rewards unused.
 - For `IronTreeCave`, enter fruit activation without unrelated cargo. After each
   currently available fruit spawns an attached iron Drop, issue the normal
   configured drop action and confirm the new iron is loose before activating
   another fruit. Record the released physical iron Drops together as one
-  ordinary cache site, then resume ordinary work after the bounded harvest. The
-  existing resource planner and cache-cleanup flow own later collection and
-  delivery, with no Iron Tree direct-return path. An interruption expires the
-  local harvest; a later ordinary encounter starts a fresh bounded snapshot.
+  ordinary cache site, then resume ordinary work after the bounded harvest.
+  Post-wave cache quantity may later push cleanup, with no Iron Tree
+  direct-return path. An interruption suspends the local snapshot; a later
+  ordinary encounter after completion starts a fresh bounded snapshot.
 - Do not inspect or persist receiver internals unless a runtime failure proves
   that the shared observation cannot diagnose or resume the interaction. Add
   only the narrow state required by that demonstrated failure.

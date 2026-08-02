@@ -67,7 +67,7 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 - A detached resource must remain authoritatively known and recoverable instead
   of being silently counted as completed or disappearing outside the recorded
   cache area. Preserve normal configured inputs, physical resource behavior,
-  existing wave-safe return deadlines, and interrupted-work restoration.
+  defense takeover deadlines, and task-stack interruption restoration.
 - Use the new evidence to choose the smallest towing correction, such as
   stretch-aware movement pauses, cargo contraction before turns, or an adaptive
   load limit. A four-resource limit is permitted only as a bounded experiment

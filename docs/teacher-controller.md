@@ -1,668 +1,201 @@
 # Rule Teacher Controller
 
-This document owns the supported gameplay scope, state ownership, and binding
-behavior policies of the current in-process rule teacher. Read it before
-changing teacher state, navigation, collection, upgrades, defense, recovery, or
-runtime input behavior.
+This document owns the supported gameplay scope and task policy of the current
+in-process rule teacher. Read it before changing navigation, interaction,
+resource handling, upgrades, defense, recovery, checkpointing, or observation.
 
-Statements under policy headings declare required behavior. The state-machine
-section also describes statically observed code routing; a listed code path is
-not runtime proof, and a code-policy mismatch is a defect rather than permission
-to weaken the policy.
+## Goal and constraints
 
-## Current Supported Scope
+The teacher demonstrates one supported normal-input play loop with the smallest
+control model that can resume interrupted work:
 
-- The supported run is manually started, offline, and single-player, with one
-  local keyboard-controlled Engineer and the normal Laser Dome.
-- The teacher currently covers fishbone exploration, revealed ore mining,
-  resource pickup and delivery, supported Gadget Chamber retrieval and choice,
-  artifact-choice water rerolls, Power Core Chamber activation and Supplement
-  choice, the supported natural Cave side tasks and passive Portal delivery,
-  return, upgrades, simple Laser defense, and bounded stuck recovery while the
-  collector produces ore/enemy YOLO image-label pairs. `ScannerCave`,
-  `DroneCave`, `IronTreeCave`, `WaterCave`, `MushroomCave`, `PortalCave`, and
-  `HelmetCave` have been exercised in runtime recordings. The shared
-  `CobaltCave` implementation remains provisional until its deep, rare spawn is
-  confirmed in a representative recording.
-- The user starts a fresh run. An explicit recording-time debug checkpoint may
-  instead restore a previously supported run; automated loadout or menu
-  navigation and restart after death are not supported.
-- Starting collection inside a station supports only the normal
-  `StationInputProcessor` or `BattleInputProcessor`. Startup while an upgrade or
-  another station modal remains open must be rejected.
-- Multiplayer, other keepers, non-Laser weapons, and Relic Hunt completion are
-  outside the current supported scope. Later capability work belongs in
-  [`roadmap.md`](roadmap.md).
+- one manually started, offline Engineer run;
+- the normal Laser Dome and keyboard bindings;
+- frame-derived deployment remains the eventual target, while the teacher may
+  read privileged runtime state only to produce actions, evidence, and labels;
+- all movement, drilling, pickup, usable, station, battle, upgrade, and reward
+  choices go through configured game inputs;
+- invalid required state fails the session instead of being repaired or
+  guessed.
 
-## Compatibility Boundary
+The controller is an interruptible task stack, following the suspend/resume
+shape of Valve NextBot Actions documented in
+[`references.md`](references.md#game-ai-architecture). It intentionally has no
+parallel top-level state machine and no general-purpose behavior-tree runtime.
 
-- The superseded teacher state machine and its runtime wiring were intentionally
-  removed before the current seven-state controller was implemented and
-  connected to the collector. Do not reintroduce the old implementation or a
-  compatibility shim for it.
+## Task stack
 
-## Gameplay Mechanics
+The last task in the internal array is active. Earlier tasks are suspended and
+retain only the data they own. A task re-evaluates live game state whenever it
+resumes; paths and decisions are not restored as stale snapshots.
 
-- The Engineer mines by moving into a tile with the drill; tiles have
-  health/hardness and take multiple hits to break.
-- Resources must be picked up and carried. Carrying slows movement, and
-  carry-strength upgrades reduce the slowdown.
-- The Engineer has dedicated pickup and drop actions for carrying resources
-  (Space and Q by default).
-- Drill-strength upgrades make the drill stronger and allow harder rock to be
-  mined more efficiently.
-
-## Runtime and Action Boundaries
-
-- Emit only normal configured keyboard actions. Do not directly change keeper
-  movement, weapon input fields, Laser transforms, or other game state, and do
-  not use OS-level input injection.
-- Keep ordinary gameplay unpaused during movement, mining, resource handling,
-  return, defense, and recovery. The TechTree's gameplay pause is permitted only
-  while `UPGRADE` operates that popup through configured in-process actions.
-- While collection is active, save and temporarily disable
-  `Options.pauseWhenOutOfFocus` and `Options.useMouseDomeGameplay`, clear
-  `InputSystem.game_not_in_focus`, and keep `Input.MOUSE_MODE_VISIBLE`. Restore
-  both prior options when the teacher stops and do not persist the overrides.
-- These overrides must let the user focus and operate another macOS application
-  while the teacher continues emitting configured in-process keyboard events.
-- Disabling mouse dome gameplay prevents incidental mouse movement after focus
-  changes from replacing simultaneous keyboard steering and fire with a stale
-  mouse target.
-- Normal state logic runs on a fixed real-time tick. Active Laser aiming and
-  firing run on physics ticks to match the weapon update cadence.
-- Operate the TechTree popup only in `UPGRADE`. The YOLO dataset exclusion for
-  TechTree frames is owned by [`vision.md`](vision.md).
-
-## Seven-State Controller
-
-The controller in
-[`rule_teacher.gd`](../mods/LemonNekoGH-YoloDataCollector/rule_teacher.gd) has
-seven top-level states. It is hierarchical and event-driven rather than a fixed
-linear sequence: exploration modes, mining outcomes, cache-cleanup modes,
-upgrade arbitration, Gadget, Power Core, and natural Cave task context,
-asynchronous game events, and the shared artifact-choice modal alter routing
-without adding top-level states.
-
-| State | Owns | Possible next states |
+| Task | Responsibility | Completion |
 | --- | --- | --- |
-| `EXPLORE` | Saved-work travel, local interaction scanning, and the fishbone mining pattern | `INTERACTION`, `CARRY`, `RETURN`, `RECOVER` |
-| `INTERACTION` | One locked ore, Chamber, or Cave lifecycle, including preparation, activation, and outcome | `EXPLORE`, `RETURN`, `RECOVER` |
-| `CARRY` | Ordinary known-cache resource pickup plans | `RETURN`, `RECOVER` |
-| `RETURN` | Travel to the main Laser station and station task arbitration | `EXPLORE`, `INTERACTION`, `UPGRADE`, `DEFEND`, `RECOVER` |
-| `UPGRADE` | Normal-input TechTree navigation and confirmed purchases | `RETURN`, `DEFEND` |
-| `DEFEND` | Battle-input entry, Laser aiming and firing, and wave settlement | `EXPLORE`, `RETURN` |
-| `RECOVER` | Bounded movement probes after a directed-action stall | The interrupted state or `RETURN` |
+| `SEARCH` | Fishbone search for the relic or a requested ore type | The requested cache exists; the root relic search does not pop |
+| `MINE` | Drill one revealed connected ore vein and record its cache site | No revealed adjacent ore remains |
+| `INTERACT` | Complete one Chamber or Cave using its exact runtime object | The interaction's visible effect or authoritative handoff is observed |
+| `ACQUIRE_RESOURCE` | Attach a requested number of physical resources from one cache | The requested load is carried |
+| `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver them to the dome | No reachable cached resource remains |
+| `UPGRADE` | Buy affordable pending upgrades through the station UI | No affordable pending target remains |
+| `DEFEND` | Reach the Laser station and finish the wave | The wave settles and keeper input returns |
+| `RECOVER` | Try bounded movement probes after a directed-action stall | One tile of progress is observed |
+| `CHOOSE_REWARD` | Resolve the mandatory Gadget or supplement popup | The chosen reward is authoritatively installed or shredded |
 
-Failure is not an eighth state. Mandatory modal or UI failures and unsupported
-required runtime states fail closed, emit the teacher's `failed` signal, and
-stop collection. Ordinary policy exhaustion may instead prune an upgrade intent
-or leave mining blocked inside `EXPLORE`.
+The controller uses only two structural operations:
 
-### Startup and Shared Routing
+- push a task to suspend the current task for a concrete reason;
+- pop a completed task to resume the task below it.
 
-- Starting outside a station selects `EXPLORE`. Starting inside a station with a
-  supported input leaf selects `DEFEND` for `BattleInputProcessor` and otherwise
-  selects `RETURN` for normal station task selection.
-- Each actual state change through the shared transition helper releases held
-  actions, applies the short transition delay, resets pickup-failure and
-  movement-progress tracking, and records the old state, new state, and reason.
-  Startup selects its initial state directly and is not recorded as a
-  transition.
-- Leaving active mining work in `EXPLORE` for a non-navigation task saves the
-  keeper's current map coordinate, which policy requires to be open, and its
-  `DESCEND` or `BRANCH` continuation when no saved continuation exists.
-  `RECOVER` is excluded because it resumes the interrupted state directly.
-- Leaving `CARRY` clears the concrete Drop and live carry plan except when
-  entering `RECOVER`. Leaving `UPGRADE` clears the opportunity-local repair
-  target and re-evaluates the persistent repair intent.
-- The mandatory `GadgetChoiceInputProcessor` is a cross-cutting modal for both
-  exact Gadget and Power Core Drops. It temporarily owns input without changing
-  the top-level state, dispatches policy by exact popup `droptype`, then restores
-  that state after authoritative popup closure.
-- Acquiring or reattaching the exact chamber artifact completes the active
-  acquisition step and enters `RETURN` for its direct handoff.
-- Open-map A* is shared by several states, with a normal-input dome-departure
-  bridge when travel starts inside the dome. Each state owns its reason and
-  target: `EXPLORE` restores saved work, `INTERACTION` reaches interaction
-  approaches and inputs, `CARRY` reaches ordinary cache pickups, and `RETURN`
-  reaches the dome and station.
-- The binding recovery policy enters `RECOVER` after four seconds of held
-  directional input without a one-tile directed move or effective drill hit in
-  states other than `UPGRADE`, `DEFEND`, and `RECOVER`.
+There is no `ChangeTo` equivalent yet because no confirmed behavior needs
+same-level permanent replacement. Every push and pop releases held input,
+resets progress tracking, and records the operation, reason, and task summary.
 
-### `EXPLORE`
+## Scheduling
 
-`EXPLORE` owns saved-work navigation, new fishbone tunneling, descent
-backtracking, and safe idle waiting. It never picks up resources.
+Each fixed control tick applies these rules in order:
 
-It is entered when collection starts outside a station; `INTERACTION` clears its locked
-task; `RETURN` closes a station with no task; `DEFEND` settles with keeper input
-already active; or `RECOVER` completes a probe for interrupted exploration.
+1. A mandatory reward popup pushes `CHOOSE_REWARD`.
+2. An active or imminent wave pushes `DEFEND`. If an upgrade popup is open, the
+   `UPGRADE` task closes it first and defense is pushed on the following tick.
+3. Being at the base computer with an affordable pending target pushes
+   `UPGRADE` from any ordinary task.
+4. `SEARCH`, `ACQUIRE_RESOURCE`, and `CLEANUP_RESOURCES` scan for nearby
+   interactables.
+5. The active task performs one normal-input step.
 
-Its priority order is:
+Consequently a resource search may be interrupted by another interaction, and
+any of those tasks may be interrupted by defense. Popping defense resumes the
+exact interaction, acquisition, or search task underneath without a separate
+"resume" state.
 
-1. respond to an active wave;
-2. scan the radius of ten tiles for revealed eligible Supply Chambers, Gadget
-   Chambers, supported Caves, and ore; lock one target and enter `INTERACTION`;
-3. respond to active cache cleanup, descent backtracking, or a
-   station task while mining is blocked;
-4. enter `CARRY` when a dynamically safe resource plan opens;
-5. enter `RETURN` when the current position and load exhaust the wave-safe
-   return budget;
-6. use open-map A* to restore a saved work coordinate and continuation; and
-7. continue the current fishbone mode.
+## Local interaction discovery
 
-The fishbone modes remain inside `EXPLORE`:
+The shared discovery and approach policy is owned by
+[`interaction.md`](interaction.md). In summary, the teacher periodically scans
+the ten-tile radius around the Engineer, ignores unrevealed objects, and accepts
+only currently usable supported ore, Chambers, and Caves. It records the
+decision to interact and the reason for leaving the current route.
 
-- `DESCEND` drills toward the next branch row. Reaching it saves the exact shaft
-  intersection and changes to `BRANCH`; confirmed border below changes to
-  `BYPASS`.
-- `BRANCH` drills one side at a time. A confirmed border endpoint sends the
-  keeper back to the exact intersection. The first side reverses direction; the
-  second records the corridor, advances the row, and resumes `DESCEND` after the
-  return.
-- `BYPASS` searches right first for a column whose tile below is not confirmed
-  border. It reverses once when the first side reaches border. Border on both
-  sides terminates only that descent frontier, activates cleanup, and enters
-  `CARRY` when cleanup can start safely or `RETURN` otherwise.
+For each candidate, it compares:
 
-`EXPLORE` enters `RECOVER` under the shared stall condition. Mining-blocked,
-wave-unsafe backtracking, dome-waiting, and fishbone mode changes remain within
-`EXPLORE`.
+- open-tile A* travel time to an interaction boundary; and
+- straight drilling time, including tile movement and drill time.
 
-### `INTERACTION`
+It follows A* unless direct drilling is faster. Re-scanning live
+interactability replaces target-completion lists: exhausted Chambers, Caves, and
+ore simply stop qualifying. Regrowing or repeatable Caves may qualify again.
 
-`INTERACTION` owns one locked local target from approach through completion. The
-existing ore, Chamber, and Cave target references identify the handler without
-a parallel interaction-kind state. Chamber and Cave preparation uses one shared
-reserved-resource reference and one shared wait counter. Game-object state
-identifies the current phase; the teacher does not persist duplicate phase flags
-when the phase can be derived. The shared scan, route choice, decision event,
-and subtype contracts are defined in [the local interaction model](interaction.md).
+## Search and mining
 
-It enters `EXPLORE` when the interaction completes; `RETURN` when a wave or
-direct-return deadline preempts it or an acquired chamber artifact needs direct
-handoff; and `RECOVER` under the shared stall condition. A wave expires an
-unfinished local target. After defense, `EXPLORE` scans again from the keeper's
-current position instead of resuming a distant target.
+The root task searches for the relic with a deterministic fishbone pattern:
 
-Temporary `RECOVER` interruption preserves the active interaction task.
-Ordinary ore completion or preemption records the active vein as a cache site
-before clearing its live target.
+- descend a central shaft;
+- mine alternating horizontal corridors spaced by the current reveal radius;
+- bypass a revealed border laterally until downward progress is possible;
+- record completed corridor cells as possible future descent frontiers;
+- choose the nearest reachable, wave-safe untried frontier when a descent ends.
 
-### `CARRY`
+A resource `SEARCH` uses the same geometry but scans only the requested ore
+type, while still allowing Chambers and Caves to interrupt it. `MINE` owns the
+target coordinate, connected-vein coordinates, and selected A*/direct approach.
+After the vein clears it records the first mined coordinate as a cache site and
+pops. The parent resource search completes only when a cache contains the
+required amount. Before another task diverts the keeper, the active search
+stores its current corridor coordinate; after the diversion it follows a fresh
+A* path back there and continues the same fishbone phase.
 
-`CARRY` owns ordinary cache collection only. Resource work executes a bounded
-quota, reselects interchangeable Drops by unmet demand and then open-path travel,
-rechecks the real next leg against wave safety, and uses the configured pickup
-action. It stores resource-type counts rather than a route of Drop identities.
+## Resource acquisition and cleanup
 
-Chamber and Cave resource preparation, activation, and detached-artifact
-recovery remain in `INTERACTION`; they never borrow `CARRY`. `CARRY` enters
-`RETURN` when a wave starts, the plan ends, the next pickup becomes unsafe, or
-bounded pickup/path failures are exhausted, and enters `RECOVER` under the
-shared stall condition.
+`ACQUIRE_RESOURCE` owns the resource type, requested carried amount, selected
+cache site, and current physical Drop. If no qualifying cache exists it pushes
+a resource `SEARCH`; it never turns the interaction itself into an exploration
+mode.
 
-### `RETURN`
+The Scanner Cave requests two iron from the nearest cache that contains at
+least three iron when selected. Other resource receivers request one exact
+resource. Pickup and delivery always use physical Drops and normal input.
 
-`RETURN` owns physical return and station task arbitration. Outside the station,
-it uses open-map A* only to reach the mine mouth, moves upward along the dome
-shaft to the main Laser station height, aligns with that exact `Usable`, and
-enters through normal input. It never deliberately enters an optional cellar
-station.
+Ordinary return-to-dome behavior does not collect resources. After a wave
+settles, the controller counts currently reachable cached Drops. It pushes
+`CLEANUP_RESOURCES` only when that live count reaches twice the Engineer's
+current bounded full-load count. Cleanup fills a supported load, delivers it,
+and repeats until no reachable cached Drop remains. Repeatedly unreachable
+Drops are ignored only by that cleanup task.
 
-Inside the station, it resolves tasks in this order:
+## Chambers, Caves, and rewards
 
-1. finish mandatory artifact delivery, handoff, or detachment recovery;
-2. absent Gadget preemption, enter `UPGRADE` for the affordable selected target
-   from the highest nonempty intent class;
-3. enter `DEFEND` for any other active or imminent wave; and
-4. otherwise issue the normal station-close action while entering `EXPLORE`, so
-   the still-focused computer cannot be entered again.
+`INTERACT` owns its runtime target and all in-progress evidence. Defense never
+invalidates this context.
 
-If the exact Gadget detaches before authoritative handoff, `RETURN` freezes its
-coordinate and enters `INTERACTION` for bounded clearance. Ordinary outside-station
-navigation can enter `RECOVER` under the shared stall condition.
+- Gadget Chambers and Power Core Chambers excavate revealed cover, activate
+  the normal usable, carry the exact artifact directly to the dome, recover a
+  detached artifact by clearing its neighboring tiles, and wait for the
+  mandatory choice popup.
+- A Power Core Chamber pushes acquisition of one water before delivering it to
+  the exact receiver.
+- Scanner pushes acquisition of two iron, crosses the two receivers, presses
+  the usable once, and succeeds only when map reveal distance increases.
+- Drone pushes acquisition of one water and succeeds only when its owned
+  Squidley exists after opening.
+- Mushroom and Helmet press the usable once and validate movement speed and
+  mine-camera zoom respectively.
+- Portal chooses one ordinary cached resource and succeeds only when its
+  detachment increases the corresponding stored inventory.
+- Iron Tree, Cobalt, and Water snapshot currently untaken reward nodes, activate
+  each through normal input, verify the exact new Drop, detach it, and record
+  its cache location. Later regrowth is a future scan, not part of the current
+  interaction.
 
-### `UPGRADE`
+Reward choice waits for authoritative offers and animation. Supported choices
+are ranked by the next upgrade intent, then by stable catalog order; an
+affordable visible reroll may be used for unsuitable offers, otherwise the
+supported shred fallback is allowed. Closing the popup without confirming the
+chosen result fails the teacher.
 
-`UPGRADE` owns one station upgrade opportunity. It freezes the selected intent
-and current concrete runtime target, opens and navigates the TechTree through
-configured actions, and accepts a purchase only after the matching game signal.
+## Upgrades
 
-After a confirmed purchase it re-resolves pending intents and runtime costs and
-may buy another affordable selected target in the same popup. It closes normally
-when no selected target remains affordable or repair reaches its frozen target.
-Once `StationInputProcessor` returns, it enters `DEFEND` if defense is required
-and otherwise `RETURN` for fresh station arbitration. Purchase rejection or
-bounded UI-navigation exhaustion fails closed.
+Upgrade intents are persistent knowledge, not controller states:
 
-### `DEFEND`
+- repeated drill hits request drill strength;
+- material wave damage requests combat improvement;
+- low dome health requests repair;
+- a post-wave cleanup backlog requests mobility, alternating the less-developed
+  speed or carry-strength chain.
 
-`DEFEND` owns the battle station lifecycle. It opens battle input when required
-and aims on physics ticks while a monster wave is present. During the supported
-in-station path it does not leave merely because `wavepresent` ended; it waits
-for `wavebattle` settlement.
+Whenever an ordinary task reaches the base computer, an affordable pending
+target pushes `UPGRADE`. The task freezes one exact target while navigating the
+UI so new observations cannot redirect a purchase mid-popup. Confirmed purchase
+removes a fulfilled intent and immediately re-evaluates the next affordable
+target. A wave closes the menu and then pushes defense.
 
-It enters `RETURN` if the keeper leaves the station, settlement restores station
-input, or a settled interaction still needs arbitration. Without an interrupted
-interaction it may enter `EXPLORE` when settlement already restored keeper input.
+## Defense and recovery
 
-### `RECOVER`
+`DEFEND` alone owns travel to the main Laser station. It is pushed when the wave
+is active or the live path-and-load return estimate reaches the station-entry
+margin. It enters battle through normal station input, aims the normal Laser at
+the eligible target requiring the least signed turn, and fires only when the
+selected target is currently damageable and is the first supported collider.
+After the wave settles it exits battle, pops, and evaluates the live cache count
+for cleanup.
 
-`RECOVER` records the interrupted movement state and probes clockwise beginning
-with the direction immediately after the failed one. Each probe continues until
-the keeper moves one directed tile. The policy says an effective drill hit
-resets the probe's four-second timer but does not complete recovery.
+Directed movement or drilling that makes no one-tile progress for four seconds
+pushes `RECOVER`. It probes the four cardinal directions in bounded order and
+pops after one tile of movement. A wave may push defense above recovery exactly
+as it can above any other ordinary task.
 
-A one-tile move resumes the interrupted state. A timeout advances to the next
-direction; four timed-out directions fail closed. Any active wave enters
-`RETURN`; interrupted `DESCEND` or `BRANCH` first saves the probe coordinate and
-continuation when no saved target exists.
+## Checkpoints, observation, and failure
 
-### State Preserved Across Interruptions
+The official save owns game state. The sidecar stores persistent teacher
+knowledge plus the task stack and stable references to Drops, Chambers, and
+Caves. A missing required reference or malformed sidecar fails loading. The
+current sidecar version is intentionally incompatible with the removed state
+machine.
 
-- During ordinary nonterminal interruption, saved work and its `DESCEND` or
-  `BRANCH` continuation survive mining, carrying, return, upgrade, defense,
-  cleanup, and recovery. Terminal-frontier handling intentionally replaces that
-  continuation with backtracking.
-- Branch row, direction, exact intersection, completed corridor cells, and exact
-  attempted descent origins preserve fishbone/backtracking progress.
-- Pending upgrade intents survive top-level state changes. They may be cleared
-  by a matching fulfilling purchase, authoritative exhaustion, or, for repair,
-  satisfaction of the health-reserve condition.
-- Cache sites and cleanup state survive waves and repeated `CARRY`/`RETURN`
-  trips until no known reachable cached resource remains.
-- An unfinished local ore, Chamber, or Cave target does not survive a wave. The
-  prior scan expires; post-defense exploration may claim it again only if a new
-  radius-ten scan sees it.
-- Once an exact chamber artifact has attached or detached during mandatory
-  delivery, its identity, recovery coordinate, and bounded recovery count
-  survive wave and station interruption until authoritative handoff and choice
-  complete. Power Cores use the same transport rule.
-- Event-driven wave-health tracking preserves the inputs intended for post-wave
-  combat and repair decisions across state changes.
-- Debug checkpoints preserve these same teacher decisions across processes.
-  Runtime object identity is stable only through saved Drop UIDs and restored
-  Chamber/Cave coordinates. Input bindings, held actions, replay buffers,
-  pathfinding previews, and live Laser observations are rebuilt after load.
+The live status and each replay event expose the task stack from active task to
+root. Replay task events are `task_pushed` and `task_popped`; their `detail`
+contains the affected task summary, while `reason` contains the concrete
+trigger. The dashboard does not reconstruct a second controller model.
 
-## Supported Natural Cave Tasks
-
-- The shared encounter and routing contract is defined in
-  [`interaction.md`](interaction.md). Scan only during ordinary exploration and
-  consider only revealed allowlisted Caves within straight-line distance `10`.
-  Record the deviation decision before movement, then use the faster estimate
-  between A* travel to the Cave boundary and direct digging. Never inspect
-  hidden map data or select a frontier to search for a Cave.
-- A Scanner task chooses the nearest known cache that had more than two iron
-  resources when preparation began, carries two iron Drops back, activates the
-  focused `Usable` through configured input, and succeeds when
-  `map.revealdistance` increases. It does not model receiver internals.
-- A Drone task reserves and carries one exact loose water Drop to its receiver.
-  It succeeds only after opening finishes and the Cave's dispatcher owns a
-  team-matching Squidley created by the exact target-version script.
-- An Iron Tree, Cobalt, or Water task snapshots only the exact untaken reward
-  nodes present when the revealed Cave is claimed. The teacher enters each
-  focused `Usable` without unrelated cargo, activates it through configured
-  input, confirms both that the snapshotted node became taken and that exactly
-  one new Drop of the expected type appeared, then confirms exclusive carry and
-  uses the configured drop action to turn it into an ordinary cache. Iron Tree
-  snapshots at most five iron rewards, Cobalt at most two cobalt rewards, and
-  Water at most three water rewards.
-- Iron Tree and Water are runtime-validated supported tasks. Cobalt uses the
-  same target-version reward contract but remains provisional until a
-  representative run confirms its complete two-reward path.
-- Mushroom and Helmet each press the focused interaction once. Mushroom
-  succeeds when observed keeper speed increases; Helmet succeeds when observed
-  mine-camera zoom changes. Neither task validates the Cave's internal reward
-  state.
-- Portal first uses an ordinary ore already carried, or otherwise fetches the
-  nearest reachable ordinary ore from a known cache. It carries that resource
-  into the passive entrance without pressing interaction and succeeds when the
-  resource detaches and matching stored inventory increases. One successful
-  delivery marks that Portal complete for the run.
-- The decision and outcome are separate replay events:
-  `interaction_decided` records why the teacher deviated and its selected
-  route; `cave_completed` or `cave_interaction_failed` records the
-  observed before/after result and reason.
-- Completing the initial snapshot marks that Cave complete for the run. Iron
-  Tree and Water regrowth does not extend the task and is not revisited by the
-  current teacher; their opportunistic renewable revisits remain roadmap work.
-- Active or imminent waves and hard return deadlines expire the locked Cave
-  task; later work requires a fresh local scan. Missing exact nodes, inconsistent
-  lifecycle state, ambiguous reward creation, or exhausted bounded interaction
-  retries fail closed.
-
-## Exploration and Mining Policy
-
-- Do not add an `ALIGN` submode or a separate top-level travel state. Use
-  `DESCEND`, `BRANCH`, and `BYPASS` only to open new tiles; use open-map A* for
-  travel over confirmed-open coordinates.
-- When departing from the Engineer spawn marker or from the main Laser keeper
-  marker after the computer closes, build the mine path from the confirmed-open
-  shaft mouth through map A*. Prepend normal-input-realizable orthogonal waypoints
-  from the keeper's actual position horizontally to the runtime dome shaft
-  x-coordinate and vertically toward the mouth. Keep the bridge outside the
-  shared map graph and never hard-code team-one coordinates.
-- Accept an authoritative reveal distance of one or two tiles. Fishbone spacing
-  is `1 + reveal_distance * 2`: three rows normally and five rows after the
-  Scanner Cave applies reveal distance two. Any other value is unsupported and
-  fails preflight.
-- Use only revealed Tiles, recorded open coordinates, and the open A* graph for
-  planning. Never inspect hidden resource or map data and never infer full map
-  completion from one terminal pocket or an exhausted recorded frontier set.
-- Before `DESCEND` or `BRANCH` is preempted, freeze the exact open work coordinate,
-  mode, and branch direction. A newly claimed Gadget Chamber must freeze this
-  continuation before `INTERACTION` moves the keeper. Return by open A* and resume only
-  after reaching the exact saved coordinate.
-- For non-adjacent revealed ore, compare the shortest open-approach ETA with
-  direct cardinal tunneling. The tunneling ETA may use movement time and only
-  revealed intervening Tiles' remaining health, runtime drill strength,
-  hard-tile modifier, per-hit cap, drill buff, and hit cooldown. Use open travel
-  unless it is slower; direct tunneling is selected only when the A* estimate is
-  longer.
-- Ordinary `INTERACTION` mining clears the connected revealed vein without pickup, records its
-  loose resources as a cache site, and resumes `EXPLORE` absent preemption. A
-  revealed adjacent border is a known branch endpoint: return to the exact shaft
-  intersection, do the other side, then advance the branch row. Do not enter
-  `RETURN` or probe the border through `RECOVER` merely because of that endpoint.
-- On a border below `DESCEND`, preserve the target branch row, search right
-  first, reverse once, and adopt the first column whose tile below is not
-  confirmed border. Center on its exact open coordinate before descending.
-- Border on both bypass sides terminates only that frontier and forces persistent
-  cleanup even below its normal threshold. Search completed branch corridors
-  newest to oldest for later descent origins, record only actually traversed
-  open cells, key attempts by exact origin, never retry one, and restore each
-  corridor's own row plus branch spacing.
-- Rank legal backtracking origins by open A* travel and require a dynamically
-  wave-safe round trip before freezing one. A temporarily unsafe origin remains
-  unattempted while the teacher waits through the wave. A movement stall enters
-  `RECOVER`; it is not evidence of geometric exhaustion. With no legal recorded
-  origin, report mining blocked while continuing upgrade and defense work.
-
-## Resource Collection and Return Policy
-
-- Do not store a requested level, concrete upgrade ID, or cost in either the
-  pending intent set or a carry plan, and do not store concrete Drop routes in a
-  carry plan. Resolve current upgrade targets and runtime costs during
-  reservation and purchase.
-- Reserve stored and carried resources through the same resource-aware class
-  arbitration used for purchase. When a higher class has no affordable target,
-  reserve every positive-cost resource type used by its current targets. A later
-  class may use other resource types, but never a reserved type. Consume each
-  fully funded selected cost before recalculating candidates and the next
-  deficit so no mineral is counted twice.
-- Open the resource `CARRY` window when a load-capped preview's collection ETA,
-  loaded return ETA, and two-second station-entry margin reach the remaining wave
-  time. The margin represents the observed 1.6–2.0 seconds from dome entrance to
-  main-station task selection.
-- Refresh the pathfinding-heavy preview at most once per second and invalidate it
-  immediately after cache, pickup, or upgrade changes. Start ordinary cache
-  collection only from `EXPLORE`, after the locked interaction has completed.
-- On resource `CARRY` entry, diagnose mobility from the preview and rebuild the
-  bounded plan once so a new mobility intent affects current-trip reservation.
-- Plan across all reachable known cache sites. Rank the next pickup by earliest
-  unmet resource demand and then open-path time; use current load for outbound
-  legs, prospective load for return, include pickup delay, and admit a pickup
-  only when the complete plan still meets the station margin.
-- Store quota counts by runtime resource type and reselect the nearest valid
-  matching Drop during execution. Recheck the actual next leg against the hard
-  wave budget. Same-type Drops remain interchangeable; behavior for overlapping
-  Drops of different types remains undecided. When an unresolved resource
-  endpoint produces no directional input, consume the bounded pickup failure
-  budget instead of treating a nonempty path as movement progress. Active cache
-  cleanup excludes the repeatedly failing Drop before returning.
-- The 15-second return target diagnoses mobility pressure only. It does not
-  forbid a wave-safe pickup, trigger cleanup, or control live pickup admission.
-- Funding one intent does not end collection. Continue toward later deficits,
-  and treat resources that reduce no current deficit as lower-priority filler. A
-  pending intent or deficit is not required for a safe filler trip.
-- During ordinary resource `CARRY`, enter `RETURN` when the next pickup would
-  cross the 55% speed-ratio floor, the wave-safe budget is exhausted, no planned
-  cached resource remains, or bounded pickup/path failures are exhausted.
-- If return finishes before the station-entry window, exit the station once.
-  While the dynamic direct-return deadline is active, wait inside the dome but
-  outside the station without resuming descent or repeatedly entering. Otherwise
-  ordinary `EXPLORE` may resume. Re-enter when remaining wave time reaches the
-  same two-second station-entry margin or another confirmed station task requires
-  it.
-
-### Cache Cleanup
-
-- Latch cleanup while mining when known reachable cached resource Drops reach
-  twice the current full-load count under the 55% speed-ratio floor. Do not
-  interrupt the current mining period at the threshold.
-- Activate cleanup after the next settled `DEFEND` and its post-defense upgrade
-  opportunity, then start through `CARRY` only after `Keeper1InputProcessor`
-  becomes active.
-- Execute as many dynamically wave-safe `CARRY`/`RETURN` trips as needed,
-  including a final partial load. Preserve cleanup and interrupted fishbone work
-  through wave, return, defense, and upgrade interruption.
-- Clear cleanup only when no known reachable cached resource remains. Drops
-  rejected by the bounded path/pickup failure policy must not block cleanup
-  forever.
-
-## Gadget Retrieval and Choice Policy
-
-- Treat a revealed Gadget Chamber as part of the current teacher loop, distinct
-  from the final Relic Hunt relic. It preempts ordinary ore, resource collection,
-  affordable upgrades, and merely imminent waves; only an already-active monster
-  wave and its settlement may interrupt excavation or activation. Such an
-  interruption expires the local Chamber target unless exact artifact transport
-  has already begun.
-- Keep the target-version Gadget inventory and compatibility policy in the
-  standalone data-only `gadget_catalog.gd`. List every canonical base Gadget ID,
-  document what it does and why it is supported or rejected, store only facts not
-  authoritative in game data, normalize team/player-prefixed runtime IDs, and
-  fail closed for unknown IDs. Preload the catalog from the teacher so selection
-  and the normal Godot parse check consume the same policy source.
-- Classify each offer independently by gameplay benefit and controller impact.
-  Initial benefit labels are combat, survival/repair, movement, drilling, and
-  carrying/logistics. A label never grants support: only exact versioned IDs on
-  the allowlist are selectable after their complete base semantics have been
-  validated. A no-new-key Gadget may still be unsupported when it changes
-  pathfinding, resource ownership or motion, usable focus, carried-object types,
-  transient stats, or another planner assumption.
-- Rank supported offers by the pending intent selected through current class
-  arbitration, including the chosen mobility arm; then use deterministic
-  canonical-ID order. When no non-shred offer is supported, select the exact
-  `shredgadgettocobalt` fallback. Gadget selection never clears the corresponding
-  upgrade intent.
-- In either a Gadget or Supplement choice, reroll when the current best offer
-  does not benefit the selected intent, the normal reroll button is visible and
-  enabled, and stored water is nonzero. Do not reserve water in advance. Submit
-  the focused button through normal UI input and re-evaluate each regenerated
-  offer set; when no reroll is available, select the current supported offer or
-  shred fallback.
-- Handle `GadgetChoiceInputProcessor` as a mandatory cross-cutting modal, not a
-  top-level state or `UPGRADE`. Wait for authoritative offers and animation
-  readiness, freeze one target, navigate only through configured `ui_*` actions,
-  submit `ui_select` once, wait for processor closure, and require a selected
-  non-shred ID to appear in `GameWorld.boughtUpgrades`. Never call popup, focus,
-  or server-selection methods directly.
-- Excavate only the chamber's revealed remaining cover, wait through
-  authoritative `OPENING`, and activate the exact focused `Usable`. Require an
-  empty load; when carrying resources, use the configured drop action, record
-  them as a cache, and resume the chamber instead of making an unloading trip.
-- Keep Gadget Drops outside the resource quota planner. A newly attached exact
-  `Drop.type == CONST.GADGET` that was absent before activation confirms
-  acquisition; the broader `carryableType == "gadget"` category is insufficient.
-  Freeze delivery until the exact Gadget popup completes and operate only a
-  popup whose `droptype == CONST.GADGET`.
-- Treat disappearance of the exact carried Gadget as delivery only after
-  authoritative handoff makes it independent or absorbed, or removes it while
-  opening the choice flow. If the same live Drop detaches first, freeze its map
-  coordinate and preserve recovery through waves.
-- Recovery may clear only already-revealed, destructible ordinary dirt or
-  resource Tiles in the eight neighboring cells around that fixed coordinate.
-  Skip the center, border, chambers, relic structures, nests, and every other
-  special Tile type; record mined resource areas as caches, then reacquire only
-  the exact Drop within `INTERACTION`.
-- Permit three complete detachment recoveries and fail closed on the fourth. Do
-  not recenter the clearance window as the rigid body drifts, add a top-level
-  state, teleport the Gadget, or alter collision masks.
-
-## Power Core Chamber and Supplement Policy
-
-- Identify a Power Core Chamber by exact `drop_type == CONST.POWERCORE`. While
-  its local interaction remains active, excavating and activating it is
-  exclusive except for a wave or an already attached/recovering Gadget handoff.
-  A wave expires the Chamber target unless exact Power Core transport has begun.
-- Excavate the chamber cover, then use a reachable physical water Drop from a
-  known cache immediately. Before fetching water, clear the single revealed,
-  destructible ordinary tile directly above the chamber's top receiver and use
-  that open tile as the fixed delivery destination, so the carried Drop crosses
-  the receiver's `Area2D`. If no cached water exists, continue the existing
-  fishbone exploration solely for water: remember revealed ore and Gadget
-  Chambers, but do not act on them until the core task completes. Require
-  authoritative `ResourceGrabber.spent` before treating the water as accepted.
-- Wait for exact chamber `OPEN`, unload ordinary cargo, activate its focused
-  `Usable`, and require a newly attached exact
-  `Drop.type == CONST.POWERCORE`. From that point, use the existing Gadget
-  exact-Drop transport, detachment recovery, wave interruption, and dome handoff
-  mechanics, parameterized by the Power Core type.
-- Finish an already attached or recovering Gadget handoff before claiming or
-  resuming a Power Core task. Neither artifact task may unload the other's exact
-  Drop as ordinary cargo.
-- Dispatch the resulting shared popup only when `droptype == CONST.POWERCORE`.
-  Keep the target-version allowlist in `supplement_catalog.gd`, normalize runtime
-  team/player prefixes, prefer an allowlisted benefit for the selected planning
-  intent, and otherwise choose deterministic supported order or exact shred.
-  Unknown, control-changing, planning-invalidating, or new-action Supplements
-  fail closed to shred. Confirm a non-shred runtime ID in
-  `GameWorld.boughtUpgrades` after popup closure. After completion, resume normal
-  priority: a remembered Gadget Chamber, then remembered revealed ore, then
-  ordinary exploration.
-
-## Upgrade Policy
-
-### Intent Arbitration
-
-- Maintain a deduplicated set of semantic intents and seed `drill` at startup.
-  The survival class (`combat`, `repair`) outranks the development class
-  (`drill`, `mobility`). An affordable target in a higher class wins. When no
-  target in that class is affordable, reserve every positive-cost resource type
-  used by its current targets; a lower-class target may proceed only when it is
-  affordable and uses none of those reserved resource types. For example, an
-  unfunded cobalt-only repair must not block an iron-only development upgrade.
-- Resolve every pending intent to its next current runtime target. Among targets
-  in the same class that are not blocked by a higher class's resource types,
-  prefer affordable over unaffordable, lower total current cost among affordable
-  targets, lower total current deficit otherwise, and use `combat > repair` or
-  `drill > mobility` only as the final stable tie.
-- Enqueue `combat` after a settled wave whose net health loss exceeds the
-  configurable per-wave limit, initially 15% of maximum health. Alternate
-  confirmed combat purchases between Laser attack strength first and dome
-  maximum health.
-- Re-enqueue `drill` after its confirmed purchase only when a subsequently
-  observed tile reaches the configurable effective-hit limit, initially five.
-- For each resource carry plan, calculate the maximum load under the 55% speed
-  floor and the maximum load that can return from the planned final pickup within
-  the 15-second diagnostic target. Enqueue `mobility` when safe capacity divided
-  by full capacity is below 75%.
-- Resolve movement-speed and carry-strength targets independently from current
-  runtime state, apply their `PropertyChange` semantics hypothetically, and
-  prefer the arm with the larger return-time saving over the same distance/load;
-  speed wins ties. A later resource plan may update the arm until `UPGRADE`
-  freezes a concrete target.
-- Keep each intent at most once. Treat only exact prerequisites for supported
-  health and repair targets as part of those intents; ignore unrelated TechTree
-  branches.
-
-### Station Opportunities
-
-- Provide independent ordinary upgrade opportunities before and after defense.
-  A mandatory Gadget task coupled to an active wave retains the `RETURN`
-  priority documented above.
-- When the resource-aware selected target is affordable, enter `UPGRADE` before
-  ordinary defense because upgrade input pauses gameplay. Freeze the intent and
-  decision-time target, use normal UI actions, and clear fulfillment only after
-  the matching purchase signal.
-- Re-run arbitration after every purchase. After `wavebattle` settlement,
-  resolve all candidates and targets from current state so a new survival intent
-  can preempt development and resources credited during defense are usable.
-- The normal post-defense path remains inside the station and returns to fresh
-  station arbitration before closing, providing the independent post-defense
-  upgrade opportunity.
-- One opportunity may confirm multiple sequential purchases. An unaffordable
-  selected target never requires a purchase.
-
-### Repair Reserve
-
-- Treat dome health as a bounded reserve, not a full-health target. Enqueue
-  `repair` only below 40% of maximum health.
-- When an opportunity first selects repair, freeze its target as
-  `min(current maximum health, max(40% of current maximum health, last settled tracked wave net loss))`.
-  Use zero loss before any tracked settled wave.
-- Calculate net wave loss as the increase in missing health so equal current and
-  maximum-health growth from a pre-defense upgrade cannot hide battle damage.
-- Re-read authoritative health, addability, runtime cost, and affordability
-  after every confirmed `domesandrepair` purchase. Continue until the frozen
-  target, full health, or unaffordability. Do not predict a purchase count or
-  recompute the target after repairs; clear the elevated target when the
-  opportunity closes.
-
-## Defense Targeting Policy
-
-- Select deterministically from valid, alive, non-leaving `Monster` instances
-  registered in the supported team's active wave. Require the monster's actual
-  `getCenter()` aim point to be inside the visible viewport, and never select
-  projectile-group nodes.
-- Exclude `Monster.Type.WORM_ROCK` from intentional pre-aim and fire despite its
-  `Monster` implementation. Leave it in the normal wave lifecycle, never let it
-  authorize fire, and tolerate only unavoidable one-physics-tick incidental
-  collision from cached ray/input timing.
-- Revalidate the retained target on every physics tick. While it remains
-  eligible, keep it without reranking against other candidates and try to kill
-  it before changing targets. If it becomes ineligible, replace it immediately.
-- When the retained target is currently damageable by runtime `canBeHit()` and
-  `invulnerable` state, keep it. Otherwise select a damageable eligible target
-  when one exists. Only when no damageable target exists may the teacher retain
-  or select an eligible non-damageable target for pre-aim, and it must not fire
-  at that target. Never hard-code damageability from monster type or apparent
-  animation phase.
-- For initial selection and required reselection, rank the applicable candidate
-  tier by the smallest absolute signed angular error along the normal Laser's
-  actual steering path. Break equal-angle ties by runtime monster UID and then
-  instance ID. Do not rank by dome distance, alternate sides for fairness, or
-  expire an otherwise eligible retained target.
-- Read the enabled raycasts in the weapon's collision-priority order and consume
-  their cached physics result without forcing a same-frame refresh. If their
-  first collider is a different eligible and currently damageable monster,
-  adopt it as the retained target and fire in the same physics tick. Never skip
-  an ineligible projectile, `WORM_ROCK`, or other blocker to inspect a collider
-  behind it.
-- Stop steering and fire only while the exact acquired target is also runtime
-  damageable. Release fire immediately when acquisition is lost. Do not use a
-  fixed angular dead zone, early-fire braking, random sweeping, direct Laser
-  angle mutation, or direct weapon-field mutation.
-- Observe normal-Laser aiming without changing selection or control behavior.
-  Live status and every replay snapshot identify the selected monster by its
-  runtime UID, wave counter, and kind; include current damageability, signed
-  angular error in radians, and the first collider with its enabled-ray order.
-  Identify non-monster colliders by category, runtime class, and session-only
-  instance ID.
-  Record semantic target, damageability, and first-collider changes as replay
-  events, with concrete target-switch reasons in the event header. Older replay
-  files may omit the aim object.
-- Leave persistent ineligible-blocker timeouts open until fresh targeting
-  telemetry distinguishes transient intersections from a repeatable stall.
-- Emit weapon controls only while the keeper is inside the station and
-  `BattleInputProcessor` is active. Recover battle input when a wave still needs
-  defense and wait for authoritative `wavebattle` settlement before the normal
-  station exit path.
-
-## Known Static Code-Policy Gaps
-
-These findings do not relax policy. They require correction or runtime evidence:
-
-- `DESCEND`, `BRANCH`, and `BYPASS` border reads do not independently assert
-  reveal state, and adjacent-vein continuation scans the runtime ore collection
-  without an explicit reveal check.
-- The recovery mining callback resets a probe timer without inspecting its
-  reported damage amount, so it does not independently prove an effective hit.
-- Return navigation treats `dome.stations.front()` as the main Laser station,
-  while preflight validates the normal Laser Dome but does not independently
-  prove that the first station is its main interaction station.
+Unsupported required objects, UI state, paths, resource ownership, or observed
+effects fail closed, release input, record `teacher_failed`, and emit the
+teacher's `failed` signal. Failure is not a task.

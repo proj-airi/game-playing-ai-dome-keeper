@@ -73,7 +73,7 @@ const keeperRows = computed(() => snapshot.value
             </option>
           </select>
           <div class="min-w-60 flex-1">
-            <strong class="capitalize">{{ dashboard.selectedEvent.value.transition ? `${dashboard.selectedEvent.value.transition.from} → ${dashboard.selectedEvent.value.transition.to}` : dashboard.selectedEvent.value.type.replaceAll('_', ' ') }}</strong>
+            <strong class="capitalize">{{ dashboard.selectedEvent.value.type.replaceAll('_', ' ') }}</strong>
             <span class="ml-2 text-sm text-neutral-500">{{ dashboard.selectedEvent.value.reason }}</span>
           </div>
         </div>
@@ -86,19 +86,30 @@ const keeperRows = computed(() => snapshot.value
         <section class="surface grid gap-4 p-5 sm:grid-cols-3">
           <div>
             <p class="data-label">
-              Current state
-            </p><strong class="text-2xl text-primary-500">{{ snapshot.teacher.state }}</strong>
+              Active task
+            </p><strong class="text-2xl text-primary-500 capitalize">{{ snapshot.teacher.tasks[0]?.type ?? '—' }}</strong>
           </div>
           <div>
             <p class="data-label">
-              Exploration
-            </p><strong>{{ snapshot.teacher.explore_mode ?? '—' }}</strong>
+              Task detail
+            </p><strong class="capitalize">{{ snapshot.teacher.tasks[0]?.detail ?? '—' }}</strong>
           </div>
           <div>
             <p class="data-label">
               Run time
             </p><strong>{{ time(snapshot.run_time_seconds) }}</strong>
           </div>
+        </section>
+
+        <section class="surface mt-4 p-5">
+          <h2 class="m-0 text-xl font-650">
+            Task stack
+          </h2>
+          <ol class="mt-3 grid gap-2">
+            <li v-for="(task, index) in snapshot.teacher.tasks" :key="`${index}-${task.type}-${task.detail}`" class="status-row capitalize">
+              <span>{{ index === 0 ? 'Active' : `Suspended ${index}` }}</span><strong>{{ task.type }}{{ task.detail ? ` · ${task.detail}` : '' }}</strong>
+            </li>
+          </ol>
         </section>
 
         <div class="mt-4 grid gap-4 md:grid-cols-2">

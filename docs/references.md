@@ -12,6 +12,11 @@ This page collects external resources useful for understanding and maintaining t
 - [Dome Keeper Caves](https://domekeeper.wiki.gg/wiki/Caves) — A supplemental community overview of ordinary and special Cave rewards; target-version recovered scenes and runtime recordings remain authoritative for implementation.
 - [Dome Keeper X-ray Cave](https://domekeeper.wiki.gg/wiki/X-ray_Cave) — A supplemental description of the two-iron Scanner Cave and its reveal-distance reward, used alongside the recovered target-version lifecycle.
 
+## Game AI Architecture
+
+- [The AI Systems of Left 4 Dead](https://steamcdn-a.akamaihd.net/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) — Michael Booth's Valve presentation describing the `Continue`, `ChangeTo`, `SuspendFor`, and `Done` Action transitions, including suspended Action resumption and reason strings for runtime debugging; it is the design reference for the teacher's interruptible task stack.
+- [Source SDK 2013: `NextBotBehavior.h`](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/server/NextBot/NextBotBehavior.h) — Valve's public NextBot Action and Behavior implementation, used as the upstream code reference for stack-based task suspension, completion, and resumption without retaining a separate top-level state machine.
+
 ## Mod Development and Godot 4.3
 
 - [Dome Keeper Mods: Getting Started](https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started) — The official environment setup guide used to define this repository's Dome Keeper modding workflow.

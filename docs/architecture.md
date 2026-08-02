@@ -15,7 +15,8 @@ implements its Dome Keeper game-playing integration.
 ## Current Implementation
 
 - The Godot mod exposes manual collection controls and connects the YOLO
-  collector to one in-process, seven-state rule teacher.
+  collector to one in-process rule teacher driven by an interruptible task
+  stack.
 - The rule teacher currently combines high-level task selection, navigation,
   upgrades, defense, and near-real-time control. It reads privileged Godot
   runtime state and emits normal configured game input actions. It is currently

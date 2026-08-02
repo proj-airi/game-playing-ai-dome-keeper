@@ -2,6 +2,7 @@ export enum DashboardMode { Live = 'live', Replay = 'replay' }
 export interface Resources { iron: number, cobalt: number, water: number }
 export interface MonsterGroup { kind: string, count: number, health: number, max_health: number }
 export interface LeveledValue { value: number, level: number }
+export interface TeacherTask { type: string, detail?: string }
 export interface LaserAimObject { category: string, kind: string, uid: number | null, counter: number | null, instance_id: string | null }
 export interface LaserAim {
   selected_monster: LaserAimObject | null
@@ -12,9 +13,10 @@ export interface LaserAim {
 export type StatusSnapshot = { available: false, run_time_seconds: 0 } | {
   available: true
   run_time_seconds: number
-  teacher: { state: string, explore_mode: string | null }
+  teacher: { tasks: TeacherTask[] }
   keeper: {
     carried_resources: Resources
+    carried_artifact: string | null
     stats: {
       movement_speed: { base: number, current: number, level: number }
       carry_strength: { speed_loss_per_carry: number, current_slowdown_percent: number, level: number }
@@ -39,7 +41,7 @@ export interface ReplayRecording {
     movie_frame: number
     type: string
     reason: string
-    transition: { from: string, to: string } | null
+    detail: unknown
     state: StatusSnapshot
   }>
 }
