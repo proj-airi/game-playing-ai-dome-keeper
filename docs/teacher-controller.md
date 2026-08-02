@@ -142,13 +142,14 @@ resource. Pickup and delivery always use physical Drops and normal input.
 Ordinary return-to-dome behavior does not collect resources. After a wave
 settles, the controller counts currently reachable cached Drops. It pushes
 `CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
-full-load count. Cleanup fills a supported load, delivers it, and repeats until
-no reachable cached Drop remains. Its reserved Drop guides navigation; inside
-pickup range it collects whichever eligible cached Drop the game currently
-focuses. A Drop that leaves every recorded cache loses its reservation, and
-repeatedly unreachable Drops are ignored only by that cleanup task. Cleanup
-also abandons a Drop when its path distance stops decreasing before pickup,
-which covers Drops wedged into or physically blocked inside narrow pockets.
+full-load count. Cleanup fills a supported load, or returns early once its load
+makes the current planned upgrade affordable, then repeats until no reachable
+cached Drop remains. Its reserved Drop guides navigation; inside pickup range
+it collects whichever eligible cached Drop the game currently focuses. A Drop
+that leaves every recorded cache loses its reservation, and repeatedly
+unreachable Drops are ignored only by that cleanup task. Cleanup also abandons
+a Drop when its path distance stops decreasing before pickup, which covers
+Drops wedged into or physically blocked inside narrow pockets.
 Because cleanup never claims side interactions, a delivery leg cannot be
 interrupted by a Chamber or Cave that would otherwise drop the carried load and
 make the controller walk back for it. Each cleanup task records trip evidence
