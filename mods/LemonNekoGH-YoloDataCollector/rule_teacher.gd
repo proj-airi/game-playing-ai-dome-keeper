@@ -1044,7 +1044,7 @@ func _search(task: Dictionary) -> void:
 		var frontier := _find_backtrack_frontier(task)
 		var frontier_status := int(frontier.get("status", FrontierSearch.BLOCKED))
 		if frontier_status == FrontierSearch.READY:
-			_adopt_descent_frontier(task, Vector2i(frontier.coord), int(frontier.row) + _branch_row_step(), "Selected the nearest untried descent frontier")
+			_adopt_descent_frontier(task, Vector2i(frontier.coord), int(frontier.row) + _branch_row_step(), "Selected a spread-out untried descent frontier")
 			return
 		if frontier_status == FrontierSearch.WAITING_WAVE:
 			task.mining_outcome = MiningOutcome.WAITING_WAVE
@@ -3889,11 +3889,13 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 	var saw_unreachable := false
 	var saw_unsupported := false
 	var saw_wave_unsafe := false
+	var keeper_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	for corridor_index in range(task.completed_corridors.size() - 1, -1, -1):
 		var corridor: Dictionary = task.completed_corridors[corridor_index]
 		var cells: Dictionary = corridor.get("cells", {})
 		var best_coord := NO_COORD
 		var best_distance := INF
+		var best_spread := -1
 		for raw_coord in cells:
 			var coord := Vector2i(raw_coord)
 			if task.attempted_descent_origins.has(coord):
@@ -3913,12 +3915,16 @@ func _find_backtrack_frontier(task: Dictionary) -> Dictionary:
 			if not _descent_frontier_trip_is_safe(outward_distance, return_distance):
 				saw_wave_unsafe = true
 				continue
-			if outward_distance > best_distance:
+			var spread := absi(coord.x - keeper_coord.x)
+			if spread < best_spread:
 				continue
-			if is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
+			if spread == best_spread and outward_distance > best_distance:
+				continue
+			if spread == best_spread and is_equal_approx(outward_distance, best_distance) and best_coord != NO_COORD and coord.x < best_coord.x:
 				continue
 			best_coord = coord
 			best_distance = outward_distance
+			best_spread = spread
 		if best_coord != NO_COORD:
 			return {
 				"status": FrontierSearch.READY,

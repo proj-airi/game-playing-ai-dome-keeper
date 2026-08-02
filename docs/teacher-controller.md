@@ -95,7 +95,8 @@ The root task searches for the relic with a deterministic fishbone pattern:
 - mine alternating horizontal corridors spaced by the current reveal radius;
 - bypass a revealed border laterally until downward progress is possible;
 - record completed corridor cells as possible future descent frontiers;
-- choose the nearest reachable, wave-safe untried frontier when a descent ends.
+- when a descent ends, spread attempts across the newest completed corridor
+  before filling adjacent reachable, wave-safe untried frontiers.
 
 A resource `SEARCH` uses the same geometry but scans only the requested ore
 type, while still allowing Chambers and Caves to interrupt it. It first returns
