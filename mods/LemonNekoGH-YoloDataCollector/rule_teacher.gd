@@ -289,6 +289,9 @@ func _process(delta: float) -> void:
 	if _blocked():
 		_release_all(); _reset_progress()
 		return
+	if keeper.isInsideStation and _leaf() == "StationInputProcessor":
+		_tick_tasks(delta)
+		return
 
 	delay = maxf(delay - delta, 0.0)
 	var active_type := _task_type()
@@ -1258,7 +1261,10 @@ func _available_resource(candidate, resource_type := "") -> bool:
 func _cleanup_resources(task: Dictionary) -> void:
 	var full_load := _full_load_count(_carry_loss())
 	var cached_resources := _cached_resources()
-	if not keeper.carriedCarryables.is_empty() and (keeper.carriedCarryables.size() >= full_load or cached_resources.is_empty()):
+	var carried_resources := keeper.carriedCarryables.filter(func(candidate):
+		return candidate is Drop and candidate.carryableType == "resource"
+	)
+	if not carried_resources.is_empty() and (carried_resources.size() >= full_load or cached_resources.is_empty()):
 		_travel_to_station()
 		return
 	var target = task.get("target")
@@ -1275,7 +1281,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 				best_distance = distance
 		task.target = target
 	if not is_instance_valid(target):
-		if keeper.carriedCarryables.is_empty():
+		if carried_resources.is_empty():
 			_pop_task("No reachable cached resource remains")
 		else:
 			_travel_to_station()
