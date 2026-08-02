@@ -215,6 +215,9 @@ chosen result fails the teacher.
 Upgrade intents are persistent knowledge, not controller states:
 
 - repeated drill hits request drill strength;
+- the baseline drill-strength improvement reserves its iron before later
+  combat or Laser spending after the baseline combat upgrade, while an active
+  repair request remains eligible alongside it;
 - combat improvement is pending from run start, alternating attack strength
   and dome health, and material wave damage reinforces it;
 - laser movement is a standing combat-class intent that buys the next
