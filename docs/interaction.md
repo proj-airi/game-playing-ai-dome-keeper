@@ -151,7 +151,8 @@ an excavated Relic Chamber, completing a switch immediately revisits that chambe
 to observe whether it opened; otherwise the root fishbone search scans a bounded
 14-tile area from the Engineer's open tile beside the switch before resuming its
 global frontier search. This matches the supported map's generated switch range
-without reading the hidden Relic Chamber position.
+without reading the hidden Relic Chamber position. Ordinary ore veins and
+post-wave cache cleanup do not interrupt this bounded search.
 
 A revealed Relic Chamber is excavated and observed after one bounded state
 settling interval. If it remains locked, the root relic search remembers the

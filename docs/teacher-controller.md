@@ -185,7 +185,9 @@ invalidates this context.
   Without a remembered chamber, the root fishbone search first scans a bounded
   14-tile area from the Engineer's open tile beside the switch, matching the
   supported map's switch-distance upper bound, then resumes global frontier
-  selection if that area is exhausted. It does not read hidden chamber state.
+  selection if that area is exhausted. While that bounded search is active,
+  ordinary ore veins and post-wave cache cleanup cannot displace it. It does
+  not read hidden chamber state.
 - A Relic Chamber is excavated and remembered when it remains locked. Once it
   opens, the teacher activates the normal usable with no unrelated cargo, carries
   the exact attached Relic to the dome, and recovers it through the shared

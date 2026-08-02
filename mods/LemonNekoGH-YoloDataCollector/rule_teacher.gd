@@ -1867,6 +1867,13 @@ func _scan_interaction(required_ore_type := "") -> bool:
 	)
 	if claimed:
 		return true
+	var relic_search := _root_relic_search()
+	if (
+		required_ore_type == "relic"
+		and not relic_search.is_empty()
+		and Vector2i(relic_search.get("focus_coord", NO_COORD)) != NO_COORD
+	):
+		return false
 	return _claim_ore_interaction("" if required_ore_type == "relic" else required_ore_type)
 
 func _target_is_claimed(target: Variant) -> bool:
@@ -2900,8 +2907,14 @@ func _defend(task: Dictionary) -> void:
 func _finish_defense() -> void:
 	_pop_task("The monster wave has settled")
 	var full_load := _full_load_count(_carry_loss())
+	var relic_search := _root_relic_search()
+	var relic_search_focused := (
+		not relic_search.is_empty()
+		and Vector2i(relic_search.get("focus_coord", NO_COORD)) != NO_COORD
+	)
 	if (
-		_find_task(TaskType.CLEANUP_RESOURCES).is_empty()
+		not relic_search_focused
+		and _find_task(TaskType.CLEANUP_RESOURCES).is_empty()
 		and _reachable_cached_resource_count() >= full_load
 	):
 		pending_intents[UpgradeIntent.MOBILITY] = true
