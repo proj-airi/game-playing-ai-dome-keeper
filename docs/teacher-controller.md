@@ -144,7 +144,9 @@ settles, the controller counts currently reachable cached Drops. It pushes
 `CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
 full-load count. Cleanup fills a supported load, or returns early once its load
 makes the current planned upgrade affordable, then repeats until no reachable
-cached Drop remains. Its reserved Drop guides navigation; inside pickup range
+cached Drop remains. An upgrade-funded return continues into the station after
+automatic resource deposit and ends only after a confirmed purchase. Its
+reserved Drop guides navigation; inside pickup range
 it collects whichever eligible cached Drop the game currently focuses. A Drop
 that leaves every recorded cache loses its reservation, and repeatedly
 unreachable Drops are ignored only by that cleanup task. Cleanup also abandons

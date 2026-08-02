@@ -1481,6 +1481,9 @@ func _at_dome() -> bool:
 	return keeper.isInsideStation or keeper.global_position.y <= _home_position().y + 12.0
 
 func _cleanup_resources(task: Dictionary) -> void:
+	if bool(task.get("returning_for_upgrade", false)):
+		_travel_to_station()
+		return
 	var full_load := _full_load_count(_carry_loss())
 	var cached_resources := _cached_resources()
 	var carried_resources := keeper.carriedCarryables.filter(func(candidate):
@@ -1500,6 +1503,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 			or bool(task.get("returning", false))
 			or funds_upgrade
 		):
+			task.returning_for_upgrade = funds_upgrade
 			_travel_to_station()
 			return
 	var target = task.get("target")
@@ -3599,6 +3603,9 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 			pending_intents.erase(UpgradeIntent.DRILL)
 		else:
 			pending_intents.erase(int(task.active_intent))
+	var cleanup_task := _find_task(TaskType.CLEANUP_RESOURCES)
+	if not cleanup_task.is_empty():
+		cleanup_task.returning_for_upgrade = false
 	_clear_active_upgrade(task)
 	_sync_repair_intent()
 	task.ui_steps = 0
