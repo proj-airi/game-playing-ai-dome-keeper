@@ -60,7 +60,8 @@ Each fixed control tick applies these rules in order:
 3. Being at the base computer with an affordable pending target pushes
    `UPGRADE` from any ordinary task.
 4. `SEARCH`, `ACQUIRE_RESOURCE`, and `CLEANUP_RESOURCES` scan for nearby
-   interactables.
+   interactables, prioritizing revealed Relic Switch and Relic Chambers before
+   optional side interactions.
 5. The active task performs one normal-input step.
 
 Consequently a resource search may be interrupted by another interaction, and
@@ -96,13 +97,19 @@ The root task searches for the relic with a deterministic fishbone pattern:
 - choose the nearest reachable, wave-safe untried frontier when a descent ends.
 
 A resource `SEARCH` uses the same geometry but scans only the requested ore
-type, while still allowing Chambers and Caves to interrupt it. `MINE` owns the
-target coordinate, connected-vein coordinates, and selected A*/direct approach.
-After the vein clears it records the first mined coordinate as a cache site and
-pops. The parent resource search completes only when a cache contains the
-required amount. Before another task diverts the keeper, the active search
-stores its current corridor coordinate; after the diversion it follows a fresh
-A* path back there and continues the same fishbone phase.
+type, while still allowing Chambers and Caves to interrupt it. It first returns
+to the root relic search's saved central-shaft intersection and continues that
+shaft instead of starting a second shaft beside the requesting interaction.
+`MINE` owns the target coordinate, connected-vein coordinates, and selected
+A*/direct approach. After the vein clears it records the first mined coordinate
+as a cache site and pops. The parent resource search completes only when a cache
+contains the required amount. Before another task diverts the keeper, the active
+search stores its current corridor coordinate; after the diversion it follows a
+fresh A* path back there and continues the same fishbone phase.
+
+When defense interrupts a direct-dig `MINE`, that task likewise stores the
+keeper's current mining coordinate. After defense it follows an open path back
+to that coordinate before resuming the same ore target.
 
 ## Resource acquisition and cleanup
 
@@ -117,10 +124,11 @@ resource. Pickup and delivery always use physical Drops and normal input.
 
 Ordinary return-to-dome behavior does not collect resources. After a wave
 settles, the controller counts currently reachable cached Drops. It pushes
-`CLEANUP_RESOURCES` only when that live count reaches twice the Engineer's
-current bounded full-load count. Cleanup fills a supported load, delivers it,
-and repeats until no reachable cached Drop remains. Repeatedly unreachable
-Drops are ignored only by that cleanup task.
+`CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
+full-load count. Cleanup fills a supported load, delivers it, and repeats until
+no reachable cached Drop remains. Its reserved Drop guides navigation; inside
+pickup range it collects whichever eligible cached Drop the game currently
+focuses. Repeatedly unreachable Drops are ignored only by that cleanup task.
 
 ## Chambers, Caves, and rewards
 
@@ -131,6 +139,15 @@ invalidates this context.
   the normal usable, carry the exact artifact directly to the dome, recover a
   detached artifact by clearing its neighboring tiles, and wait for the
   mandatory choice popup.
+- Relic Switch Chambers excavate revealed cover, activate the normal usable,
+  and complete when their live Chamber state is empty and activation has removed
+  the usable. A remembered excavated Relic Chamber is then revisited once to
+  observe whether it opened.
+- A Relic Chamber is excavated and remembered when it remains locked. Once it
+  opens, the teacher activates the normal usable with no unrelated cargo, carries
+  the exact attached Relic to the dome, and recovers it through the shared
+  physical-artifact path if it detaches. Stored Relic inventory completes this
+  interaction; the game-created final wave then uses the ordinary `DEFEND` task.
 - A Power Core Chamber pushes acquisition of one water before delivering it to
   the exact receiver.
 - Scanner pushes acquisition of two iron, crosses the two receivers, presses

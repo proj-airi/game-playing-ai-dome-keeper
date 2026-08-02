@@ -62,23 +62,24 @@ unless an explicit project decision says so.
   that the shared observation cannot diagnose or resume the interaction. Add
   only the narrow state required by that demonstrated failure.
 
-### Complete Relic Hunt
+### Validate Complete Relic Hunt
 
-- After the supported rule-teacher loop is proven, extend the manually started,
-  single-player Engineer and Laser Dome run through the actual Relic Hunt
-  completion condition: discover and activate revealed relic switches, excavate
-  and open the relic chamber, pick up and carry the final relic to the dome
-  through normal configured inputs, resolve the required final act, and confirm
-  success only when `game.over == won`.
-- Preserve the current revealed-information and realizable-action boundaries.
-  Keep Gadget artifacts and their choice flow distinct from the final Relic Hunt
-  relic; current supported Gadget behavior is owned by
-  [`teacher-controller.md`](teacher-controller.md). Extend the allowlist only
-  after validating any newly required Gadget's complete runtime semantics.
-- Before implementing relic control, decide the minimum structured observations
-  or Vision classes needed for relic switches, the chamber, the carried relic,
-  the dome drop point, and terminal win/loss state. Keep them out of the current
-  ore/enemy dataset until annotation and evaluation contracts are decided.
+- The manually started, single-player Engineer and Laser Dome teacher now
+  discovers and activates revealed relic switches, remembers and revisits one
+  excavated Relic Chamber, carries the final relic to the dome through normal
+  configured inputs, and lets the game-created final wave use ordinary defense.
+  It still confirms overall success only when `game.over == won`.
+- Prove the complete chain in a fresh runtime recording. Cover both discovery
+  orders for the chamber and a switch, confirm exact artifact pickup and
+  delivery, and observe the automatically scheduled final defense through its
+  terminal outcome. Keep the revealed-information and realizable-action
+  boundaries described in [`interaction.md`](interaction.md).
+- Keep Gadget artifacts and their choice flow distinct from the final Relic Hunt
+  relic. Extend either allowlist only after validating any newly required
+  artifact's complete runtime semantics.
+- Decide the minimum Vision classes needed for relic switches, the chamber, the
+  carried relic, the dome drop point, and terminal win/loss state before adding
+  them to the current ore/enemy dataset.
 
 ### Expand the YOLO Dataset
 

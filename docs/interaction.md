@@ -2,9 +2,8 @@
 
 This document defines the shared discovery and approach behavior for nearby
 interactable objects in the mine. Ordinary ore, Gadget Chambers, Supply
-Chambers, and supported natural Caves use the same local scan. Relic Chambers
-are classified by the same model but remain ineligible until Relic Hunt behavior
-is supported.
+Chambers, Relic Switch Chambers, Relic Chambers, and supported natural Caves
+use the same local scan.
 
 The teacher treats an interaction as a task pushed above the work it interrupts.
 Interaction types share discovery, approach choice, decision recording, and
@@ -22,9 +21,9 @@ interaction-type state machine.
    straight-line map distance from the keeper is less than `10` tiles.
 2. Ignore unrevealed objects. A scan result is eligible only when its public
    game state says work remains and the teacher supports that subtype.
-3. Select one target in priority order: Supply Chamber, Gadget Chamber,
-   supported Cave, then ordinary ore. Within a category choose the nearest
-   target.
+3. Select one target in priority order: Relic Switch Chamber, Relic Chamber,
+   Supply Chamber, Gadget Chamber, supported Cave, then ordinary ore. Within a
+   category choose the nearest target.
 4. Lock that target until completion or invalidation. A wave suspends rather
    than discards the task. Do not rerank while the interaction remains active.
 5. Estimate the travel time of the shortest A* route to a reachable interaction
@@ -142,3 +141,26 @@ Keep the shared flow unchanged. Add only:
 Do not introduce Cave-specific routing, completion markers, validation layers,
 or interruption machinery unless an observed failure cannot be handled by the
 shared task stack, acquisition, recording, and live interactability checks.
+
+## Relic Hunt Behavior
+
+A revealed Relic Switch Chamber is excavated and activated through its exact
+usable. It completes when its live Chamber state becomes `EMPTY` and the
+activation animation removes that usable. If the root search already remembers
+an excavated Relic Chamber, completing a switch immediately revisits that chamber
+to observe whether it opened; otherwise the teacher resumes the interrupted
+search.
+
+A revealed Relic Chamber is excavated and observed after one bounded state
+settling interval. If it remains locked, the root relic search remembers the
+exact chamber and resumes its existing fishbone route. The remembered locked
+chamber is not reclaimed by the periodic local scan. Each later switch
+activation triggers one explicit revisit instead, so the teacher neither reads
+hidden switch positions nor hard-codes a switch count.
+
+When the chamber opens, the teacher activates its exact usable with no unrelated
+cargo. The game attaches the final Relic directly; only a later detachment uses
+the shared exact-artifact recovery. The teacher carries it to the dome through
+normal movement and completes the interaction when the corresponding stored
+Relic inventory increases. The game-created final wave then uses the ordinary
+`DEFEND` scheduling and authoritative `game.over` outcome.

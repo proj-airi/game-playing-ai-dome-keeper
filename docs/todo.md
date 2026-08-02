@@ -4,7 +4,18 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 
 ## Teacher Controller Cleanup
 
-- After a fresh gameplay recording and teacher log confirm the current shaft-shift and descent-backtracking behavior, schedule a dedicated teacher cleanup before the planned Relic Hunt expansion without turning it into a blanket gate on urgent fixes. Establish explicit expected observable outcomes for the representative lifecycle scenarios in scope rather than preserving one recording's exact action trace. Audit the current code and state-machine logic for dead or duplicated paths, unreachable transitions, unclear state ownership, accidental coupling, and contradictory invariants; identify responsibility boundaries without presuming that every large function or file must be split. Keep each batch independently reviewable and verifiable. Pure refactors must preserve the declared outcomes, while defect or policy corrections must declare the corrected expectation and receive targeted runtime validation.
+- After a fresh gameplay recording and teacher log confirm the current shaft-shift and descent-backtracking behavior, schedule a dedicated teacher cleanup before further controller expansion without turning it into a blanket gate on urgent fixes. Establish explicit expected observable outcomes for the representative lifecycle scenarios in scope rather than preserving one recording's exact action trace. Audit the current code and state-machine logic for dead or duplicated paths, unreachable transitions, unclear state ownership, accidental coupling, and contradictory invariants; identify responsibility boundaries without presuming that every large function or file must be split. Keep each batch independently reviewable and verifiable. Pure refactors must preserve the declared outcomes, while defect or policy corrections must declare the corrected expectation and receive targeted runtime validation.
+
+## Relic Hunt Runtime Validation
+
+- Capture a fresh run that exercises Relic Chamber and switch discovery in both
+  orders, exact relic pickup and dome delivery, the automatically scheduled
+  final `DEFEND`, and terminal `run_won`. The wave-20 checkpoint replay on
+  2026-08-02 reached wave 31 without a teacher failure but lost before seeing a
+  relic interaction while an older Drone water search, resource cleanup, and
+  recurring Iron Tree interactions remained stacked above the root search. Do
+  not count that replay as end-to-end Relic Hunt validation or change the relic
+  chain to compensate for an unexercised path.
 
 ## Laser Targeting Runtime Validation
 

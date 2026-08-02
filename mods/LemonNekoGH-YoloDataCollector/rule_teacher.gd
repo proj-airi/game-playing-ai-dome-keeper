@@ -30,14 +30,13 @@ const CHECKPOINT_FIELDS := [
 	"drill_hits_by_coord", "wave_start_missing_health", "wave_start_max_health",
 	"last_wave_health_loss", "wave_health_tracking", "caches",
 ]
-const TASK_REF_FIELDS := [&"target", &"resource", &"gadget_drop"]
+const TASK_REF_FIELDS := [&"target", &"resource", &"gadget_drop", &"relic_chamber"]
 const TICK := 0.1
 const STATION_ENTRY_SECONDS := 2.0
 const CARRY_PICKUP_SECONDS := 0.35
 const ARTIFACT_UI_STEP_LIMIT := 40
-const GADGET_RECOVERY_LIMIT := 3
+const ARTIFACT_RECOVERY_LIMIT := 3
 const INTERACTION_WAIT_LIMIT := 150
-const CACHE_CLEANUP_LOAD_MULTIPLIER := 2
 const MIN_SPEED_RATIO := 0.55
 const STALL_SECONDS := 4.0
 const INTERACTION_RADIUS_TILES := 10.0
@@ -484,7 +483,14 @@ func _restore_checkpoint_ref(value):
 		return Level.drops.get_drop(int(value[1])) if Level.drops.has_drop(int(value[1])) else null
 	var group := str(value[0])
 	var coord = str_to_var(value[1])
-	for candidate in get_tree().get_nodes_in_group(group):
+	var candidates: Array[Node] = (
+		Level.map.tiles_node.get_children()
+		if group == "chamber"
+		else get_tree().get_nodes_in_group(group)
+	)
+	for candidate in candidates:
+		if group == "chamber" and not candidate is Chamber:
+			continue
 		if candidate.get("coord") == coord:
 			return candidate
 	return null
@@ -619,7 +625,7 @@ func _status_carried_resources() -> Dictionary:
 
 func _status_carried_artifact():
 	for drop in keeper.carriedCarryables:
-		if drop is Drop and (drop.type == CONST.GADGET or drop.type == CONST.POWERCORE):
+		if drop is Drop and drop.type in [CONST.GADGET, CONST.POWERCORE, CONST.RELIC]:
 			return str(drop.type)
 	return null
 
@@ -730,6 +736,8 @@ func _preflight() -> String:
 	dome = Level.getDome(keeper.teamId)
 	if not is_instance_valid(dome) or dome.techId != "dome1" or _laser() == null:
 		return "Teacher requires one normal Laser Dome weapon"
+	if Level.loadout.modeId != CONST.MODE_RELICHUNT:
+		return "Teacher requires Relic Hunt mode"
 	var full_load := _full_load_count(_carry_loss())
 	if full_load <= 0 or full_load >= 128:
 		return "Engineer carry slowdown does not produce a bounded supported load"
@@ -771,6 +779,7 @@ func _new_search_task(goal: String, minimum := 1) -> Dictionary:
 		"active_corridor_cells": {},
 		"attempted_descent_origins": {},
 		"resume_coord": NO_COORD,
+		"relic_chamber": null,
 	}
 
 func _task_type() -> int:
@@ -785,8 +794,22 @@ func _find_task(type: TaskType) -> Dictionary:
 			return tasks[index]
 	return {}
 
+func _root_relic_search() -> Dictionary:
+	if tasks.is_empty():
+		return {}
+	var root: Dictionary = tasks.front()
+	if int(root.get("type", -1)) != TaskType.SEARCH or str(root.get("goal", "")) != "relic":
+		return {}
+	return root
+
 func _push_task(task: Dictionary, reason: String) -> void:
 	_release_all()
+	if (
+		int(task.type) == TaskType.DEFEND
+		and _task_is(TaskType.MINE)
+		and Vector2i(tasks.back().approach_coord) == NO_COORD
+	):
+		tasks.back().approach_coord = Level.map.getTileCoord(keeper.global_position)
 	var search := _find_task(TaskType.SEARCH)
 	if (
 		int(task.type) != TaskType.RECOVER
@@ -1001,6 +1024,12 @@ func _interact(task: Dictionary) -> void:
 	if str(task.kind) == "cave":
 		_run_cave_task(task)
 		return
+	if target is Chamber and target.getTileType() == Data.TILE_RELIC_SWITCH:
+		_run_relic_switch_task(task)
+		return
+	if target is Chamber and target.drop_type == CONST.RELIC:
+		_run_relic_chamber_task(task)
+		return
 
 	var carried_artifact := _carried_artifact(task)
 	if is_instance_valid(carried_artifact):
@@ -1011,10 +1040,10 @@ func _interact(task: Dictionary) -> void:
 		task.wait_steps = 0
 		_travel_to_station()
 		return
-	var gadget = task.get("gadget_drop")
-	if is_instance_valid(gadget):
-		if not gadget.absorbed and not gadget.independent:
-			_mine_gadget_recovery(task)
+	var artifact = task.get("gadget_drop")
+	if is_instance_valid(artifact):
+		if not artifact.absorbed and not artifact.independent:
+			_recover_detached_artifact(task)
 		else:
 			_wait_for_interaction(task, "Authoritative gadget handoff did not open its mandatory choice popup")
 		return
@@ -1023,6 +1052,84 @@ func _interact(task: Dictionary) -> void:
 		_run_power_core_task(task)
 	else:
 		_mine_gadget_chamber(task)
+
+func _run_relic_switch_task(task: Dictionary) -> void:
+	var relic_switch: Chamber = task.target
+	match relic_switch.currentState:
+		Chamber.State.REVEALED:
+			_excavate_chamber(task, relic_switch, CONST.RELICSWITCH, "Relic switch")
+		Chamber.State.OPENING:
+			_wait_for_interaction(task, "Relic switch did not finish opening")
+		Chamber.State.OPEN:
+			_activate_chamber(task, "Relic switch", false)
+		Chamber.State.EMPTY:
+			if is_instance_valid(relic_switch.get_node_or_null("Usable")):
+				_wait_for_interaction(task, "Relic switch activation animation did not finish")
+				return
+			var search := _root_relic_search()
+			var relic_chamber = search.get("relic_chamber")
+			_pop_task("The revealed relic switch was activated")
+			if is_instance_valid(relic_chamber):
+				_push_task(
+					_new_chamber_interaction_task(relic_chamber, "relic chamber"),
+					"A relic switch was activated; revisit the excavated Relic Chamber"
+				)
+		_:
+			_fail("Relic switch returned to an unsupported state")
+
+func _run_relic_chamber_task(task: Dictionary) -> void:
+	if int(Data.ofOr(keeper.teamId + ".inventory.relic", 0)) > 0:
+		_record("relic_delivered", "The exact final relic reached the dome", null)
+		_pop_task("The final relic was delivered to the dome")
+		return
+
+	var carried_relic := _carried_artifact(task)
+	if is_instance_valid(carried_relic):
+		if not is_instance_valid(task.get("gadget_drop")):
+			_record("relic_acquired", "The exact final relic attached to the Engineer", null)
+		task.gadget_drop = carried_relic
+		task.recovery_coord = NO_COORD
+		task.wait_steps = 0
+		_travel_to_station()
+		return
+
+	var relic = task.get("gadget_drop")
+	if is_instance_valid(relic):
+		if not relic.absorbed and not relic.independent:
+			_recover_detached_artifact(task)
+		else:
+			_wait_for_interaction(task, "The final relic did not finish entering the dome")
+		return
+
+	var chamber: Chamber = task.target
+	match chamber.currentState:
+		Chamber.State.REVEALED:
+			if is_instance_valid(chamber.tileCover) and not chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER).is_empty():
+				_excavate_chamber(task, chamber, CONST.RELIC, "Relic")
+				return
+			if keeper.global_position.distance_to(chamber.global_position) >= GameWorld.TILE_SIZE * 7.5:
+				if not _move_open(chamber.global_position):
+					_fail("No open path reaches the excavated Relic Chamber")
+				return
+			if not bool(task.get("open_check_pending", false)):
+				task.open_check_pending = true
+				_release_all()
+				delay = 0.2
+				return
+			var search := _root_relic_search()
+			var first_discovery: bool = search.get("relic_chamber") != chamber
+			search.relic_chamber = chamber
+			if first_discovery:
+				_record("relic_chamber_excavated", "The Relic Chamber remains locked after excavation", null)
+			_pop_task("The excavated Relic Chamber has not opened")
+		Chamber.State.OPENING:
+			_wait_for_interaction(task, "Relic Chamber did not finish opening")
+		Chamber.State.OPEN:
+			_activate_chamber(task, "Relic", true)
+		Chamber.State.EMPTY:
+			_wait_for_interaction(task, "Activated Relic Chamber did not attach its exact relic")
+		_:
+			_fail("Relic Chamber returned to an unsupported state")
 
 func _mine(task: Dictionary) -> void:
 	var ore := Vector2i(task.get("ore", NO_COORD))
@@ -1042,9 +1149,11 @@ func _mine(task: Dictionary) -> void:
 		task.approach_coord = NO_COORD if float(route.astar_seconds) > float(route.direct_seconds) else Vector2i(route.approach_coord)
 	var approach_coord := Vector2i(task.get("approach_coord", NO_COORD))
 	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
-	if approach_coord != NO_COORD and absi(current_coord.x - ore.x) + absi(current_coord.y - ore.y) > 1:
+	if approach_coord != NO_COORD and current_coord != approach_coord:
 		if _move_open(Level.map.getTilePos(approach_coord)):
 			return
+		task.approach_coord = NO_COORD
+	elif approach_coord != NO_COORD:
 		task.approach_coord = NO_COORD
 	_hold(_axis(Level.map.getTilePos(ore)))
 
@@ -1095,7 +1204,15 @@ func _acquire_resource(task: Dictionary) -> void:
 	if not site is Vector2:
 		site = _resource_site(resource_type, int(task.site_minimum))
 		if not site is Vector2:
-			_push_task(_new_search_task(resource_type, int(task.site_minimum)), "No known cache contains enough %s" % resource_type)
+			var search := _new_search_task(resource_type, int(task.site_minimum))
+			var root_search := _root_relic_search()
+			if not root_search.is_empty():
+				var shaft_coord := Vector2i(root_search.get("resume_coord", NO_COORD))
+				var branch_entry := Vector2i(root_search.get("branch_entry_coord", NO_COORD))
+				if int(root_search.get("mode", ExploreMode.DESCEND)) == ExploreMode.BRANCH and branch_entry != NO_COORD:
+					shaft_coord = branch_entry
+				search.resume_coord = shaft_coord
+			_push_task(search, "No known cache contains enough %s" % resource_type)
 			return
 		task.site = site
 	var target = task.get("target")
@@ -1139,7 +1256,8 @@ func _available_resource(candidate, resource_type := "") -> bool:
 
 func _cleanup_resources(task: Dictionary) -> void:
 	var full_load := _full_load_count(_carry_loss())
-	if not keeper.carriedCarryables.is_empty() and (keeper.carriedCarryables.size() >= full_load or _cached_resources().is_empty()):
+	var cached_resources := _cached_resources()
+	if not keeper.carriedCarryables.is_empty() and (keeper.carriedCarryables.size() >= full_load or cached_resources.is_empty()):
 		_travel_to_station()
 		return
 	var target = task.get("target")
@@ -1147,7 +1265,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 	if not _available_resource(target) or ignored.has(target):
 		target = null
 		var best_distance := INF
-		for candidate in _cached_resources():
+		for candidate in cached_resources:
 			if ignored.has(candidate):
 				continue
 			var distance := _path_distance(keeper.global_position, candidate.global_position)
@@ -1161,6 +1279,10 @@ func _cleanup_resources(task: Dictionary) -> void:
 		else:
 			_travel_to_station()
 		return
+	var focused = keeper.focussedCarryable
+	if _available_resource(focused) and cached_resources.has(focused) and not ignored.has(focused):
+		target = focused
+		task.target = focused
 	if keeper.focussedCarryable == target and _leaf() == "Keeper1InputProcessor":
 		if pickup_failures >= 3:
 			ignored[target] = true
@@ -1446,7 +1568,9 @@ func _finish_artifact_choice(task: Dictionary) -> void:
 
 func _scan_interaction(required_ore_type := "") -> bool:
 	var claimed := (
-		_claim_chamber_interaction(CONST.POWERCORE)
+		_claim_relic_switch_interaction()
+		or _claim_chamber_interaction(CONST.RELIC)
+		or _claim_chamber_interaction(CONST.POWERCORE)
 		or _claim_chamber_interaction(CONST.GADGET)
 		or _claim_cave_interaction()
 	)
@@ -1466,12 +1590,60 @@ func _target_is_claimed(target: Variant) -> bool:
 				return true
 	return false
 
+func _claim_relic_switch_interaction() -> bool:
+	var best: Chamber
+	var best_distance := INF
+	var best_plan := {}
+	for candidate in Level.map.tiles_node.get_children():
+		if (
+			not candidate is Chamber
+			or candidate.getTileType() != Data.TILE_RELIC_SWITCH
+			or candidate.currentState != Chamber.State.REVEALED
+			or _target_is_claimed(candidate)
+		):
+			continue
+		var distance := keeper.global_position.distance_to(candidate.global_position) / GameWorld.TILE_SIZE
+		if distance >= INTERACTION_RADIUS_TILES:
+			continue
+		var plan := _chamber_cover_plan(candidate, CONST.RELICSWITCH)
+		if not plan.has("astar_seconds") or not Level.map.isRevealed(Vector2i(plan.target)):
+			continue
+		if distance < best_distance:
+			best = candidate
+			best_distance = distance
+			best_plan = plan
+	if not is_instance_valid(best):
+		return false
+	_record_interaction_decision("chamber", "relic switch", Vector2i(best.coord), best_distance, best_plan)
+	_push_task(
+		_new_chamber_interaction_task(best, "relic switch"),
+		"A revealed Relic Switch Chamber is inside the interaction scan"
+	)
+	return true
+
+func _new_chamber_interaction_task(target: Chamber, label: String) -> Dictionary:
+	return {
+		"type": TaskType.INTERACT,
+		"kind": "chamber",
+		"label": label,
+		"target": target,
+		"resource": null,
+		"gadget_drop": null,
+		"recovery_coord": NO_COORD,
+		"recovery_attempts": 0,
+		"wait_steps": 0,
+		"prior_drop_uids": {},
+	}
+
 func _claim_chamber_interaction(tile_type: String) -> bool:
+	var remembered_relic_chamber = _root_relic_search().get("relic_chamber")
 	var best: Chamber
 	var best_distance := INF
 	var best_plan := {}
 	for candidate in get_tree().get_nodes_in_group("chamber"):
 		if not candidate is Chamber or candidate.drop_type != tile_type or _target_is_claimed(candidate):
+			continue
+		if tile_type == CONST.RELIC and candidate == remembered_relic_chamber:
 			continue
 		if tile_type == CONST.GADGET and candidate.type != CONST.GADGET:
 			continue
@@ -1489,20 +1661,12 @@ func _claim_chamber_interaction(tile_type: String) -> bool:
 			best_plan = plan
 	if not is_instance_valid(best):
 		return false
-	var subtype := "supply" if tile_type == CONST.POWERCORE else "gadget"
+	var subtype := "supply" if tile_type == CONST.POWERCORE else "relic" if tile_type == CONST.RELIC else "gadget"
 	_record_interaction_decision("chamber", subtype, Vector2i(best.coord), best_distance, best_plan)
-	_push_task({
-		"type": TaskType.INTERACT,
-		"kind": "chamber",
-		"label": subtype + " chamber",
-		"target": best,
-		"resource": null,
-		"gadget_drop": null,
-		"recovery_coord": NO_COORD,
-		"recovery_attempts": 0,
-		"wait_steps": 0,
-		"prior_drop_uids": {},
-	}, "A revealed %s Chamber is inside the interaction scan" % subtype.capitalize())
+	_push_task(
+		_new_chamber_interaction_task(best, subtype + " chamber"),
+		"A revealed %s Chamber is inside the interaction scan" % subtype.capitalize()
+	)
 	return true
 
 func _run_power_core_task(task: Dictionary) -> void:
@@ -1532,7 +1696,7 @@ func _run_power_core_task(task: Dictionary) -> void:
 		_deliver_power_core_water(task)
 		return
 	if chamber.currentState == Chamber.State.OPEN:
-		_activate_artifact_chamber(task)
+		_activate_chamber(task, "Power Core", true)
 		return
 	if chamber.currentState == Chamber.State.EMPTY:
 		_wait_for_interaction(task, "Activated Power Core chamber did not attach its core")
@@ -2167,7 +2331,7 @@ func _mine_gadget_chamber(task: Dictionary) -> void:
 		Chamber.State.OPENING:
 			_wait_for_interaction(task, "Gadget chamber did not finish opening")
 		Chamber.State.OPEN:
-			_activate_artifact_chamber(task)
+			_activate_chamber(task, "Gadget", true)
 		Chamber.State.EMPTY:
 			_wait_for_interaction(task, "Activated gadget chamber did not attach its artifact")
 		_:
@@ -2222,34 +2386,34 @@ func _chamber_cover_plan(chamber: Chamber, tile_type: String) -> Dictionary:
 		return {"approach_coord": NO_COORD, "target": fallback}
 	return best
 
-func _begin_detached_gadget_recovery(task: Dictionary, gadget: Drop) -> void:
+func _begin_detached_artifact_recovery(task: Dictionary, artifact: Drop) -> void:
 	if Vector2i(task.recovery_coord) != NO_COORD:
 		return
-	if int(task.recovery_attempts) >= GADGET_RECOVERY_LIMIT:
-		_fail("The chamber gadget detached more than three times before delivery")
+	if int(task.recovery_attempts) >= ARTIFACT_RECOVERY_LIMIT:
+		_fail("The chamber artifact detached more than three times before delivery")
 		return
 	task.recovery_attempts = int(task.recovery_attempts) + 1
-	task.recovery_coord = Level.map.getTileCoord(gadget.global_position)
+	task.recovery_coord = Level.map.getTileCoord(artifact.global_position)
 	task.wait_steps = 0
 	_record("artifact_recovery_started", "The chamber artifact detached; clear its fixed neighboring tiles", {"attempt": task.recovery_attempts})
 
-func _mine_gadget_recovery(task: Dictionary) -> void:
-	var gadget = task.get("gadget_drop")
-	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
+func _recover_detached_artifact(task: Dictionary) -> void:
+	var artifact = task.get("gadget_drop")
+	if not is_instance_valid(artifact) or artifact.absorbed or artifact.independent:
 		task.recovery_coord = NO_COORD
 		return
-	if gadget.isCarried():
-		_fail("The tracked chamber gadget attached to an unexpected carrier during clearance")
+	if artifact.isCarried():
+		_fail("The tracked chamber artifact attached to an unexpected carrier during clearance")
 		return
 	if Vector2i(task.recovery_coord) == NO_COORD:
-		_begin_detached_gadget_recovery(task, gadget)
+		_begin_detached_artifact_recovery(task, artifact)
 	var plan := _artifact_recovery_clearance_plan(task.recovery_coord)
 	if int(plan["remaining"]) == 0:
 		task.wait_steps = 0
-		_reattach_detached_gadget(task)
+		_reattach_detached_artifact(task)
 		return
 	if not plan.has("target"):
-		_wait_for_interaction(task, "No open approach reaches the detached gadget clearance tiles")
+		_wait_for_interaction(task, "No open approach reaches the detached artifact clearance tiles")
 		return
 	task.wait_steps = 0
 	var target: Vector2i = plan["target"]
@@ -2259,7 +2423,7 @@ func _mine_gadget_recovery(task: Dictionary) -> void:
 	var approach: Vector2i = plan["approach"]
 	if Level.map.getTileCoord(keeper.global_position) != approach:
 		if not _move_open(Level.map.getTilePos(approach)):
-			_fail("The detached gadget clearance approach became unreachable")
+			_fail("The detached artifact clearance approach became unreachable")
 		return
 	_hold(_axis(Level.map.getTilePos(target)))
 
@@ -2291,46 +2455,47 @@ func _artifact_recovery_clearance_plan(recovery_coord: Vector2i) -> Dictionary:
 				best_distance = distance
 	return result
 
-func _reattach_detached_gadget(task: Dictionary) -> void:
-	var gadget = task.get("gadget_drop")
-	if not is_instance_valid(gadget) or gadget.absorbed or gadget.independent:
+func _reattach_detached_artifact(task: Dictionary) -> void:
+	var artifact = task.get("gadget_drop")
+	if not is_instance_valid(artifact) or artifact.absorbed or artifact.independent:
 		task.recovery_coord = NO_COORD
 		return
-	if gadget.isCarried():
-		_fail("The tracked chamber gadget attached to an unexpected carrier before reattachment")
+	if artifact.isCarried():
+		_fail("The tracked chamber artifact attached to an unexpected carrier before reattachment")
 		return
 	if not keeper.carriedCarryables.is_empty():
-		_fail("Cannot reacquire the chamber gadget with a non-exclusive load")
+		_fail("Cannot reacquire the chamber artifact with a non-exclusive load")
 		return
-	if keeper.focussedCarryable == gadget and _leaf() == "Keeper1InputProcessor":
+	if keeper.focussedCarryable == artifact and _leaf() == "Keeper1InputProcessor":
 		if pickup_failures >= 3:
-			_fail("Repeated exact chamber gadget pickup attempts failed")
+			_fail("Repeated exact chamber artifact pickup attempts failed")
 			return
 		pickup_failures += 1
 		_release_all()
 		_tap(&"keeper1_pickup")
 		delay = CARRY_PICKUP_SECONDS
 		return
-	if _move_open(gadget.global_position):
+	if _move_open(artifact.global_position):
 		task.wait_steps = 0
 		return
-	_wait_for_interaction(task, "No open path reaches the detached chamber gadget")
+	_wait_for_interaction(task, "No open path reaches the detached chamber artifact")
 
-func _activate_artifact_chamber(task: Dictionary) -> void:
+func _activate_chamber(task: Dictionary, label: String, transport_artifact: bool) -> void:
 	var chamber: Chamber = task.target
 	if not is_instance_valid(chamber) or chamber.currentState != Chamber.State.OPEN:
-		_wait_for_interaction(task, "Artifact chamber is not ready for acquisition")
+		_wait_for_interaction(task, "%s chamber is not ready for activation" % label)
 		return
-	if not keeper.carriedCarryables.is_empty():
+	if transport_artifact and not keeper.carriedCarryables.is_empty():
 		_drop_interaction_cargo()
 		return
 	var usable := chamber.get_node_or_null("Usable") as Node2D
 	if not is_instance_valid(usable) or not chamber.canFocusUse(keeper):
-		_wait_for_interaction(task, "Open artifact chamber did not expose its usable target")
+		_wait_for_interaction(task, "Open %s chamber did not expose its usable target" % label)
 		return
 	if keeper.focussedUsable == usable and _leaf() == "Keeper1InputProcessor":
 		_release_all()
-		_prepare_artifact_transport(task)
+		if transport_artifact:
+			_prepare_artifact_transport(task)
 		_tap(&"ui_select")
 		task.wait_steps = 0
 		delay = 0.2
@@ -2341,12 +2506,12 @@ func _activate_artifact_chamber(task: Dictionary) -> void:
 			task.wait_steps = 0
 			_hold(actions)
 			return
-		_wait_for_interaction(task, "The open artifact chamber did not receive exact usable focus")
+		_wait_for_interaction(task, "The open %s chamber did not receive exact usable focus" % label)
 		return
 	if _move_open(usable.global_position):
 		task.wait_steps = 0
 	else:
-		_fail("No open path reaches the artifact chamber usable")
+		_fail("No open path reaches the %s chamber usable" % label)
 
 func _prepare_artifact_transport(task: Dictionary) -> void:
 	task.gadget_drop = null
@@ -2362,11 +2527,8 @@ func _drop_interaction_cargo() -> void:
 	if _leaf() != "Keeper1InputProcessor":
 		_fail("Cannot unload cargo without keeper input control")
 		return
-	if keeper.carriedCarryables.any(func(item): return item is Drop and item.type == CONST.POWERCORE):
-		_fail("Cannot unload cargo without dropping an in-flight Power Core")
-		return
-	if keeper.carriedCarryables.any(func(item): return item is Drop and item.type == CONST.GADGET):
-		_fail("Cannot unload mixed cargo without dropping the chamber gadget")
+	if keeper.carriedCarryables.any(func(item): return item is Drop and item.type in [CONST.POWERCORE, CONST.GADGET, CONST.RELIC]):
+		_fail("Cannot unload mixed cargo without dropping the chamber artifact")
 		return
 	if keeper.carriedCarryables.any(func(item): return item is Drop and item.carryableType == "resource"):
 		_record_cache_site(keeper.global_position)
@@ -2425,7 +2587,7 @@ func _finish_defense() -> void:
 	var full_load := _full_load_count(_carry_loss())
 	if (
 		_find_task(TaskType.CLEANUP_RESOURCES).is_empty()
-		and _reachable_cached_resource_count() >= full_load * CACHE_CLEANUP_LOAD_MULTIPLIER
+		and _reachable_cached_resource_count() >= full_load
 	):
 		pending_intents[UpgradeIntent.MOBILITY] = true
 		mobility_arm = MobilityArm.SPEED if _bought_count(SPEED_UPGRADES) <= _bought_count(CARRY_UPGRADES) else MobilityArm.STRENGTH
