@@ -1262,7 +1262,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 		return
 	var target = task.get("target")
 	var ignored: Dictionary = task.ignored
-	if not _available_resource(target) or ignored.has(target):
+	if not _available_resource(target) or not cached_resources.has(target) or ignored.has(target):
 		target = null
 		var best_distance := INF
 		for candidate in cached_resources:

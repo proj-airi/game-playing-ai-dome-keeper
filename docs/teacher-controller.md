@@ -128,7 +128,8 @@ settles, the controller counts currently reachable cached Drops. It pushes
 full-load count. Cleanup fills a supported load, delivers it, and repeats until
 no reachable cached Drop remains. Its reserved Drop guides navigation; inside
 pickup range it collects whichever eligible cached Drop the game currently
-focuses. Repeatedly unreachable Drops are ignored only by that cleanup task.
+focuses. A Drop that leaves every recorded cache loses its reservation, and
+repeatedly unreachable Drops are ignored only by that cleanup task.
 
 ## Chambers, Caves, and rewards
 
