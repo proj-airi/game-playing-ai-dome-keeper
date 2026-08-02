@@ -1107,8 +1107,9 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			if is_instance_valid(chamber.tileCover) and not chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER).is_empty():
 				_excavate_chamber(task, chamber, CONST.RELIC, "Relic")
 				return
-			if keeper.global_position.distance_to(chamber.global_position) >= GameWorld.TILE_SIZE * 7.5:
-				if not _move_open(chamber.global_position):
+			var chamber_coord: Vector2 = Level.map.getTilePos(chamber.coord)
+			if keeper.global_position.distance_to(chamber_coord) >= GameWorld.TILE_SIZE * 7.5:
+				if not _move_open(chamber_coord):
 					_fail("No open path reaches the excavated Relic Chamber")
 				return
 			if not bool(task.get("open_check_pending", false)):

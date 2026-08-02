@@ -147,7 +147,8 @@ invalidates this context.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to
-  observe whether it opened.
+  observe whether it opened. Revisit navigation targets the Chamber's map-cell
+  center because the scene node itself sits between A* cells.
 - A Relic Chamber is excavated and remembered when it remains locked. Once it
   opens, the teacher activates the normal usable with no unrelated cargo, carries
   the exact attached Relic to the dome, and recovers it through the shared
