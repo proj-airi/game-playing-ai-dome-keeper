@@ -132,10 +132,11 @@ of their requested type first and fall back to a dedicated fishbone search only
 when no vein is recorded. A vein is therefore never cleared just because it was
 found, and the parent resource search completes only when a cache contains the
 required amount.
-Once reachable cached drops cover a pending upgrade deficit, the same scheduler
-pushes `CLEANUP_RESOURCES` so the mined drops are collected and deposited
-without waiting for the next wave; the pre-wave `CARRY_TO_DOME` and post-wave
-cleanup paths continue to deliver larger or wave-timed loads.
+Upgrade-funded `MINE` tasks carry their own load home, so the scheduler never
+re-pushes `CLEANUP_RESOURCES` for the same deficit; drops that were already
+mined and cached are delivered by the pre-wave `CARRY_TO_DOME` and post-wave
+cleanup paths, which keeps the teacher from repeatedly walking to drops it
+cannot collect.
 
 When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back

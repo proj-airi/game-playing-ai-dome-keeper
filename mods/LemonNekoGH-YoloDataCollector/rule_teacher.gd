@@ -1096,9 +1096,6 @@ func _tick_tasks(delta: float) -> void:
 					var need := int(deficits.get(resource, 0))
 					if need <= 0:
 						continue
-					if _reachable_cached_resource_count(resource) >= need:
-						_push_task({"type": TaskType.CLEANUP_RESOURCES, "target": null, "ignored": {}}, "Reachable cached %s can fund the pending upgrade" % resource)
-						return
 					var vein := _nearest_recorded_ore(resource)
 					if vein.is_empty():
 						continue
@@ -1122,15 +1119,6 @@ func _tick_tasks(delta: float) -> void:
 						"deliver": true,
 					}, "A pending upgrade needs %d %s beyond cached drops" % [need, resource])
 					return
-			else:
-				var upgrade := _next_upgrade_target(false)
-				if not upgrade.is_empty():
-					var cost: Dictionary = GameWorld.upgrades[upgrade["id"]].get("cost", {})
-					var stored_deficits := _resource_deficits(cost, _stored_upgrade_resources())
-					for resource in stored_deficits:
-						if _reachable_cached_resource_count(resource) > 0:
-							_push_task({"type": TaskType.CLEANUP_RESOURCES, "target": null, "ignored": {}}, "Cached %s covers the remaining upgrade cost" % resource)
-							return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and not _wave("wavepresent") and _leaf() == "StationInputProcessor":
 		var upgrade := _next_upgrade_target()
 		var upgrade_id: String = upgrade.get("id", "")
