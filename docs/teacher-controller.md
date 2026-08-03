@@ -173,6 +173,15 @@ a carried Drop detaches mid-route; the detached Drop is collected on a later
 leg instead of turning the keeper back, which previously made the same Drop
 break and get re-picked repeatedly at the same narrow passage.
 
+Before an imminent wave, when a carry window opens (the remaining wave time
+fits the planned collection, load-weighted return, and station entry), the
+controller pushes `CARRY_TO_DOME` so the mandatory defense return also delivers
+one bounded load of cached resources. The plan is greedy on outward travel
+time and capped by the safe-load speed floor, so a complex cache layout can
+only contribute drops that still fit before the wave. Defense stacks on top
+when the wave arrives, and the carry resumes after the wave to finish the
+deposit.
+
 ## Chambers, Caves, and rewards
 
 `INTERACT` owns its runtime target and all in-progress evidence. Defense never

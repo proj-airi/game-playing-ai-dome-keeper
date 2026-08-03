@@ -6,7 +6,7 @@ signal recording_finished
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 const SUPPLEMENT_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/supplement_catalog.gd")
 
-enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT }
+enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT, CARRY_TO_DOME }
 enum ExploreMode { DESCEND, BRANCH, BYPASS, ASCEND }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
@@ -81,6 +81,7 @@ const SQUIDLEY_SCRIPT := "res://content/gadgets/droneyard/Squidley.gd"
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
 const REPAIR_HEALTH_RESERVE_RATIO := 0.4
+const CARRY_PREVIEW_INTERVAL := 1.0
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
 const ARTIFACT_CLEARANCE_TILE_TYPES: Array[String] = ["dirt", CONST.IRON, CONST.SAND, CONST.WATER]
@@ -137,6 +138,8 @@ var wave_start_max_health := 0.0
 var last_wave_health_loss := 0.0
 var wave_health_tracking := false
 var observed_properties: Array[String] = []
+var carry_preview_cache := {}
+var carry_preview_refresh_at := 0.0
 var caches: Array[Vector2] = []
 var shaft_widen_done := false
 var tick_time := 0.0
@@ -1004,6 +1007,8 @@ func _status_task(task: Dictionary) -> Dictionary:
 			result["detail"] = str(task.get("active_id", "select target"))
 		TaskType.DEFEND:
 			result["detail"] = "active wave" if bool(task.get("saw_wave", false)) else "pre-wave staging"
+		TaskType.CARRY_TO_DOME:
+			result["detail"] = "pre-wave carry"
 		TaskType.RECOVER:
 			result["detail"] = "movement probe"
 		TaskType.CHOOSE_REWARD:
@@ -1026,7 +1031,35 @@ func _tick_tasks(delta: float) -> void:
 		or (_defense_due() and not keeper.isInsideStation)
 	):
 		tasks.back().closing = true
-	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and (_wave("wavepresent") or _wave("wavebattle") or _defense_due()):
+	if (
+		active_type != TaskType.UPGRADE
+		and active_type != TaskType.DEFEND
+		and active_type != TaskType.CARRY_TO_DOME
+		and active_type != TaskType.CHOOSE_REWARD
+		and tasks.size() == 1
+		and _find_task(TaskType.CLEANUP_RESOURCES).is_empty()
+		and not _wave("wavepresent")
+		and not _wave("wavebattle")
+	):
+		var relic_search := _root_relic_search()
+		var relic_search_focused := (
+			not relic_search.is_empty()
+			and Vector2i(relic_search.get("focus_coord", NO_COORD)) != NO_COORD
+		)
+		var carry_plan := _carry_window_plan()
+		if not relic_search_focused and not carry_plan.is_empty():
+			_push_task({"type": TaskType.CARRY_TO_DOME, "plan": carry_plan, "target": null, "carry_complete": false}, "A pre-wave carry window opened")
+			return
+	if (
+		active_type != TaskType.UPGRADE
+		and active_type != TaskType.DEFEND
+		and active_type != TaskType.CHOOSE_REWARD
+		and (
+			_wave("wavepresent")
+			or _wave("wavebattle")
+			or (active_type != TaskType.CARRY_TO_DOME and _defense_due())
+		)
+	):
 		_push_task({"type": TaskType.DEFEND, "saw_wave": _wave("wavepresent") or _wave("wavebattle")}, "Defense requires the keeper at the dome")
 		return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and not _wave("wavepresent") and _leaf() == "StationInputProcessor":
@@ -1066,6 +1099,7 @@ func _tick_tasks(delta: float) -> void:
 		TaskType.DEFEND: _defend(task)
 		TaskType.RECOVER: _recover(task)
 		TaskType.WIDEN_SHAFT: _widen_main_shaft(task)
+		TaskType.CARRY_TO_DOME: _carry_to_dome(task)
 		_: _fail("Unsupported task type: " + str(task.type))
 
 func _task_can_scan(task: Dictionary) -> bool:
@@ -2910,6 +2944,139 @@ func _consume_upgrade_step(task: Dictionary, reason: String) -> bool:
 		_tap(&"ui_cancel")
 	_fail(reason)
 	return false
+
+func _return_seconds(distance: float, count: int, base_speed: float, loss: float) -> float:
+	var speed := _effective_speed(count, base_speed, loss)
+	if not is_finite(speed) or speed <= 0.0:
+		return INF
+	return distance / speed
+
+func _build_carry_plan(wave_time: float) -> Dictionary:
+	var remaining := _cached_resources()
+	var counts := {}
+	var pickup_count := 0
+	var collection_seconds := 0.0
+	var return_distance := INF
+	var return_seconds := INF
+	var position := keeper.global_position
+	var load := keeper.carriedCarryables.size()
+	var base_speed := _planning_base_speed()
+	var loss := _carry_loss()
+	while not remaining.is_empty() and _speed_ratio_for_count(load + 1, loss) >= MIN_SPEED_RATIO:
+		var best: Drop
+		var best_outward_seconds := INF
+		var best_inward_distance := INF
+		for drop in remaining:
+			if not is_instance_valid(drop) or drop.absorbed or drop.independent or drop.isCarried():
+				continue
+			var outward_distance := _path_distance(position, drop.global_position)
+			var inward_distance := _path_distance(drop.global_position, _home_position())
+			if not is_finite(outward_distance) or not is_finite(inward_distance):
+				continue
+			var outward_seconds := _return_seconds(outward_distance, load, base_speed, loss)
+			var inward_seconds := _return_seconds(inward_distance, load + 1, base_speed, loss)
+			var planned_total := collection_seconds + outward_seconds + CARRY_PICKUP_SECONDS + inward_seconds
+			if is_finite(wave_time) and planned_total + STATION_ENTRY_SECONDS >= wave_time:
+				continue
+			if outward_seconds >= best_outward_seconds:
+				continue
+			best = drop
+			best_outward_seconds = outward_seconds
+			best_inward_distance = inward_distance
+		if not is_instance_valid(best):
+			break
+		remaining.erase(best)
+		counts[best.type] = int(counts.get(best.type, 0)) + 1
+		pickup_count += 1
+		collection_seconds += best_outward_seconds + CARRY_PICKUP_SECONDS
+		return_distance = best_inward_distance
+		load += 1
+		return_seconds = _return_seconds(return_distance, load, base_speed, loss)
+		position = best.global_position
+	return {
+		"counts": counts,
+		"pickup_count": pickup_count,
+		"final_load": load,
+		"collection_seconds": collection_seconds,
+		"return_seconds": return_seconds,
+	}
+
+func _carry_window_plan() -> Dictionary:
+	var wave_time := _wave_time()
+	if not is_finite(wave_time):
+		return {}
+	if GameWorld.runTime >= carry_preview_refresh_at:
+		carry_preview_cache = _build_carry_plan(wave_time)
+		carry_preview_refresh_at = GameWorld.runTime + CARRY_PREVIEW_INTERVAL
+	var preview: Dictionary = carry_preview_cache
+	if int(preview.get("pickup_count", 0)) <= 0:
+		return {}
+	var planned_seconds := float(preview.get("collection_seconds", INF))
+	planned_seconds += float(preview.get("return_seconds", INF))
+	if wave_time > planned_seconds + STATION_ENTRY_SECONDS + TICK:
+		return {}
+	return preview
+
+func _carry_plan_complete(task: Dictionary) -> bool:
+	var counts: Dictionary = task.plan.get("counts", {})
+	for resource_type in counts:
+		var need := int(counts[resource_type])
+		var have := 0
+		for candidate in keeper.carriedCarryables:
+			if candidate is Drop and candidate.type == resource_type:
+				have += 1
+		if have < need:
+			return false
+	return true
+
+func _carry_plan_type(task: Dictionary, resource_type: String) -> bool:
+	var counts: Dictionary = task.plan.get("counts", {})
+	if int(counts.get(resource_type, 0)) <= 0:
+		return false
+	var have := 0
+	for candidate in keeper.carriedCarryables:
+		if candidate is Drop and candidate.type == resource_type:
+			have += 1
+	return have < int(counts[resource_type])
+
+func _carry_to_dome(task: Dictionary) -> void:
+	if _wave("wavepresent") or _wave("wavebattle"):
+		return
+	if bool(task.get("carry_complete", false)):
+		if keeper.carriedCarryables.is_empty():
+			_pop_task("The pre-wave carry was deposited at the dome")
+			return
+		_travel_to_station()
+		return
+	var target = task.get("target")
+	if not _available_resource(target) or not _carry_plan_type(task, target.type):
+		target = null
+		var best_distance := INF
+		for candidate in _cached_resources():
+			if not _carry_plan_type(task, candidate.type):
+				continue
+			var distance := _path_distance(keeper.global_position, candidate.global_position)
+			if distance < best_distance:
+				target = candidate
+				best_distance = distance
+		task.target = target
+	if not is_instance_valid(target):
+		task.carry_complete = true
+		_travel_to_station()
+		return
+	if keeper.focussedCarryable == target and _leaf() == "Keeper1InputProcessor":
+		if pickup_failures >= 3:
+			task.carry_complete = true
+			_travel_to_station()
+			return
+		pickup_failures += 1
+		_release_all()
+		_tap(&"keeper1_pickup")
+		delay = CARRY_PICKUP_SECONDS
+		return
+	if not _move_open(target.global_position):
+		task.carry_complete = true
+		_travel_to_station()
 
 func _defend(task: Dictionary) -> void:
 	var leaf := _leaf()
