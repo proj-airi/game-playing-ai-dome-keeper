@@ -112,7 +112,7 @@ When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back
 to that coordinate before resuming the same ore target.
 
-Once the Engineer's current planned full load reaches nine resources, the
+Once the Engineer's current planned full load reaches five resources, the
 controller pushes a dedicated `WIDEN_SHAFT` task once; the threshold is the
 actual carried count (`_full_load_count`), independent of which upgrade produced
 it. The task walks the keeper to the main shaft entrance and descends the
