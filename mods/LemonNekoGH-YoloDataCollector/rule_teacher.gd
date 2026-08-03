@@ -6,7 +6,7 @@ signal recording_finished
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 const SUPPLEMENT_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/supplement_catalog.gd")
 
-enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT, CARRY_TO_DOME }
+enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT, CARRY_TO_DOME, RECORD_ORE }
 enum ExploreMode { DESCEND, BRANCH, BYPASS, ASCEND }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
@@ -28,12 +28,13 @@ const CHECKPOINT_SIDECAR := "teacher.json"
 const CHECKPOINT_FIELDS := [
 	"pending_intents", "combat_attack_next", "mobility_arm",
 	"drill_hits_by_coord", "wave_start_missing_health", "wave_start_max_health",
-	"last_wave_health_loss", "wave_health_tracking", "caches", "shaft_widen_done",
+	"last_wave_health_loss", "wave_health_tracking", "caches", "ore_caches", "shaft_widen_done",
 ]
 const TASK_REF_FIELDS := [&"target", &"resource", &"gadget_drop", &"relic_chamber"]
 const TICK := 0.1
 const STATION_ENTRY_SECONDS := 2.0
 const CARRY_PICKUP_SECONDS := 0.35
+const ORE_RECORD_DIG_LIMIT := 32
 const ARTIFACT_UI_STEP_LIMIT := 40
 const ARTIFACT_RECOVERY_LIMIT := 3
 const INTERACTION_WAIT_LIMIT := 150
@@ -141,6 +142,7 @@ var observed_properties: Array[String] = []
 var carry_preview_cache := {}
 var carry_preview_refresh_at := 0.0
 var caches: Array[Vector2] = []
+var ore_caches: Array[Dictionary] = []
 var shaft_widen_done := false
 var tick_time := 0.0
 var delay := 0.0
@@ -398,7 +400,7 @@ func _load_checkpoint(checkpoint_id: String) -> void:
 			error = "Failed to open teacher checkpoint: " + error_string(FileAccess.get_open_error())
 		else:
 			var parsed = JSON.parse_string(file.get_as_text())
-			if not parsed is Dictionary or int(parsed.get("version", 0)) != 5:
+			if not parsed is Dictionary or int(parsed.get("version", 0)) != 6:
 				error = "Teacher checkpoint is malformed or has an unsupported version"
 			else:
 				checkpoint_state = parsed
@@ -449,7 +451,7 @@ func _checkpoint_snapshot() -> Dictionary:
 					ignored.append(ref)
 			saved.ignored = ignored
 		saved_tasks.append(var_to_str(saved))
-	return {"version": 5, "values": values, "tasks": saved_tasks}
+	return {"version": 6, "values": values, "tasks": saved_tasks}
 
 func _restore_checkpoint(data: Dictionary) -> String:
 	var values: Dictionary = data.get("values", {})
@@ -603,7 +605,7 @@ func get_status_snapshot() -> Dictionary:
 	return {
 		"available": true,
 		"run_time_seconds": maxf(float(GameWorld.runTime), 0.0),
-		"teacher": {"tasks": _status_tasks()},
+		"teacher": {"tasks": _status_tasks(), "ore_caches": _status_ore_caches()},
 		"keeper": {
 			"carried_resources": _status_carried_resources(),
 			"carried_artifact": _status_carried_artifact(),
@@ -628,6 +630,13 @@ func get_status_snapshot() -> Dictionary:
 			"resolved_next": resolved_next,
 		},
 	}
+
+func _status_ore_caches() -> Dictionary:
+	var by_type := {}
+	for entry in ore_caches:
+		var resource_type := str(entry.get("type", ""))
+		by_type[resource_type] = int(by_type.get(resource_type, 0)) + (entry.get("coords", []) as Array).size()
+	return {"count": ore_caches.size(), "by_type": by_type}
 
 func _status_carried_resources() -> Dictionary:
 	var resources := {"iron": 0, "cobalt": 0, "water": 0}
@@ -999,6 +1008,8 @@ func _status_task(task: Dictionary) -> Dictionary:
 			result["detail"] = str(task.get("goal", "relic"))
 		TaskType.MINE:
 			result["detail"] = str(task.get("ore", NO_COORD))
+		TaskType.RECORD_ORE:
+			result["detail"] = "ore vein record"
 		TaskType.INTERACT:
 			result["detail"] = str(task.get("label", "interactable"))
 		TaskType.ACQUIRE_RESOURCE:
@@ -1062,6 +1073,53 @@ func _tick_tasks(delta: float) -> void:
 	):
 		_push_task({"type": TaskType.DEFEND, "saw_wave": _wave("wavepresent") or _wave("wavebattle")}, "Defense requires the keeper at the dome")
 		return
+	if (
+		active_type != TaskType.UPGRADE
+		and active_type != TaskType.DEFEND
+		and active_type != TaskType.CHOOSE_REWARD
+		and active_type != TaskType.CARRY_TO_DOME
+		and tasks.size() == 1
+		and _find_task(TaskType.CLEANUP_RESOURCES).is_empty()
+		and not _wave("wavepresent")
+		and not _wave("wavebattle")
+	):
+		var relic_search := _root_relic_search()
+		var relic_search_focused := (
+			not relic_search.is_empty()
+			and Vector2i(relic_search.get("focus_coord", NO_COORD)) != NO_COORD
+		)
+		if not relic_search_focused:
+			var deficits := _upgrade_deficits_with_cached()
+			if not deficits.is_empty():
+				for resource in ORE_TYPES:
+					var need := int(deficits.get(resource, 0))
+					if need <= 0:
+						continue
+					if _reachable_cached_resource_count(resource) >= need:
+						_push_task({"type": TaskType.CLEANUP_RESOURCES, "target": null, "ignored": {}}, "Reachable cached %s can fund the pending upgrade" % resource)
+						return
+					var vein := _nearest_recorded_ore(resource)
+					if vein.is_empty():
+						continue
+					var coords: Array = vein.get("coords", [])
+					var target := _nearest_valid_ore_coord(coords)
+					if target == NO_COORD:
+						continue
+					_record("ore_mine_demand", "A pending upgrade needs %s beyond cached drops" % resource, {
+						"amount": need,
+						"resource_type": resource,
+						"target": target,
+						"recorded_tiles": coords.size(),
+					})
+					_push_task({
+						"type": TaskType.MINE,
+						"ore": target,
+						"approach_coord": NO_COORD,
+						"vein": coords.duplicate(),
+						"resource_type": resource,
+						"amount": need,
+					}, "A pending upgrade needs %d %s beyond cached drops" % [need, resource])
+					return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and not _wave("wavepresent") and _leaf() == "StationInputProcessor":
 		var upgrade := _next_upgrade_target()
 		var upgrade_id: String = upgrade.get("id", "")
@@ -1092,6 +1150,7 @@ func _tick_tasks(delta: float) -> void:
 	match int(task.type):
 		TaskType.SEARCH: _search(task)
 		TaskType.MINE: _mine(task)
+		TaskType.RECORD_ORE: _record_ore(task)
 		TaskType.INTERACT: _interact(task)
 		TaskType.ACQUIRE_RESOURCE: _acquire_resource(task)
 		TaskType.CLEANUP_RESOURCES: _cleanup_resources(task)
@@ -1372,6 +1431,17 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			_fail("Relic Chamber returned to an unsupported state")
 
 func _mine(task: Dictionary) -> void:
+	var resource_type := str(task.get("resource_type", ""))
+	var amount := int(task.get("amount", 0))
+	var vein: Array = task.get("vein", [])
+	if amount > 0 and not resource_type.is_empty() and _site_drop_count(resource_type, task.get("sites", [])) >= amount:
+		_record("ore_mine_complete", "The mined %s cache satisfies the requested amount" % resource_type, {
+			"amount": amount,
+			"resource_type": resource_type,
+			"site": (task.get("sites", []) as Array).front() if not (task.get("sites", []) as Array).is_empty() else null,
+		})
+		_pop_task("The mined %s cache satisfies the requested amount" % resource_type)
+		return
 	var ore := Vector2i(task.get("ore", NO_COORD))
 	if ore == NO_COORD or not Level.map.getTile(ore) is Tile or not Level.map.isRevealed(ore):
 		task.approach_coord = NO_COORD
@@ -1381,12 +1451,17 @@ func _mine(task: Dictionary) -> void:
 		_record_cache(task.get("vein", []))
 		_pop_task("The revealed ore vein has been cleared")
 		return
-	var vein: Array = task.get("vein", [])
 	if not vein.has(ore):
 		vein.append(ore)
 		task.vein = vein
-		var route := _tile_interaction_route(ore)
-		task.approach_coord = NO_COORD if float(route.astar_seconds) > float(route.direct_seconds) else Vector2i(route.approach_coord)
+	var ore_position: Vector2 = Level.map.getTilePos(ore)
+	var sites: Array = task.get("sites", [])
+	if not sites.has(ore_position):
+		sites.append(ore_position)
+		task.sites = sites
+	_record_cache_site(ore_position)
+	var route := _tile_interaction_route(ore)
+	task.approach_coord = NO_COORD if float(route.astar_seconds) > float(route.direct_seconds) else Vector2i(route.approach_coord)
 	var approach_coord := Vector2i(task.get("approach_coord", NO_COORD))
 	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
 	if approach_coord != NO_COORD and current_coord != approach_coord:
@@ -1450,6 +1525,20 @@ func _acquire_resource(task: Dictionary) -> void:
 	if not site is Vector2:
 		site = _resource_site(resource_type, int(task.site_minimum))
 		if not site is Vector2:
+			var vein := _nearest_recorded_ore(resource_type)
+			if not vein.is_empty():
+				var coords: Array = vein.get("coords", [])
+				var target := _nearest_valid_ore_coord(coords)
+				if target != NO_COORD:
+					_push_task({
+						"type": TaskType.MINE,
+						"ore": target,
+						"approach_coord": NO_COORD,
+						"vein": coords.duplicate(),
+						"resource_type": resource_type,
+						"amount": int(task.site_minimum),
+					}, "A recorded %s vein can supply the active side task" % resource_type)
+					return
 			var search := _new_search_task(resource_type, int(task.site_minimum))
 			var root_search := _root_relic_search()
 			if not root_search.is_empty():
@@ -1942,7 +2031,9 @@ func _scan_interaction(required_ore_type := "") -> bool:
 	)
 	if optional_claimed:
 		return true
-	return _claim_ore_interaction("" if required_ore_type == "relic" else required_ore_type)
+	if required_ore_type == "relic":
+		return _claim_ore_interaction("", true)
+	return _claim_ore_interaction(required_ore_type)
 
 func _target_is_claimed(target: Variant) -> bool:
 	for task in tasks:
@@ -3142,7 +3233,7 @@ func _recover(task: Dictionary) -> void:
 		action = DIRECTIONS[int(task.probe_index)]
 	_hold([action])
 
-func _claim_ore_interaction(required_type := "") -> bool:
+func _claim_ore_interaction(required_type := "", record_only := false) -> bool:
 	var best := NO_COORD
 	var best_distance := INF
 	var best_route := {}
@@ -3154,6 +3245,8 @@ func _claim_ore_interaction(required_type := "") -> bool:
 				continue
 			var coord := Vector2i(tile.coord)
 			if not Level.map.isRevealed(coord) or _target_is_claimed(coord):
+				continue
+			if record_only and _coord_is_recorded(coord):
 				continue
 			var distance := keeper.global_position.distance_to(tile.global_position) / GameWorld.TILE_SIZE
 			if distance >= INTERACTION_RADIUS_TILES:
@@ -3168,17 +3261,225 @@ func _claim_ore_interaction(required_type := "") -> bool:
 	if best == NO_COORD:
 		return false
 	var subtype := required_type if not required_type.is_empty() else "ore"
+	if record_only:
+		_record_interaction_decision("ore", subtype, best, best_distance, best_route)
+		_push_task({
+			"type": TaskType.RECORD_ORE,
+			"ore": best,
+			"approach_coord": NO_COORD,
+			"vein": [best],
+			"attempted": {},
+			"digs": 0,
+		}, "A revealed mineral deposit is recorded instead of mined")
+		return true
 	var reason := "A revealed ore deposit is inside the interaction scan"
 	if not required_type.is_empty():
 		reason = "A revealed %s deposit can supply the active side task" % required_type
+	var search := _find_task(TaskType.SEARCH)
+	var amount := int(search.get("minimum", 1)) if not search.is_empty() else 1
 	_record_interaction_decision("mine", subtype, best, best_distance, best_route)
 	_push_task({
 		"type": TaskType.MINE,
 		"ore": best,
 		"approach_coord": NO_COORD if float(best_route.astar_seconds) > float(best_route.direct_seconds) else Vector2i(best_route.approach_coord),
 		"vein": [best],
+		"resource_type": required_type,
+		"amount": amount,
 	}, reason)
 	return true
+
+func _coord_is_recorded(coord: Vector2i) -> bool:
+	for entry in ore_caches:
+		if (entry.get("coords", []) as Array).has(coord):
+			return true
+	return false
+
+func _is_ore_coord(coord: Vector2i) -> bool:
+	var tile = Level.map.getTile(coord)
+	return tile is Tile and ORE_TYPES.has(tile.type)
+
+func _nearest_recorded_ore(resource_type: String) -> Dictionary:
+	var best := {}
+	var best_distance := INF
+	for entry in ore_caches:
+		if str(entry.get("type", "")) != resource_type:
+			continue
+		var coords: Array = entry.get("coords", [])
+		if not coords.any(func(c): return _is_ore_coord(c)):
+			continue
+		var site = entry.get("site", Vector2.ZERO)
+		var distance := _path_distance(keeper.global_position, site)
+		if not is_finite(distance):
+			distance = keeper.global_position.distance_to(site)
+		if distance < best_distance:
+			best = entry
+			best_distance = distance
+	return best
+
+func _nearest_valid_ore_coord(coords: Array) -> Vector2i:
+	var best := NO_COORD
+	var best_distance := INF
+	for coord in coords:
+		if not _is_ore_coord(coord):
+			continue
+		var distance := keeper.global_position.distance_squared_to(Level.map.getTilePos(coord))
+		if distance < best_distance:
+			best = coord
+			best_distance = distance
+	return best
+
+func _record_ore_cache(resource_type: String, coords: Array) -> void:
+	if coords.is_empty():
+		return
+	for entry in ore_caches:
+		if str(entry.get("type", "")) != resource_type:
+			continue
+		var existing: Array = entry.get("coords", [])
+		for coord in coords:
+			if existing.has(coord):
+				for extra in coords:
+					if not existing.has(extra):
+						existing.append(extra)
+				return
+	ore_caches.append({
+		"type": resource_type,
+		"site": Level.map.getTilePos(coords.front()),
+		"coords": coords.duplicate(),
+	})
+
+func _site_drop_count(resource_type: String, sites: Array) -> int:
+	var count := 0
+	for candidate in Level.drops.get_all_drops().values():
+		if (
+			not candidate is Drop
+			or candidate.type != resource_type
+			or candidate.carryableType != "resource"
+			or candidate.absorbed
+			or candidate.independent
+			or candidate.isCarried()
+			or _drop_targeted_by_transport(candidate)
+		):
+			continue
+		for site in sites:
+			if candidate.global_position.distance_to(site) <= GameWorld.TILE_SIZE * 3.0:
+				count += 1
+				break
+	return count
+
+func _upgrade_deficits_with_cached() -> Dictionary:
+	var upgrade := _next_upgrade_target(false)
+	if upgrade.is_empty():
+		return {}
+	var cost: Dictionary = GameWorld.upgrades[upgrade["id"]].get("cost", {})
+	var available := _stored_upgrade_resources()
+	for drop in _cached_resources():
+		available[drop.type] = int(available.get(drop.type, 0)) + 1
+	return _resource_deficits(cost, available)
+
+func _record_ore(task: Dictionary) -> void:
+	var vein: Array = task.get("vein", [])
+	if vein.is_empty():
+		_pop_task("The ore record has no remaining target")
+		return
+	if int(task.get("digs", 0)) >= ORE_RECORD_DIG_LIMIT:
+		_finish_record_ore(task, "Ore record reached its dig budget")
+		return
+	var anchor := Vector2i(task.get("ore", NO_COORD))
+	if not _is_ore_coord(anchor):
+		anchor = _nearest_valid_ore_coord(vein)
+		task.ore = anchor
+		if anchor == NO_COORD:
+			_pop_task("The recorded ore vein is fully consumed")
+			return
+	_expand_recorded_vein(task)
+	var target := _record_dig_target(task)
+	if target == NO_COORD:
+		_finish_record_ore(task, "No diggable dirt remains around the revealed ore")
+		return
+	var route := _tile_interaction_route(target)
+	task.approach_coord = (
+		NO_COORD
+		if float(route.astar_seconds) > float(route.direct_seconds)
+		else Vector2i(route.approach_coord)
+	)
+	var approach_coord := Vector2i(task.get("approach_coord", NO_COORD))
+	var current_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if approach_coord != NO_COORD and current_coord != approach_coord:
+		if _move_open(Level.map.getTilePos(approach_coord)):
+			return
+		task.approach_coord = NO_COORD
+	elif approach_coord != NO_COORD:
+		task.approach_coord = NO_COORD
+	_hold(_axis(Level.map.getTilePos(target)))
+
+func _finish_record_ore(task: Dictionary, reason: String) -> void:
+	var vein: Array = task.get("vein", [])
+	var resource_type := ""
+	var coords: Array = []
+	for coord in vein:
+		if not _is_ore_coord(coord):
+			continue
+		if resource_type.is_empty():
+			resource_type = str(Level.map.getTile(coord).type)
+		coords.append(coord)
+	if coords.is_empty():
+		_pop_task(reason)
+		return
+	_record_ore_cache(resource_type, coords)
+	_record("ore_cache_recorded", reason, {
+		"resource_type": resource_type,
+		"tiles": coords.size(),
+		"digs": int(task.get("digs", 0)),
+		"site": Level.map.getTilePos(coords.front()),
+	})
+	_pop_task(reason)
+
+func _expand_recorded_vein(task: Dictionary) -> void:
+	var vein: Array = task.get("vein", [])
+	var pending: Array = vein.duplicate()
+	while not pending.is_empty():
+		var coord: Vector2i = pending.pop_back()
+		for offset in _neighbor_offsets():
+			var neighbor: Vector2i = coord + offset
+			if vein.has(neighbor) or not _is_ore_coord(neighbor):
+				continue
+			vein.append(neighbor)
+			pending.append(neighbor)
+	task.vein = vein
+
+func _record_dig_target(task: Dictionary) -> Vector2i:
+	var attempted: Dictionary = task.get("attempted", {})
+	var vein: Array = task.get("vein", [])
+	for coord in vein:
+		for offset in _neighbor_offsets():
+			var candidate: Vector2i = coord + offset
+			if attempted.has(candidate) or _target_is_claimed(candidate):
+				continue
+			var tile = Level.map.getTile(candidate)
+			if not tile is Tile or tile.type != "dirt" or not tile.get_meta("destructable", false):
+				continue
+			if _record_target_blocked(candidate):
+				continue
+			attempted[candidate] = true
+			task.attempted = attempted
+			task.digs = int(task.get("digs", 0)) + 1
+			return candidate
+	return NO_COORD
+
+func _record_target_blocked(candidate: Vector2i) -> bool:
+	for node in get_tree().get_nodes_in_group("chamber") + get_tree().get_nodes_in_group("cave"):
+		if not is_instance_valid(node):
+			continue
+		var coord: Vector2i = Level.map.getTileCoord(node.global_position)
+		if absi(candidate.x - coord.x) <= 1 and absi(candidate.y - coord.y) <= 1:
+			return true
+	return false
+
+func _neighbor_offsets() -> Array:
+	return [
+		Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT,
+		Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+	]
 
 func _tile_interaction_route(target: Vector2i) -> Dictionary:
 	var speed := _effective_speed(
@@ -3316,9 +3617,11 @@ func _is_cave_squidley(drone) -> bool:
 	var script = drone.get_script()
 	return script is Script and script.resource_path == SQUIDLEY_SCRIPT
 
-func _reachable_cached_resource_count() -> int:
+func _reachable_cached_resource_count(resource_type := "") -> int:
 	var reachable := 0
 	for drop in _cached_resources():
+		if not resource_type.is_empty() and drop.type != resource_type:
+			continue
 		if not is_finite(_path_distance(keeper.global_position, drop.global_position)):
 			continue
 		if not is_finite(_path_distance(drop.global_position, _home_position())):

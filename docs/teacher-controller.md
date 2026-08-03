@@ -32,7 +32,8 @@ resumes; paths and decisions are not restored as stale snapshots.
 | Task | Responsibility | Completion |
 | --- | --- | --- |
 | `SEARCH` | Fishbone search for the relic or a requested ore type | The requested cache exists; the root relic search does not pop |
-| `MINE` | Drill one revealed connected ore vein and record its cache site | No revealed adjacent ore remains |
+| `RECORD_ORE` | Dig the dirt perimeter around a revealed ore block so the whole connected vein is revealed, then record it as a mineral cache point | The vein perimeter is fully revealed or the dig budget is reached |
+| `MINE` | Drill recorded ore until the requested drop count exists at the site | The requested drop count is reached or the vein is exhausted |
 | `INTERACT` | Complete one Chamber or Cave using its exact runtime object | The interaction's visible effect or authoritative handoff is observed |
 | `ACQUIRE_RESOURCE` | Attach a requested number of physical resources from one cache | The requested load is carried |
 | `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver them to the dome | No reachable cached resource remains |
@@ -106,13 +107,28 @@ A resource `SEARCH` uses the same geometry but scans only the requested ore
 type, while still allowing Chambers and Caves to interrupt it. It first returns
 to the root relic search's saved central-shaft intersection and continues that
 shaft instead of starting a second shaft beside the requesting interaction.
-`MINE` owns the target coordinate, connected-vein coordinates, and selected
-A*/direct approach. After the vein clears it records the first mined coordinate
-as a cache site and pops. The parent resource search completes only when a cache
-contains the required amount. Before another task diverts the keeper, the active
-search stores its current coordinate until it has a known-open shaft intersection,
-then always resumes from that intersection; after the diversion it follows a fresh
-A* path back there and continues the same fishbone phase.
+Before another task diverts the keeper, the active search stores its current
+coordinate until it has a known-open shaft intersection, then always resumes
+from that intersection; after the diversion it follows a fresh A* path back
+there and continues the same fishbone phase.
+
+The root relic search never mines revealed ore. When a revealed ore block enters
+the interaction scan, `RECORD_ORE` digs the surrounding dirt instead — dirt
+spawns no drops and does not raise run weight — until the connected vein is
+fully revealed, then records it in `ore_caches` as a mineral cache point
+(`{type, site, coords}`). `MINE` owns the target coordinate, recorded-vein
+coordinates, and selected A*/direct approach, and drills only until the
+requested drop count is produced at the site. Upgrade intents are funded by
+mining the nearest recorded vein of the missing resource when stored inventory
+and existing cached drops cannot cover the deficit; Cave demands (Scanner,
+Power Core, Portal, and Cave receivers) mine a recorded vein of their requested
+type first and fall back to a dedicated fishbone search only when no vein is
+recorded. A vein is therefore never cleared just because it was found, and the
+parent resource search completes only when a cache contains the required amount.
+Once reachable cached drops cover a pending upgrade deficit, the same scheduler
+pushes `CLEANUP_RESOURCES` so the mined drops are collected and deposited
+without waiting for the next wave; the pre-wave `CARRY_TO_DOME` and post-wave
+cleanup paths continue to deliver larger or wave-timed loads.
 
 When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back
