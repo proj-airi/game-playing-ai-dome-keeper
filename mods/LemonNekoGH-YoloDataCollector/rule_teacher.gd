@@ -709,7 +709,7 @@ func _status_active_monsters() -> Array[Dictionary]:
 		return []
 	var grouped := {}
 	for monster in wave_manager.monstersInWave:
-		if not is_instance_valid(monster) or monster.dead:
+		if not is_instance_valid(monster) or monster.dead or monster.type == Monster.Type.WORM_ROCK:
 			continue
 		var kind := Utils.decode_monster_type(monster.type)
 		if not grouped.has(kind):
