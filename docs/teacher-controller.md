@@ -95,6 +95,8 @@ The root task searches for the relic with a deterministic fishbone pattern:
 
 - descend a central shaft;
 - mine alternating horizontal corridors spaced by the current reveal radius;
+- reverse directly through each already-open corridor to scan the other side,
+  then return to its main-shaft intersection before changing rows;
 - bypass a revealed border laterally until downward progress is possible;
 - record completed corridor cells as possible future descent frontiers;
 - when a descent ends, spread attempts across the deepest completed corridor
@@ -108,8 +110,9 @@ shaft instead of starting a second shaft beside the requesting interaction.
 A*/direct approach. After the vein clears it records the first mined coordinate
 as a cache site and pops. The parent resource search completes only when a cache
 contains the required amount. Before another task diverts the keeper, the active
-search stores its current corridor coordinate; after the diversion it follows a
-fresh A* path back there and continues the same fishbone phase.
+search stores its current coordinate until it has a known-open shaft intersection,
+then always resumes from that intersection; after the diversion it follows a fresh
+A* path back there and continues the same fishbone phase.
 
 When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back
@@ -176,24 +179,21 @@ invalidates this context.
 - Gadget Chambers and Power Core Chambers excavate revealed cover, activate
   the normal usable, carry the exact artifact directly to the dome, recover a
   detached artifact by clearing its neighboring tiles, and wait for the
-  mandatory choice popup. A finite open A* path is sufficient for a cover
-  approach, including Chamber-cleared empty cells outside the revealed-tile
-  registry.
+  mandatory choice popup. Cover selection accepts live Chamber-cover cells and
+  keeps the selected cell fixed until it is destroyed.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to
-  observe whether it opened. Revisit navigation first targets the nearest
-  registered corridor cell as the saved approach and only then performs the
-  open check, because the Chamber scene node itself sits between A* cells.
-  Without a remembered chamber, the root fishbone search first scans a bounded
-  14-tile area from the Engineer's open tile beside the switch, matching the
-  supported map's switch-distance upper bound, then resumes global frontier
-  selection if that area is exhausted. While that bounded search is active,
-  ordinary ore veins and post-wave cache cleanup cannot displace it. It does
-  not read hidden chamber state.
+  observe whether it opened; if it remains locked, the interaction pops and the
+  interrupted root fishbone search resumes from its saved main-shaft cell. Before
+  a Relic Chamber is known, the first activated switch bounds that same root
+  search to its surrounding mine; it does not create a second search task.
+  Revisit navigation targets a live traversed pathfinding cell.
 - A Relic Chamber is excavated and remembered when it remains locked. The root
-  search then scans its bounded generated switch area upward before covering
-  the lower half and returning to global frontiers. Once it opens, the teacher
+  interaction then pops, recenters the existing bounded search on the Chamber,
+  and resumes its current row and downward direction without restarting the
+  search. Optional ore, caves, and post-wave cache cleanup cannot displace this
+  bounded finish. Once the Chamber opens, the teacher
   activates the normal usable with no unrelated cargo, carries the exact
   attached Relic to the dome, and recovers it through the shared
   physical-artifact path if it detaches. Stored Relic inventory completes this

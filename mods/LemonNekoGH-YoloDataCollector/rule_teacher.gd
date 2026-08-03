@@ -916,6 +916,31 @@ func _root_relic_search() -> Dictionary:
 		return {}
 	return root
 
+func _relic_chamber_revisit_coord(search: Dictionary, chamber: Chamber, live_approach := NO_COORD) -> Vector2i:
+	if live_approach != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(live_approach) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+		return live_approach
+	var preferred := Vector2i(search.get("relic_chamber_approach", NO_COORD))
+	if preferred != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(preferred) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+		return preferred
+	var chamber_coord := Vector2i(chamber.coord)
+	var best := NO_COORD
+	var best_distance := INF
+	var corridor_cells: Array = [search.get("active_corridor_cells", {})]
+	for corridor in search.get("completed_corridors", []):
+		if corridor is Dictionary:
+			corridor_cells.append(corridor.get("cells", {}))
+	for cells in corridor_cells:
+		if not cells is Dictionary:
+			continue
+		for candidate in cells:
+			if not candidate is Vector2i or not Level.map.pathfinder.pointIdsByCoord.has(Vector2(candidate) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+				continue
+			var distance := Vector2i(candidate).distance_squared_to(chamber_coord)
+			if distance < best_distance:
+				best = candidate
+				best_distance = distance
+	return best
+
 func _push_task(task: Dictionary, reason: String) -> void:
 	_release_all()
 	if (
@@ -925,12 +950,18 @@ func _push_task(task: Dictionary, reason: String) -> void:
 	):
 		tasks.back().approach_coord = Level.map.getTileCoord(keeper.global_position)
 	var search := _find_task(TaskType.SEARCH)
-	if (
-		int(task.type) != TaskType.RECOVER
-		and not search.is_empty()
-		and Vector2i(search.resume_coord) == NO_COORD
-	):
-		search.resume_coord = Level.map.getTileCoord(keeper.global_position)
+	if int(task.type) != TaskType.RECOVER and not search.is_empty():
+		if Vector2i(search.resume_coord) == NO_COORD:
+			var resume_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
+			var branch_entry := Vector2i(search.get("branch_entry_coord", NO_COORD))
+			if (
+				branch_entry != NO_COORD
+				and Level.map.pathfinder.pointIdsByCoord.has(
+					Vector2(branch_entry) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+				)
+			):
+				resume_coord = branch_entry
+			search.resume_coord = resume_coord
 	tasks.append(task)
 	delay = 0.2
 	pickup_failures = 0
@@ -1151,29 +1182,20 @@ func _search(task: Dictionary) -> void:
 			_fail("The fishbone branch has no saved open shaft intersection")
 			return
 		task.branch_side = int(task.branch_side) * -1
-		task.resume_coord = task.branch_entry_coord
 		if int(task.branch_side) > 0:
 			_record_completed_corridor(task, int(task.branch_row))
 			task.attempted_descent_origins[task.branch_entry_coord] = true
+			task.resume_coord = task.branch_entry_coord
 			var row_direction := int(task.get("branch_row_direction", 1))
 			task.branch_row = int(task.branch_row) + _branch_row_step() * row_direction
-			if (
-				focus_coord != NO_COORD
-				and row_direction < 0
-				and int(task.branch_row) < focus_coord.y - focus_radius
-			):
-				task.branch_row_direction = 1
-				task.branch_row = focus_coord.y
-				task.mode = ExploreMode.DESCEND
-			elif focus_coord != NO_COORD and int(task.branch_row) > focus_coord.y + focus_radius:
+			if focus_coord != NO_COORD and int(task.branch_row) > focus_coord.y + focus_radius:
 				task.focus_coord = NO_COORD
 				task.focus_radius = 0
 				task.resume_coord = NO_COORD
 				task.mining_outcome = MiningOutcome.BACKTRACK_PENDING
-				task.mining_outcome_reason = "The bounded relic switch search was exhausted"
+				task.mining_outcome_reason = "The bounded relic search was exhausted"
 				return
-			else:
-				task.mode = ExploreMode.ASCEND if row_direction < 0 else ExploreMode.DESCEND
+			task.mode = ExploreMode.ASCEND if row_direction < 0 else ExploreMode.DESCEND
 			_reset_progress()
 		delay = 0.2
 		return
@@ -1234,21 +1256,14 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 				return
 			var search := _root_relic_search()
 			var relic_chamber = search.get("relic_chamber")
-			var focus_coord: Vector2i = Level.map.getTileCoord(keeper.global_position)
 			_pop_task("The revealed relic switch was activated")
 			if is_instance_valid(relic_chamber):
 				var revisit := _new_chamber_interaction_task(relic_chamber, "relic chamber")
 				revisit.approach_coord = _relic_chamber_revisit_coord(search, relic_chamber)
 				_push_task(revisit, "A relic switch was activated; revisit the excavated Relic Chamber")
 			else:
-				search.focus_coord = focus_coord
+				search.focus_coord = Vector2i(relic_switch.coord)
 				search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
-				_adopt_descent_frontier(
-					search,
-					focus_coord,
-					focus_coord.y,
-					"An activated relic switch focused the search on its surrounding mine"
-				)
 		_:
 			_fail("Relic switch returned to an unsupported state")
 
@@ -1285,11 +1300,10 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			var search := _root_relic_search()
 			var approach_cell := Vector2i(task.get("approach_coord", NO_COORD))
 			if approach_cell == NO_COORD:
-				approach_cell = _relic_chamber_revisit_coord(
-					search,
-					chamber,
-					Level.map.getTileCoord(keeper.global_position)
-				)
+				var live_approach := Vector2i(task.get("cover_approach_coord", NO_COORD))
+				if live_approach == NO_COORD:
+					live_approach = Level.map.getTileCoord(keeper.global_position)
+				approach_cell = _relic_chamber_revisit_coord(search, chamber, live_approach)
 				task.approach_coord = approach_cell
 			if approach_cell == NO_COORD:
 				_fail("No recorded open approach reaches the excavated Relic Chamber")
@@ -1311,15 +1325,9 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			search.relic_chamber = chamber
 			if first_discovery:
 				_record("relic_chamber_excavated", "The Relic Chamber remains locked after excavation", null)
+				search.focus_coord = Vector2i(chamber.coord)
+				search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
 			_pop_task("The excavated Relic Chamber has not opened")
-			search.focus_coord = chamber_cell
-			search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
-			_adopt_ascent_frontier(
-				search,
-				Level.map.getTileCoord(keeper.global_position),
-				Level.map.getTileCoord(keeper.global_position).y,
-				"A locked Relic Chamber focused the search on its surrounding switches"
-			)
 		Chamber.State.OPENING:
 			_wait_for_interaction(task, "Relic Chamber did not finish opening")
 		Chamber.State.OPEN:
@@ -1328,31 +1336,6 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			_wait_for_interaction(task, "Activated Relic Chamber did not attach its exact relic")
 		_:
 			_fail("Relic Chamber returned to an unsupported state")
-
-func _relic_chamber_revisit_coord(search: Dictionary, chamber: Chamber, live_approach := NO_COORD) -> Vector2i:
-	if live_approach != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(live_approach) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
-		return live_approach
-	var preferred := Vector2i(search.get("relic_chamber_approach", NO_COORD))
-	if preferred != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(preferred) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
-		return preferred
-	var chamber_coord := Vector2i(chamber.coord)
-	var best := NO_COORD
-	var best_distance := INF
-	var corridor_cells: Array = [search.get("active_corridor_cells", {})]
-	for corridor in search.get("completed_corridors", []):
-		if corridor is Dictionary:
-			corridor_cells.append(corridor.get("cells", {}))
-	for cells in corridor_cells:
-		if not cells is Dictionary:
-			continue
-		for candidate in cells:
-			if not candidate is Vector2i or not Level.map.pathfinder.pointIdsByCoord.has(Vector2(candidate) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
-				continue
-			var distance := Vector2i(candidate).distance_squared_to(chamber_coord)
-			if distance < best_distance:
-				best = candidate
-				best_distance = distance
-	return best
 
 func _mine(task: Dictionary) -> void:
 	var ore := Vector2i(task.get("ore", NO_COORD))
@@ -1937,7 +1920,7 @@ func _claim_relic_switch_interaction() -> bool:
 		if distance >= INTERACTION_RADIUS_TILES:
 			continue
 		var plan := _chamber_cover_plan(candidate, CONST.RELICSWITCH)
-		if not plan.has("astar_seconds") or not Level.map.isRevealed(Vector2i(plan.target)):
+		if plan.is_empty():
 			continue
 		if distance < best_distance:
 			best = candidate
@@ -1984,7 +1967,7 @@ func _claim_chamber_interaction(tile_type: String) -> bool:
 		if distance >= INTERACTION_RADIUS_TILES:
 			continue
 		var plan := _chamber_cover_plan(candidate, tile_type)
-		if not plan.has("astar_seconds") or not Level.map.isRevealed(Vector2i(plan.target)):
+		if plan.is_empty():
 			continue
 		if distance < best_distance:
 			best = candidate
@@ -2690,13 +2673,22 @@ func _mine_gadget_chamber(task: Dictionary) -> void:
 			_fail("Gadget chamber returned to an unsupported state")
 
 func _excavate_chamber(task: Dictionary, chamber: Chamber, tile_type: String, label: String) -> void:
-	var plan := _chamber_cover_plan(chamber, tile_type)
-	if plan.is_empty():
-		_wait_for_interaction(task, "No revealed %s cover has a reachable open approach" % label)
-		return
+	var target := Vector2i(task.get("cover_target", NO_COORD))
+	var approach := Vector2i(task.get("cover_approach_coord", NO_COORD))
+	var local_cell := target - Vector2i(chamber.coord)
+	if (
+		target == NO_COORD
+		or chamber.tileCover.get_cell_source_id(MapData.DEFAULT_LAYER, local_cell) == CONST.TILEMAP_INVALID_CELL
+	):
+		var plan := _chamber_cover_plan(chamber, tile_type)
+		if plan.is_empty():
+			_wait_for_interaction(task, "No revealed %s cover has a reachable approach" % label)
+			return
+		target = Vector2i(plan.target)
+		approach = Vector2i(plan.approach_coord)
+		task.cover_target = target
+		task.cover_approach_coord = approach
 	task.wait_steps = 0
-	var approach: Vector2i = plan["approach_coord"]
-	var target: Vector2i = plan["target"]
 	if approach != NO_COORD and Level.map.getTileCoord(keeper.global_position) != approach:
 		if not _move_open(Level.map.getTilePos(approach)):
 			_fail("The revealed %s cover approach became unreachable" % label)
@@ -2712,18 +2704,10 @@ func _chamber_cover_plan(chamber: Chamber, tile_type: String) -> Dictionary:
 		return {}
 	var best := {}
 	var best_seconds := INF
-	var fallback := NO_COORD
-	var fallback_distance := INF
 	for local_cell in chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER):
 		var target := Vector2i(chamber.coord + Vector2(local_cell))
 		var tile = Level.map.getTile(target)
-		if not tile is Tile or tile.type != tile_type:
-			continue
-		var distance := keeper.global_position.distance_squared_to(Level.map.getTilePos(target))
-		if distance < fallback_distance:
-			fallback = target
-			fallback_distance = distance
-		if not Level.map.isRevealed(target):
+		if tile is Tile and tile.type != tile_type:
 			continue
 		var route := _tile_interaction_route(target)
 		var selected_seconds := minf(route.astar_seconds, route.direct_seconds)
@@ -2734,8 +2718,6 @@ func _chamber_cover_plan(chamber: Chamber, tile_type: String) -> Dictionary:
 		best = route
 		best["target"] = target
 		best_seconds = selected_seconds
-	if best.is_empty() and fallback != NO_COORD:
-		return {"approach_coord": NO_COORD, "target": fallback}
 	return best
 
 func _begin_detached_artifact_recovery(task: Dictionary, artifact: Drop) -> void:
@@ -3023,6 +3005,9 @@ func _tile_interaction_route(target: Vector2i) -> Dictionary:
 	var approach_coord := NO_COORD
 	for offset in CARDINAL_OFFSETS:
 		var candidate: Vector2i = target + offset
+		var pathfinder_coord := Vector2(candidate) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+		if not Level.map.pathfinder.pointIdsByCoord.has(pathfinder_coord):
+			continue
 		var seconds := _path_distance(
 			keeper.global_position,
 			Level.map.getTilePos(candidate)
@@ -3953,24 +3938,6 @@ func _adopt_descent_frontier(task: Dictionary, coord: Vector2i, target_row: int,
 	task.shaft_row = -1
 	_release_all()
 	_record("search_route_changed", reason, {"mode": "descend", "coord": coord})
-	_reset_progress()
-	delay = 0.2
-
-func _adopt_ascent_frontier(task: Dictionary, coord: Vector2i, target_row: int, reason: String) -> void:
-	task.attempted_descent_origins[coord] = true
-	task.mining_outcome = MiningOutcome.ACTIVE
-	task.mining_outcome_reason = ""
-	task.branch_row = target_row
-	task.branch_row_direction = -1
-	task.branch_side = 1
-	task.branch_entry_coord = NO_COORD
-	task.active_corridor_cells.clear()
-	task.bypass_side = 1
-	task.bypass_reversed = false
-	task.resume_coord = coord
-	task.mode = ExploreMode.ASCEND
-	_release_all()
-	_record("search_route_changed", reason, {"mode": "ascend", "coord": coord})
 	_reset_progress()
 	delay = 0.2
 
