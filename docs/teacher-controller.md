@@ -128,6 +128,14 @@ three tiles wide. Waves and upgrades suspend and resume it through the ordinary
 task stack. Every descent after that widens its own column the same way while
 digging, so no further widening task is needed.
 
+Relic Hunt wave strength is not fixed by the seed alone: accumulated mined and
+carried resources raise the run weight used by wave generation, so a search
+policy that keeps digging without delivering measurably increases pressure on
+later defense windows. This is an empirical observation from the locally
+recovered wave-generation behavior, corroborated by the community-documented
+run weight linked in [`references.md`](references.md#project-and-game); the
+exact formula is deliberately not reproduced here.
+
 ## Resource acquisition and cleanup
 
 `ACQUIRE_RESOURCE` owns the resource type, requested carried amount, selected

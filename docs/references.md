@@ -9,6 +9,7 @@ This page collects external resources useful for understanding and maintaining t
 - [Dome Keeper Engineer](https://domekeeper.wiki.gg/wiki/Engineer) — A gameplay reference for the Engineer's drilling, carrying, controls, and upgrades used by the teacher.
 - [Dome Keeper Laser Dome](https://domekeeper.wiki.gg/wiki/Laser_Dome) — A reference for the weapon and upgrades used by the currently supported Engineer and Laser Dome setup.
 - [Dome Keeper Relic Hunt](https://domekeeper.wiki.gg/wiki/Relic_Hunt#Bedrock) — A guide to Relic Hunt progression, victory, and bedrock boundaries relevant to planned completion support and current exploration behavior.
+- [Dome Keeper Technical Terms](https://domekeeper.wiki.gg/wiki/Technical_Terms#Run_Weight_in_Relic_Hunt) — Community documentation of gameplay terms, including the Relic Hunt run weight (a base value plus contributions from resources and Gadgets); used to corroborate the locally recovered observation that accumulated mining raises later wave pressure.
 - [Dome Keeper Caves](https://domekeeper.wiki.gg/wiki/Caves) — A supplemental community overview of ordinary and special Cave rewards; target-version recovered scenes and runtime recordings remain authoritative for implementation.
 - [Dome Keeper X-ray Cave](https://domekeeper.wiki.gg/wiki/X-ray_Cave) — A supplemental description of the two-iron Scanner Cave and its reveal-distance reward, used alongside the recovered target-version lifecycle.
 
