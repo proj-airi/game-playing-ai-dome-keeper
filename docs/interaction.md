@@ -157,8 +157,9 @@ post-wave cache cleanup do not interrupt this bounded search.
 
 A revealed Relic Chamber is excavated and observed after one bounded state
 settling interval. If it remains locked, the root relic search remembers the
-exact chamber and resumes its existing fishbone route. The remembered locked
-chamber is not reclaimed by the periodic local scan. Each later switch
+exact chamber and scans the bounded lower half of its generated switch area
+before resuming global frontiers. The remembered locked chamber is not reclaimed
+by the periodic local scan. Each later switch
 activation triggers one explicit revisit instead, so the teacher neither reads
 hidden switch positions nor hard-codes a switch count.
 
