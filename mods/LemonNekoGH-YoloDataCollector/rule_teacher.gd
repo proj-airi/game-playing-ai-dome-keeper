@@ -6,7 +6,7 @@ signal recording_finished
 const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/gadget_catalog.gd")
 const SUPPLEMENT_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/supplement_catalog.gd")
 
-enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD }
+enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT }
 enum ExploreMode { DESCEND, BRANCH, BYPASS }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
@@ -28,7 +28,7 @@ const CHECKPOINT_SIDECAR := "teacher.json"
 const CHECKPOINT_FIELDS := [
 	"pending_intents", "combat_attack_next", "mobility_arm",
 	"drill_hits_by_coord", "wave_start_missing_health", "wave_start_max_health",
-	"last_wave_health_loss", "wave_health_tracking", "caches",
+	"last_wave_health_loss", "wave_health_tracking", "caches", "shaft_widen_done",
 ]
 const TASK_REF_FIELDS := [&"target", &"resource", &"gadget_drop", &"relic_chamber"]
 const TICK := 0.1
@@ -38,6 +38,7 @@ const ARTIFACT_UI_STEP_LIMIT := 40
 const ARTIFACT_RECOVERY_LIMIT := 3
 const INTERACTION_WAIT_LIMIT := 150
 const MIN_SPEED_RATIO := 0.55
+const WIDE_SHAFT_MIN_LOAD := 5
 const STALL_SECONDS := 4.0
 const INTERACTION_RADIUS_TILES := 10.0
 const DEFAULT_REVEAL_DISTANCE := 1
@@ -136,6 +137,7 @@ var last_wave_health_loss := 0.0
 var wave_health_tracking := false
 var observed_properties: Array[String] = []
 var caches: Array[Vector2] = []
+var shaft_widen_done := false
 var tick_time := 0.0
 var delay := 0.0
 var pickup_failures := 0
@@ -212,6 +214,7 @@ func start() -> bool:
 	if _leaf() == "BattleInputProcessor" or _wave("wavepresent") or _wave("wavebattle"):
 		tasks.append({"type": TaskType.DEFEND, "saw_wave": true})
 	caches.clear()
+	shaft_widen_done = false
 	_reset_progress()
 	if not checkpoint_state.is_empty():
 		error = _restore_checkpoint(checkpoint_state)
@@ -759,6 +762,100 @@ func _preflight() -> String:
 func _branch_row_step() -> int:
 	return 1 + int(Data.ofOr("map.revealdistance", DEFAULT_REVEAL_DISTANCE)) * 2
 
+func _step_wide_shaft(task: Dictionary, cell: Vector2i) -> bool:
+	var col := int(task.get("shaft_col", -1))
+	if col < 0 or absi(cell.x - col) > 1:
+		task.shaft_col = cell.x
+		col = cell.x
+	var phase := int(task.get("shaft_phase", 0))
+	for _guard in range(4):
+		var target := cell
+		match phase:
+			0: target = Vector2i(col + 1, cell.y)
+			1: target = Vector2i(col - 1, cell.y)
+			_:
+				target = Vector2i(col, int(task.get("shaft_row", cell.y)) + 1)
+		if phase < 2:
+			var side = Level.map.getTile(target)
+			if not (side is Tile and ARTIFACT_CLEARANCE_TILE_TYPES.has(side.type) and side.get_meta("destructable", false)):
+				phase += 1
+				if phase == 2:
+					task.shaft_row = cell.y
+				task.shaft_phase = phase
+				continue
+		if phase == 2 and cell.y > int(task.get("shaft_row", cell.y)):
+			task.shaft_phase = 0
+			continue
+		if Level.map.getTileCoord(keeper.global_position) == target:
+			phase = (phase + 1) % 3
+			if phase == 2:
+				task.shaft_row = cell.y
+			task.shaft_phase = phase
+			continue
+		_hold(_axis(Level.map.getTilePos(target)))
+		return true
+	_hold([&"ui_down"])
+	return true
+
+func _widen_main_shaft(task: Dictionary) -> void:
+	var col := int(task.get("main_col", -1))
+	if col < 0:
+		task.main_col = Level.map.getTileCoord(_home_position()).x
+		col = int(task.main_col)
+	var entry_coord := Vector2i(task.get("entry_coord", NO_COORD))
+	if entry_coord == NO_COORD:
+		task.entry_coord = Level.map.getTileCoord(_home_position())
+		entry_coord = Vector2i(task.entry_coord)
+	var cell: Vector2i = Level.map.getTileCoord(keeper.global_position)
+	if not bool(task.get("descending", false)):
+		if cell == entry_coord:
+			task.descending = true
+		else:
+			if not _move_open(Level.map.getTilePos(entry_coord)):
+				_fail("No open path reaches the main shaft entrance")
+			return
+	var phase := int(task.get("widen_phase", 0))
+	for _guard in range(4):
+		var target := cell
+		match phase:
+			0: target = Vector2i(col + 1, cell.y)
+			1: target = Vector2i(col - 1, cell.y)
+			_:
+				target = Vector2i(col, int(task.get("widen_row", cell.y)) + 1)
+		if phase < 2:
+			var side = Level.map.getTile(target)
+			if not (side is Tile and ARTIFACT_CLEARANCE_TILE_TYPES.has(side.type) and side.get_meta("destructable", false)):
+				phase += 1
+				if phase == 2:
+					task.widen_row = cell.y
+				task.widen_phase = phase
+				continue
+		if phase == 2 and cell.y > int(task.get("widen_row", cell.y)):
+			task.widen_phase = 0
+			continue
+		if phase == 2 and Level.map.getTile(target) is Tile:
+			shaft_widen_done = true
+			var cleared := 0
+			for row in range(entry_coord.y + 1, cell.y + 1):
+				for side in [Vector2i(col - 1, row), Vector2i(col + 1, row)]:
+					var tile = Level.map.getTile(side)
+					if not (tile is Tile and ARTIFACT_CLEARANCE_TILE_TYPES.has(tile.type) and tile.get_meta("destructable", false)):
+						cleared += 1
+			_record("shaft_widened", "The main shaft was widened to three tiles", {
+				"col": col, "depth": cell.y, "cleared": cleared,
+			})
+			_pop_task("The main shaft has been widened")
+			return
+		if Level.map.getTileCoord(keeper.global_position) == target:
+			phase = (phase + 1) % 3
+			if phase == 2:
+				task.widen_row = cell.y
+			task.widen_phase = phase
+			continue
+		_hold(_axis(Level.map.getTilePos(target)))
+		return
+	_hold([&"ui_down"])
+
 func _load_bindings() -> String:
 	bindings.clear(); var actions := ACTIONS.duplicate()
 	actions.append(StringName(dome.techId + "_fire"))
@@ -788,6 +885,9 @@ func _new_search_task(goal: String, minimum := 1) -> Dictionary:
 		"attempted_descent_origins": {},
 		"resume_coord": NO_COORD,
 		"relic_chamber": null,
+		"shaft_phase": 0,
+		"shaft_col": -1,
+		"shaft_row": -1,
 	}
 
 func _task_type() -> int:
@@ -871,6 +971,8 @@ func _status_task(task: Dictionary) -> Dictionary:
 			result["detail"] = "movement probe"
 		TaskType.CHOOSE_REWARD:
 			result["detail"] = "mandatory artifact choice"
+		TaskType.WIDEN_SHAFT:
+			result["detail"] = "main shaft"
 	return result
 
 func _tick_tasks(delta: float) -> void:
@@ -892,6 +994,16 @@ func _tick_tasks(delta: float) -> void:
 		if not upgrade_id.is_empty() and _upgrade_ready(upgrade_id):
 			_push_task({"type": TaskType.UPGRADE}, "An affordable upgrade is available at the base computer")
 			return
+	if (
+		active_type != TaskType.UPGRADE
+		and active_type != TaskType.DEFEND
+		and active_type != TaskType.CHOOSE_REWARD
+		and not shaft_widen_done
+		and _shaft_should_widen()
+		and _find_task(TaskType.WIDEN_SHAFT).is_empty()
+	):
+		_push_task({"type": TaskType.WIDEN_SHAFT, "main_col": -1, "entry_coord": NO_COORD, "widen_phase": 0, "widen_row": -1, "descending": false}, "The carry load reached the shaft-widening threshold")
+		return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and keeper.isInsideStation:
 		_release_all()
 		if _leaf() == "StationInputProcessor":
@@ -910,10 +1022,11 @@ func _tick_tasks(delta: float) -> void:
 		TaskType.UPGRADE: _upgrade(task)
 		TaskType.DEFEND: _defend(task)
 		TaskType.RECOVER: _recover(task)
+		TaskType.WIDEN_SHAFT: _widen_main_shaft(task)
 		_: _fail("Unsupported task type: " + str(task.type))
 
 func _task_can_scan(task: Dictionary) -> bool:
-	return int(task.type) == TaskType.SEARCH or int(task.type) == TaskType.ACQUIRE_RESOURCE or int(task.type) == TaskType.CLEANUP_RESOURCES
+	return int(task.type) == TaskType.SEARCH or int(task.type) == TaskType.ACQUIRE_RESOURCE
 
 func _search(task: Dictionary) -> void:
 	var goal := str(task.goal)
@@ -973,6 +1086,8 @@ func _search(task: Dictionary) -> void:
 				task.bypass_reversed = false
 				_reset_progress()
 				delay = 0.2
+				return
+			if _shaft_should_widen() and _step_wide_shaft(task, cell):
 				return
 			_hold([&"ui_down"])
 			return
@@ -1263,13 +1378,58 @@ func _available_resource(candidate, resource_type := "") -> bool:
 		and not _drop_targeted_by_transport(candidate)
 	)
 
+func _track_cleanup_trip(task: Dictionary, full_load: int, carried: int, cached_empty: bool) -> void:
+	if not task.has("planned"):
+		task.planned = full_load
+	task.peak = maxi(int(task.get("peak", 0)), carried)
+	var prev := int(task.get("prev_carried", -1))
+	if prev >= 0 and carried < prev:
+		var lost := prev - carried
+		var start_frame := int(task.get("return_frame", -1))
+		if _at_dome():
+			task.delivered = int(task.get("delivered", 0)) + lost
+			_record("cleanup_delivery", "A cleanup load reached the dome", {
+				"carried": lost,
+				"actual_seconds": (Engine.get_process_frames() - start_frame) / float(recording_fps) if recording_fps > 0 and start_frame >= 0 else null,
+			})
+		else:
+			task.detachments = int(task.get("detachments", 0)) + 1
+			_record("cleanup_detachment", "A carried resource detached outside the dome", {
+				"before": prev, "after": carried,
+				"coord": Level.map.getTileCoord(keeper.global_position),
+			})
+	task.prev_carried = carried
+	var inside := keeper.isInsideStation
+	if bool(task.get("inside", false)) and not inside:
+		task.returning = false
+	task.inside = inside
+	if not bool(task.get("returning", false)) and carried > 0 and not inside and (carried >= full_load or cached_empty):
+		task.returning = true
+		task.trips = int(task.get("trips", 0)) + 1
+		task.return_carried = carried
+		task.return_frame = Engine.get_process_frames()
+		var distance := _path_distance(keeper.global_position, _home_position())
+		var speed := _effective_speed(carried, _planning_base_speed(), _carry_loss())
+		_record("cleanup_return_start", "A cleanup delivery leg started", {
+			"carried": carried,
+			"predicted_seconds": distance / speed if is_finite(distance) and speed > 0.0 else null,
+		})
+
+func _at_dome() -> bool:
+	return keeper.isInsideStation or keeper.global_position.y <= _home_position().y + 12.0
+
 func _cleanup_resources(task: Dictionary) -> void:
 	var full_load := _full_load_count(_carry_loss())
 	var cached_resources := _cached_resources()
 	var carried_resources := keeper.carriedCarryables.filter(func(candidate):
 		return candidate is Drop and candidate.carryableType == "resource"
 	)
-	if not carried_resources.is_empty() and (carried_resources.size() >= full_load or cached_resources.is_empty()):
+	_track_cleanup_trip(task, full_load, carried_resources.size(), cached_resources.is_empty())
+	if not carried_resources.is_empty() and (
+		carried_resources.size() >= full_load
+		or cached_resources.is_empty()
+		or bool(task.get("returning", false))
+	):
 		_travel_to_station()
 		return
 	var target = task.get("target")
@@ -1287,6 +1447,13 @@ func _cleanup_resources(task: Dictionary) -> void:
 		task.target = target
 	if not is_instance_valid(target):
 		if carried_resources.is_empty():
+			_record("cleanup_trip_summary", "Cleanup finished without a reachable cached resource", {
+				"planned": int(task.get("planned", 0)),
+				"peak": int(task.get("peak", 0)),
+				"trips": int(task.get("trips", 0)),
+				"detachments": int(task.get("detachments", 0)),
+				"delivered": int(task.get("delivered", 0)),
+			})
 			_pop_task("No reachable cached resource remains")
 		else:
 			_travel_to_station()
@@ -2876,6 +3043,9 @@ func _full_load_count(loss: float) -> int:
 		count += 1
 	return count
 
+func _shaft_should_widen() -> bool:
+	return _full_load_count(_carry_loss()) >= WIDE_SHAFT_MIN_LOAD
+
 func _aim() -> void:
 	var weapon = _laser()
 	if weapon == null or not weapon.inputReady:
@@ -3595,6 +3765,9 @@ func _adopt_descent_frontier(task: Dictionary, coord: Vector2i, target_row: int,
 	task.bypass_reversed = false
 	task.resume_coord = coord
 	task.mode = ExploreMode.DESCEND
+	task.shaft_phase = 0
+	task.shaft_col = -1
+	task.shaft_row = -1
 	_release_all()
 	_record("search_route_changed", reason, {"mode": "descend", "coord": coord})
 	_reset_progress()

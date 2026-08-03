@@ -59,9 +59,10 @@ Each fixed control tick applies these rules in order:
    `UPGRADE` task closes it first and defense is pushed on the following tick.
 3. Being at the base computer with an affordable pending target pushes
    `UPGRADE` from any ordinary task.
-4. `SEARCH`, `ACQUIRE_RESOURCE`, and `CLEANUP_RESOURCES` scan for nearby
-   interactables, prioritizing revealed Relic Switch and Relic Chambers before
-   optional side interactions.
+4. `SEARCH` and `ACQUIRE_RESOURCE` scan for nearby interactables, prioritizing
+   revealed Relic Switch and Relic Chambers before optional side interactions.
+   `CLEANUP_RESOURCES` does not scan: a full return haul must not be suspended
+   by a side interaction, which would force-drop the carried load at the target.
 5. The active task performs one normal-input step.
 
 Consequently a resource search may be interrupted by another interaction, and
@@ -111,6 +112,16 @@ When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back
 to that coordinate before resuming the same ore target.
 
+Once the Engineer's current planned full load reaches five resources, the
+controller pushes a dedicated `WIDEN_SHAFT` task once; the threshold is the
+actual carried count (`_full_load_count`), independent of which upgrade produced
+it. The task walks the keeper to the main shaft entrance and descends the
+central dome column, clearing the right tile, then the left tile, then stepping
+down at every row until the shaft bottom, so the already-dug main shaft becomes
+three tiles wide. Waves and upgrades suspend and resume it through the ordinary
+task stack. Every descent after that widens its own column the same way while
+digging, so no further widening task is needed.
+
 ## Resource acquisition and cleanup
 
 `ACQUIRE_RESOURCE` owns the resource type, requested carried amount, selected
@@ -132,6 +143,18 @@ focuses. A Drop that leaves every recorded cache loses its reservation, and
 repeatedly unreachable Drops are ignored only by that cleanup task. Cleanup
 also abandons a Drop when its path distance stops decreasing before pickup,
 which covers Drops wedged into or physically blocked inside narrow pockets.
+Because cleanup never claims side interactions, a delivery leg cannot be
+interrupted by a Chamber or Cave that would otherwise drop the carried load and
+make the controller walk back for it. Each cleanup task records trip evidence
+in replay events (`cleanup_return_start`, `cleanup_delivery`,
+`cleanup_detachment`, and `cleanup_trip_summary`) covering planned and peak
+load, return-leg carried count, dome-entry deliveries, and carried resources
+that detached outside the dome, so towing loss stays distinguishable from
+ordinary pickup, delivery, and absorption.
+Once a delivery leg starts, cleanup stays on the return to the station even if
+a carried Drop detaches mid-route; the detached Drop is collected on a later
+leg instead of turning the keeper back, which previously made the same Drop
+break and get re-picked repeatedly at the same narrow passage.
 
 ## Chambers, Caves, and rewards
 
