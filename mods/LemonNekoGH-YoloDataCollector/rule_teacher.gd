@@ -367,8 +367,10 @@ func _configure_runtime() -> void:
 			% [str(window_size), str(RECORDING_RESOLUTION)]
 		)
 		get_tree().quit(1)
-	elif not OS.has_feature("movie") and DisplayServer.get_name() != "headless":
-		push_error("Configured replay requires Movie Maker or the headless display driver")
+	elif not OS.has_feature("movie") and DisplayServer.get_name() != "headless" and window_size != RECORDING_RESOLUTION:
+		push_error(
+			"Configured windowed replay requires the recording resolution"
+		)
 		get_tree().quit(1)
 	else:
 		recording_path = directory.path_join("recording.jsonl")

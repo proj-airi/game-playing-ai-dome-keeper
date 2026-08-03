@@ -13,6 +13,7 @@ const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
     fps: { type: 'string' },
+    headless: { type: 'boolean' },
     load: { type: 'string' },
     movie: { type: 'boolean' },
     save: { type: 'boolean' },
@@ -44,21 +45,21 @@ const replay = path.join(sessionDir, 'recording.jsonl')
 await mkdir(sessionDir, { recursive: true })
 console.log(`Recording to ${sessionDir}`)
 const startedAt = performance.now()
+const displayArgs = values.headless
+  ? ['--headless']
+  : [
+      '--render-thread',
+      'safe',
+      '--disable-vsync',
+      '--windowed',
+      '--resolution',
+      recordingResolution,
+      ...(values.movie ? ['--write-movie', avi] : []),
+    ]
 await run(godot, [
   '--path',
   project,
-  ...(values.movie
-    ? [
-        '--render-thread',
-        'safe',
-        '--disable-vsync',
-        '--windowed',
-        '--resolution',
-        recordingResolution,
-        '--write-movie',
-        avi,
-      ]
-    : ['--headless']),
+  ...displayArgs,
   '--fixed-fps',
   String(fps),
   '--',
@@ -94,7 +95,8 @@ if (values.movie) {
   ], 'FFmpeg conversion failed; the AVI and replay JSONL were kept')
 }
 
-console.log(`${values.movie ? 'Movie replay' : 'Headless replay'} ready: ${replay}`)
+const mode = values.movie ? 'Movie' : values.headless ? 'Headless' : 'Windowed'
+console.log(`${mode} replay ready: ${replay}`)
 
 async function run(command: string, args: string[], failure: string): Promise<void> {
   try {

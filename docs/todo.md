@@ -41,6 +41,12 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
   not present a lower capture rate or dropped confirmed telemetry as a fix for
   the underlying slowdown. Preserve ordinary manual YOLO collection for later
   label work.
+- Windowed replay throughput does not improve when the window is shrunk: the
+  game renders its `1920x1080` canvas baseline under `canvas_items` stretch
+  regardless of window size, and a same-seed `640x360` window measured ~11.9x
+  versus ~11.5x at `1280x720` (10 FPS, no movie). Keep the fixed `1280x720`
+  windowed mode; headless (~46x) remains the speed lever, and do not add a
+  resolution-reduction code path.
 - Bound JSONL and movie growth per fixed game minute, and validate the final
   replay flush and synchronized playback after a representative run beyond wave
   20. Do not prioritize the built-in AVI size boundary based on file size alone:
@@ -51,7 +57,7 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 
 ## Automated Recording Lifecycle Validation
 
-- Validate the repository replay command's headless and Movie Maker lifecycles
+- Validate the repository replay command's headless, windowed, and Movie Maker lifecycles
   in fresh won and lost runs. It waits for the supported single-player Engineer and Laser
   run's Keeper input to become active, starts the rule teacher and replay without
   the pause-menu button, treats authoritative `game.over` values as terminal,
