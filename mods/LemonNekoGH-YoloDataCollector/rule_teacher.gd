@@ -358,13 +358,18 @@ func _configure_runtime() -> void:
 	):
 		push_error("Recording directory and FPS are invalid")
 		get_tree().quit(1)
-	elif not OS.has_feature("movie") or movie != directory.path_join(RECORDING_MOVIE):
+	elif OS.has_feature("movie") and movie != directory.path_join(RECORDING_MOVIE):
 		push_error("Movie Maker output does not match the recording session")
 		get_tree().quit(1)
-	elif window_size != RECORDING_RESOLUTION:
+	elif OS.has_feature("movie") and window_size != RECORDING_RESOLUTION:
 		push_error(
 			"Recording window is %s instead of %s"
 			% [str(window_size), str(RECORDING_RESOLUTION)]
+		)
+		get_tree().quit(1)
+	elif not OS.has_feature("movie") and DisplayServer.get_name() != "headless" and window_size != RECORDING_RESOLUTION:
+		push_error(
+			"Configured windowed replay requires the recording resolution"
 		)
 		get_tree().quit(1)
 	else:
