@@ -143,6 +143,7 @@ var carry_preview_cache := {}
 var carry_preview_refresh_at := 0.0
 var caches: Array[Vector2] = []
 var ore_caches: Array[Dictionary] = []
+var blocked_drop_uids: Dictionary = {}
 var shaft_widen_done := false
 var tick_time := 0.0
 var delay := 0.0
@@ -1120,6 +1121,15 @@ func _tick_tasks(delta: float) -> void:
 						"amount": need,
 					}, "A pending upgrade needs %d %s beyond cached drops" % [need, resource])
 					return
+			else:
+				var upgrade := _next_upgrade_target(false)
+				if not upgrade.is_empty():
+					var cost: Dictionary = GameWorld.upgrades[upgrade["id"]].get("cost", {})
+					var stored_deficits := _resource_deficits(cost, _stored_upgrade_resources())
+					for resource in stored_deficits:
+						if _reachable_cached_resource_count(resource) > 0:
+							_push_task({"type": TaskType.CLEANUP_RESOURCES, "target": null, "ignored": {}}, "Cached %s covers the remaining upgrade cost" % resource)
+							return
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and not _wave("wavepresent") and _leaf() == "StationInputProcessor":
 		var upgrade := _next_upgrade_target()
 		var upgrade_id: String = upgrade.get("id", "")
@@ -1448,6 +1458,19 @@ func _mine(task: Dictionary) -> void:
 		ore = _adjacent_ore(task.get("vein", []))
 		task.ore = ore
 	if ore == NO_COORD:
+		if amount > 0 and not resource_type.is_empty():
+			var next_vein := _next_recorded_ore(resource_type, vein)
+			if not next_vein.is_empty():
+				var coords: Array = next_vein.get("coords", [])
+				var target := _nearest_valid_ore_coord(coords)
+				if target != NO_COORD:
+					task.ore = target
+					task.approach_coord = NO_COORD
+					for coord in coords:
+						if not vein.has(coord):
+							vein.append(coord)
+					task.vein = vein
+					return
 		_record_cache(task.get("vein", []))
 		_pop_task("The revealed ore vein has been cleared")
 		return
@@ -1720,6 +1743,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 			task.unfocusable_time = float(task.unfocusable_time) + TICK
 		if float(task.unfocusable_time) >= STALL_SECONDS:
 			ignored[target] = true
+			blocked_drop_uids[target.UID] = true
 			task.target = null
 			return
 	else:
@@ -1728,6 +1752,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 	if keeper.focussedCarryable == target and _leaf() == "Keeper1InputProcessor":
 		if pickup_failures >= 3:
 			ignored[target] = true
+			blocked_drop_uids[target.UID] = true
 			task.target = null
 			pickup_failures = 0
 			return
@@ -3316,6 +3341,26 @@ func _nearest_recorded_ore(resource_type: String) -> Dictionary:
 			best_distance = distance
 	return best
 
+func _next_recorded_ore(resource_type: String, current_vein: Array) -> Dictionary:
+	var best := {}
+	var best_distance := INF
+	for entry in ore_caches:
+		if str(entry.get("type", "")) != resource_type:
+			continue
+		var coords: Array = entry.get("coords", [])
+		if coords.any(func(c): return current_vein.has(c)):
+			continue
+		if not coords.any(func(c): return _is_ore_coord(c)):
+			continue
+		var site = entry.get("site", Vector2.ZERO)
+		var distance := _path_distance(keeper.global_position, site)
+		if not is_finite(distance):
+			distance = keeper.global_position.distance_to(site)
+		if distance < best_distance:
+			best = entry
+			best_distance = distance
+	return best
+
 func _nearest_valid_ore_coord(coords: Array) -> Vector2i:
 	var best := NO_COORD
 	var best_distance := INF
@@ -3354,6 +3399,7 @@ func _site_drop_count(resource_type: String, sites: Array) -> int:
 			not candidate is Drop
 			or candidate.type != resource_type
 			or candidate.carryableType != "resource"
+			or blocked_drop_uids.has(candidate.UID)
 			or candidate.absorbed
 			or candidate.independent
 			or candidate.isCarried()
@@ -3374,7 +3420,12 @@ func _upgrade_deficits_with_cached() -> Dictionary:
 	var available := _stored_upgrade_resources()
 	for drop in _cached_resources():
 		available[drop.type] = int(available.get(drop.type, 0)) + 1
-	return _resource_deficits(cost, available)
+	var deficits := _resource_deficits(cost, available)
+	var result := {}
+	for resource in ORE_TYPES:
+		if int(deficits.get(resource, 0)) > 0:
+			result[resource] = int(deficits[resource])
+	return result
 
 func _record_ore(task: Dictionary) -> void:
 	var vein: Array = task.get("vein", [])
@@ -3589,6 +3640,8 @@ func _cached_resources() -> Array[Drop]:
 	var result: Array[Drop] = []
 	for candidate in Level.drops.get_all_drops().values():
 		if not candidate is Drop:
+			continue
+		if blocked_drop_uids.has(candidate.UID):
 			continue
 		if candidate.carryableType != "resource" or candidate.absorbed or candidate.independent or candidate.isCarried():
 			continue
@@ -4058,6 +4111,14 @@ func _select_upgrade_target(
 				uses_reserved_resource = true
 			if uses_reserved_resource:
 				continue
+			var deficits := _resource_deficits(cost, available)
+			var unfundable := false
+			for resource in deficits:
+				if not ORE_TYPES.has(resource):
+					unfundable = true
+					break
+			if unfundable:
+				continue
 			if best.is_empty() or _upgrade_target_is_better(target, best, available):
 				best = target
 		if not best.is_empty() and _resource_deficits(
@@ -4139,8 +4200,6 @@ func _on_upgrade_bought(id: String, team_id: String, player_id: String) -> void:
 	if bool(task.get("active_fulfills", false)):
 		if int(task.active_intent) == UpgradeIntent.COMBAT:
 			combat_attack_next = int(task.active_arm) != 0
-			if not combat_attack_next:
-				pending_intents.erase(UpgradeIntent.COMBAT)
 		elif int(task.active_intent) == UpgradeIntent.DRILL:
 			drill_hits_by_coord.clear()
 			pending_intents.erase(UpgradeIntent.DRILL)

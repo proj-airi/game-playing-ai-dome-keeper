@@ -118,13 +118,17 @@ spawns no drops and does not raise run weight — until the connected vein is
 fully revealed, then records it in `ore_caches` as a mineral cache point
 (`{type, site, coords}`). `MINE` owns the target coordinate, recorded-vein
 coordinates, and selected A*/direct approach, and drills only until the
-requested drop count is produced at the site. Upgrade intents are funded by
-mining the nearest recorded vein of the missing resource when stored inventory
-and existing cached drops cannot cover the deficit; Cave demands (Scanner,
-Power Core, Portal, and Cave receivers) mine a recorded vein of their requested
-type first and fall back to a dedicated fishbone search only when no vein is
-recorded. A vein is therefore never cleared just because it was found, and the
-parent resource search completes only when a cache contains the required amount.
+requested drop count is produced at the site. When a recorded vein is exhausted
+before the requested count is reached, the same `MINE` continues to the next
+nearest recorded vein of that type instead of popping and starting a new
+delivery cycle, so one task can fund a whole upgrade deficit. Upgrade intents
+are funded by mining the nearest recorded vein of the missing resource when
+stored inventory and existing cached drops cannot cover the deficit; Cave
+demands (Scanner, Power Core, Portal, and Cave receivers) mine a recorded vein
+of their requested type first and fall back to a dedicated fishbone search only
+when no vein is recorded. A vein is therefore never cleared just because it was
+found, and the parent resource search completes only when a cache contains the
+required amount.
 Once reachable cached drops cover a pending upgrade deficit, the same scheduler
 pushes `CLEANUP_RESOURCES` so the mined drops are collected and deposited
 without waiting for the next wave; the pre-wave `CARRY_TO_DOME` and post-wave
@@ -265,8 +269,14 @@ Upgrade intents are persistent knowledge, not controller states:
 - the baseline drill-strength improvement reserves its iron before later
   combat or Laser spending after the baseline combat upgrade, while an active
   repair request remains eligible alongside it;
-- combat improvement is pending from run start, alternating attack strength
-  and dome health, and material wave damage reinforces it;
+- combat improvement stays pending from run start and alternates attack
+  strength with dome health, so the defense chain keeps funding itself instead
+  of going dormant after the first attack arm; material wave damage reinforces
+  it with repairs;
+- upgrade targets whose remaining deficit includes a resource the teacher
+  cannot mine on demand (such as cobalt, which only Caves produce) are skipped,
+  so the resource budget is not parked on an unfundable purchase while the dome
+  still needs mineable defense upgrades;
 - laser movement is a standing combat-class intent that buys the next
   `laserMove` chain upgrade whenever it is the cheapest affordable combat
   target;
