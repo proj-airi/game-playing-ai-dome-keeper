@@ -1868,6 +1868,9 @@ func _cave_route(candidate: Cave, speed: float) -> Dictionary:
 			var boundary: Vector2i = cell + offset
 			if footprint.has(boundary) or not Level.map.visibleTileCoords.has(boundary):
 				continue
+			var pathfinder_coord := Vector2(boundary) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+			if not Level.map.pathfinder.pointIdsByCoord.has(pathfinder_coord):
+				continue
 			var seconds := _path_distance(
 				keeper.global_position,
 				Level.map.getTilePos(boundary)
