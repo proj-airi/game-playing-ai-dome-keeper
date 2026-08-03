@@ -127,7 +127,12 @@ digging, so no further widening task is needed.
 `ACQUIRE_RESOURCE` owns the resource type, requested carried amount, selected
 cache site, and current physical Drop. If no qualifying cache exists it pushes
 a resource `SEARCH`; it never turns the interaction itself into an exploration
-mode.
+mode. Inside pickup range it adopts whichever eligible resource Drop the game
+currently focuses, even when the Drop's type differs from the requested
+resource, so a foreign focused Drop cannot stall the target pickup. If the
+carried load reaches the Engineer's bounded full-load count before the
+requested resource attaches, it returns to the dome to deposit the load and
+then resumes the same acquisition.
 
 The Scanner Cave requests two iron from the nearest cache that contains at
 least three iron when selected. Other resource receivers request one exact

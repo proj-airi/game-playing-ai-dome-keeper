@@ -1324,6 +1324,12 @@ func _acquire_resource(task: Dictionary) -> void:
 	if _carried_resource_count(resource_type) >= int(task.amount):
 		_pop_task("The requested physical %s is attached" % resource_type)
 		return
+	var carried_resources := keeper.carriedCarryables.filter(func(candidate):
+		return candidate is Drop and candidate.carryableType == "resource"
+	)
+	if not carried_resources.is_empty() and carried_resources.size() >= _full_load_count(_carry_loss()):
+		_travel_to_station()
+		return
 	var site = task.get("site")
 	if not site is Vector2:
 		site = _resource_site(resource_type, int(task.site_minimum))
@@ -1351,6 +1357,10 @@ func _acquire_resource(task: Dictionary) -> void:
 				target = candidate
 				best_distance = distance
 		task.target = target
+	var focused = keeper.focussedCarryable
+	if _available_resource(focused):
+		target = focused
+		task.target = focused
 	if not is_instance_valid(target):
 		task.site = null
 		return
