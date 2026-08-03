@@ -129,7 +129,9 @@ full-load count. Cleanup fills a supported load, delivers it, and repeats until
 no reachable cached Drop remains. Its reserved Drop guides navigation; inside
 pickup range it collects whichever eligible cached Drop the game currently
 focuses. A Drop that leaves every recorded cache loses its reservation, and
-repeatedly unreachable Drops are ignored only by that cleanup task.
+repeatedly unreachable Drops are ignored only by that cleanup task. Cleanup
+also abandons a Drop when its path distance stops decreasing before pickup,
+which covers Drops wedged into or physically blocked inside narrow pockets.
 
 ## Chambers, Caves, and rewards
 
@@ -139,11 +141,14 @@ invalidates this context.
 - Gadget Chambers and Power Core Chambers excavate revealed cover, activate
   the normal usable, carry the exact artifact directly to the dome, recover a
   detached artifact by clearing its neighboring tiles, and wait for the
-  mandatory choice popup.
+  mandatory choice popup. A finite open A* path is sufficient for a cover
+  approach, including Chamber-cleared empty cells outside the revealed-tile
+  registry.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to
-  observe whether it opened.
+  observe whether it opened. Revisit navigation targets the Chamber's map-cell
+  center because the scene node itself sits between A* cells.
 - A Relic Chamber is excavated and remembered when it remains locked. Once it
   opens, the teacher activates the normal usable with no unrelated cargo, carries
   the exact attached Relic to the dome, and recovers it through the shared

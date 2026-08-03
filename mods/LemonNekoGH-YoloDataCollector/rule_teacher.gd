@@ -289,6 +289,9 @@ func _process(delta: float) -> void:
 	if _blocked():
 		_release_all(); _reset_progress()
 		return
+	if keeper.isInsideStation and _leaf() == "StationInputProcessor":
+		_tick_tasks(delta)
+		return
 
 	delay = maxf(delay - delta, 0.0)
 	var active_type := _task_type()
@@ -1107,8 +1110,9 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			if is_instance_valid(chamber.tileCover) and not chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER).is_empty():
 				_excavate_chamber(task, chamber, CONST.RELIC, "Relic")
 				return
-			if keeper.global_position.distance_to(chamber.global_position) >= GameWorld.TILE_SIZE * 7.5:
-				if not _move_open(chamber.global_position):
+			var chamber_coord: Vector2 = Level.map.getTilePos(chamber.coord)
+			if keeper.global_position.distance_to(chamber_coord) >= GameWorld.TILE_SIZE * 7.5:
+				if not _move_open(chamber_coord):
 					_fail("No open path reaches the excavated Relic Chamber")
 				return
 			if not bool(task.get("open_check_pending", false)):
@@ -1257,7 +1261,10 @@ func _available_resource(candidate, resource_type := "") -> bool:
 func _cleanup_resources(task: Dictionary) -> void:
 	var full_load := _full_load_count(_carry_loss())
 	var cached_resources := _cached_resources()
-	if not keeper.carriedCarryables.is_empty() and (keeper.carriedCarryables.size() >= full_load or cached_resources.is_empty()):
+	var carried_resources := keeper.carriedCarryables.filter(func(candidate):
+		return candidate is Drop and candidate.carryableType == "resource"
+	)
+	if not carried_resources.is_empty() and (carried_resources.size() >= full_load or cached_resources.is_empty()):
 		_travel_to_station()
 		return
 	var target = task.get("target")
@@ -1274,7 +1281,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 				best_distance = distance
 		task.target = target
 	if not is_instance_valid(target):
-		if keeper.carriedCarryables.is_empty():
+		if carried_resources.is_empty():
 			_pop_task("No reachable cached resource remains")
 		else:
 			_travel_to_station()
@@ -1283,6 +1290,24 @@ func _cleanup_resources(task: Dictionary) -> void:
 	if _available_resource(focused) and cached_resources.has(focused) and not ignored.has(focused):
 		target = focused
 		task.target = focused
+	if int(task.get("approach_uid", -1)) != target.UID:
+		task.approach_uid = target.UID
+		task.closest_path_distance = INF
+		task.unfocusable_time = 0.0
+	var path_distance := _path_distance(keeper.global_position, target.global_position)
+	if not keeper.carryables.has(target):
+		if path_distance + 2.0 < float(task.closest_path_distance):
+			task.closest_path_distance = path_distance
+			task.unfocusable_time = 0.0
+		else:
+			task.unfocusable_time = float(task.unfocusable_time) + TICK
+		if float(task.unfocusable_time) >= STALL_SECONDS:
+			ignored[target] = true
+			task.target = null
+			return
+	else:
+		task.closest_path_distance = path_distance
+		task.unfocusable_time = 0.0
 	if keeper.focussedCarryable == target and _leaf() == "Keeper1InputProcessor":
 		if pickup_failures >= 3:
 			ignored[target] = true
@@ -1842,6 +1867,9 @@ func _cave_route(candidate: Cave, speed: float) -> Dictionary:
 		for offset in CARDINAL_OFFSETS:
 			var boundary: Vector2i = cell + offset
 			if footprint.has(boundary) or not Level.map.visibleTileCoords.has(boundary):
+				continue
+			var pathfinder_coord := Vector2(boundary) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+			if not Level.map.pathfinder.pointIdsByCoord.has(pathfinder_coord):
 				continue
 			var seconds := _path_distance(
 				keeper.global_position,
@@ -2658,8 +2686,6 @@ func _tile_interaction_route(target: Vector2i) -> Dictionary:
 	var approach_coord := NO_COORD
 	for offset in CARDINAL_OFFSETS:
 		var candidate: Vector2i = target + offset
-		if not Level.map.visibleTileCoords.has(candidate):
-			continue
 		var seconds := _path_distance(
 			keeper.global_position,
 			Level.map.getTilePos(candidate)
