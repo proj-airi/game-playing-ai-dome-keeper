@@ -4094,12 +4094,6 @@ func _select_upgrade_target(
 	var reserved_resource_types := {}
 	var fallback := {}
 	var intent_classes := INTENT_CLASSES
-	if pending_intents.has(UpgradeIntent.DRILL) and _bought_count(DRILL_UPGRADES) <= 1 and _bought_count(ATTACK_UPGRADES) > 0:
-		intent_classes = [
-			[UpgradeIntent.REPAIR, UpgradeIntent.DRILL],
-			[UpgradeIntent.COMBAT, UpgradeIntent.LASER_MOVE],
-			[UpgradeIntent.MOBILITY],
-		]
 	for intent_class in intent_classes:
 		var class_resource_types := {}
 		var best := {}
