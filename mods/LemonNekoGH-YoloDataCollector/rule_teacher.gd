@@ -1520,13 +1520,20 @@ func _cleanup_resources(task: Dictionary) -> void:
 		return candidate is Drop and candidate.carryableType == "resource"
 	)
 	_track_cleanup_trip(task, full_load, carried_resources.size(), cached_resources.is_empty())
+	var available := _stored_upgrade_resources()
+	for resource in carried_resources:
+		available[resource.type] = int(available.get(resource.type, 0)) + 1
+	var upgrade := _select_upgrade_target(available, false)
+	var upgrade_id: String = upgrade.get("id", "")
+	var deficits := (
+		{}
+		if upgrade_id.is_empty()
+		else _resource_deficits(GameWorld.upgrades[upgrade_id].get("cost", {}), available)
+	)
+	var funds_upgrade := not upgrade_id.is_empty() and deficits.is_empty()
+	if not funds_upgrade:
+		cached_resources = cached_resources.filter(func(resource): return deficits.has(resource.type))
 	if not carried_resources.is_empty():
-		var available := _stored_upgrade_resources()
-		for resource in carried_resources:
-			available[resource.type] = int(available.get(resource.type, 0)) + 1
-		var upgrade := _select_upgrade_target(available, false)
-		var upgrade_id: String = upgrade.get("id", "")
-		var funds_upgrade := not upgrade_id.is_empty() and _resource_deficits(GameWorld.upgrades[upgrade_id].get("cost", {}), available).is_empty()
 		if (
 			carried_resources.size() >= full_load
 			or cached_resources.is_empty()
@@ -1558,7 +1565,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 				"detachments": int(task.get("detachments", 0)),
 				"delivered": int(task.get("delivered", 0)),
 			})
-			_pop_task("No reachable cached resource remains")
+			_pop_task("No reachable cached resource funds the current upgrade")
 		else:
 			_travel_to_station()
 		return
