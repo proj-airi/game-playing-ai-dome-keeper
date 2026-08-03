@@ -175,8 +175,9 @@ invalidates this context.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to
-  observe whether it opened. Revisit navigation targets the Chamber's map-cell
-  center because the scene node itself sits between A* cells.
+  observe whether it opened. Revisit navigation first targets the nearest
+  registered corridor cell as the saved approach and only then performs the
+  open check, because the Chamber scene node itself sits between A* cells.
 - A Relic Chamber is excavated and remembered when it remains locked. Once it
   opens, the teacher activates the normal usable with no unrelated cargo, carries
   the exact attached Relic to the dome, and recovers it through the shared
@@ -187,7 +188,10 @@ invalidates this context.
 - Scanner pushes acquisition of two iron, crosses the two receivers, presses
   the usable once, and succeeds only when map reveal distance increases.
 - Drone pushes acquisition of one water and succeeds only when its owned
-  Squidley exists after opening.
+  Squidley exists after opening. When the keeper reaches the exact receiver
+  position while the carried line still trails behind, delivery backs off to
+  an adjacent open tile so the trailing drops drag across the receiver, with
+  a bounded retry before failing.
 - Mushroom and Helmet press the usable once and validate movement speed and
   mine-camera zoom respectively.
 - Portal chooses one ordinary cached resource and succeeds only when its
@@ -208,7 +212,11 @@ chosen result fails the teacher.
 Upgrade intents are persistent knowledge, not controller states:
 
 - repeated drill hits request drill strength;
-- material wave damage requests combat improvement;
+- combat improvement is pending from run start, alternating attack strength
+  and dome health, and material wave damage reinforces it;
+- laser movement is a standing combat-class intent that buys the next
+  `laserMove` chain upgrade whenever it is the cheapest affordable combat
+  target;
 - low dome health requests repair;
 - a post-wave cleanup backlog requests mobility, alternating the less-developed
   speed or carry-strength chain.
@@ -217,7 +225,9 @@ Whenever an ordinary task reaches the base computer, an affordable pending
 target pushes `UPGRADE`. The task freezes one exact target while navigating the
 UI so new observations cannot redirect a purchase mid-popup. Confirmed purchase
 removes a fulfilled intent and immediately re-evaluates the next affordable
-target. A wave closes the menu and then pushes defense.
+target. Within the combat intent class, attack, health, and laser movement
+targets rotate by affordability and total resource cost. A wave closes the
+menu and then pushes defense.
 
 ## Defense and recovery
 

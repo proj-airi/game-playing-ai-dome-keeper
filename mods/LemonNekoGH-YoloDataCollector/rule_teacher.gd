@@ -11,7 +11,7 @@ enum ExploreMode { DESCEND, BRANCH, BYPASS }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
 enum FrontierSearch { READY, WAITING_WAVE, BLOCKED }
-enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY }
+enum UpgradeIntent { COMBAT, REPAIR, DRILL, MOBILITY, LASER_MOVE }
 enum MobilityArm { SPEED, STRENGTH }
 enum CaveTaskKind { NONE, SCANNER, DRONE, IRON_TREE, COBALT, WATER, MUSHROOM, PORTAL, HELMET }
 
@@ -84,7 +84,7 @@ const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
 const ARTIFACT_CLEARANCE_TILE_TYPES: Array[String] = ["dirt", CONST.IRON, CONST.SAND, CONST.WATER]
 const INTENT_CLASSES := [
-	[UpgradeIntent.COMBAT, UpgradeIntent.REPAIR],
+	[UpgradeIntent.COMBAT, UpgradeIntent.REPAIR, UpgradeIntent.LASER_MOVE],
 	[UpgradeIntent.DRILL, UpgradeIntent.MOBILITY],
 ]
 const ATTACK_UPGRADES: Array[StringName] = [&"laserStrength1", &"laserStrength2", &"laserStrength3", &"laserStrength4"]
@@ -180,6 +180,8 @@ func start() -> bool:
 	InputSystem.game_not_in_focus = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	pending_intents.clear()
+	pending_intents[UpgradeIntent.COMBAT] = true
+	pending_intents[UpgradeIntent.LASER_MOVE] = true
 	pending_intents[UpgradeIntent.DRILL] = true
 	combat_attack_next = _bought_count(ATTACK_UPGRADES) <= _bought_count(HEALTH_UPGRADES)
 	mobility_arm = MobilityArm.SPEED
@@ -1193,10 +1195,9 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 			var relic_chamber = search.get("relic_chamber")
 			_pop_task("The revealed relic switch was activated")
 			if is_instance_valid(relic_chamber):
-				_push_task(
-					_new_chamber_interaction_task(relic_chamber, "relic chamber"),
-					"A relic switch was activated; revisit the excavated Relic Chamber"
-				)
+				var revisit := _new_chamber_interaction_task(relic_chamber, "relic chamber")
+				revisit.approach_coord = _relic_chamber_revisit_coord(search, relic_chamber)
+				_push_task(revisit, "A relic switch was activated; revisit the excavated Relic Chamber")
 		_:
 			_fail("Relic switch returned to an unsupported state")
 
@@ -1230,9 +1231,20 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			if is_instance_valid(chamber.tileCover) and not chamber.tileCover.get_used_cells(MapData.DEFAULT_LAYER).is_empty():
 				_excavate_chamber(task, chamber, CONST.RELIC, "Relic")
 				return
-			var chamber_coord: Vector2 = Level.map.getTilePos(chamber.coord)
-			if keeper.global_position.distance_to(chamber_coord) >= GameWorld.TILE_SIZE * 7.5:
-				if not _move_open(chamber_coord):
+			var search := _root_relic_search()
+			var approach_cell := Vector2i(task.get("approach_coord", NO_COORD))
+			if approach_cell == NO_COORD:
+				approach_cell = _relic_chamber_revisit_coord(
+					search,
+					chamber,
+					Level.map.getTileCoord(keeper.global_position)
+				)
+				task.approach_coord = approach_cell
+			if approach_cell == NO_COORD:
+				_fail("No recorded open approach reaches the excavated Relic Chamber")
+				return
+			if Level.map.getTileCoord(keeper.global_position) != approach_cell:
+				if not _move_open(Level.map.getTilePos(approach_cell)):
 					_fail("No open path reaches the excavated Relic Chamber")
 				return
 			if not bool(task.get("open_check_pending", false)):
@@ -1240,7 +1252,10 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 				_release_all()
 				delay = 0.2
 				return
-			var search := _root_relic_search()
+			search.relic_chamber_approach = _relic_chamber_revisit_coord(search, chamber, approach_cell)
+			if Vector2i(search.relic_chamber_approach) == NO_COORD:
+				_fail("No revealed corridor cell can revisit the excavated Relic Chamber")
+				return
 			var first_discovery: bool = search.get("relic_chamber") != chamber
 			search.relic_chamber = chamber
 			if first_discovery:
@@ -1254,6 +1269,31 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			_wait_for_interaction(task, "Activated Relic Chamber did not attach its exact relic")
 		_:
 			_fail("Relic Chamber returned to an unsupported state")
+
+func _relic_chamber_revisit_coord(search: Dictionary, chamber: Chamber, live_approach := NO_COORD) -> Vector2i:
+	if live_approach != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(live_approach) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+		return live_approach
+	var preferred := Vector2i(search.get("relic_chamber_approach", NO_COORD))
+	if preferred != NO_COORD and Level.map.pathfinder.pointIdsByCoord.has(Vector2(preferred) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+		return preferred
+	var chamber_coord := Vector2i(chamber.coord)
+	var best := NO_COORD
+	var best_distance := INF
+	var corridor_cells: Array = [search.get("active_corridor_cells", {})]
+	for corridor in search.get("completed_corridors", []):
+		if corridor is Dictionary:
+			corridor_cells.append(corridor.get("cells", {}))
+	for cells in corridor_cells:
+		if not cells is Dictionary:
+			continue
+		for candidate in cells:
+			if not candidate is Vector2i or not Level.map.pathfinder.pointIdsByCoord.has(Vector2(candidate) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET):
+				continue
+			var distance := Vector2i(candidate).distance_squared_to(chamber_coord)
+			if distance < best_distance:
+				best = candidate
+				best_distance = distance
+	return best
 
 func _mine(task: Dictionary) -> void:
 	var ore := Vector2i(task.get("ore", NO_COORD))
@@ -2477,7 +2517,9 @@ func _run_cave_resource_delivery(task: Dictionary, required_type: String, owner_
 	if not is_instance_valid(resource):
 		_push_task(_new_acquire_resource_task(required_type, 1), "%s requires one %s" % [owner_label, required_type])
 		return
-	task.resource = resource
+	if task.resource != resource:
+		task.resource = resource
+		task.receiver_passes = 0
 	_deliver_cave_resource(task, owner_label, receiver)
 
 func _deliver_cave_resource(task: Dictionary, owner_label: String, receiver: ResourceGrabber) -> void:
@@ -2497,6 +2539,19 @@ func _deliver_cave_resource(task: Dictionary, owner_label: String, receiver: Res
 		_hold(actions)
 		task.wait_steps = 0
 		return
+	# The keeper reached the exact receiver position while the carried line
+	# still trails behind; back off to an adjacent open tile so the trailing
+	# drops drag across the receiver instead of failing at the first stop.
+	task.receiver_passes = int(task.get("receiver_passes", 0)) + 1
+	if int(task.receiver_passes) > 30:
+		_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label)
+		return
+	for offset in CARDINAL_OFFSETS:
+		var side_pos := Vector2(receiver_coord + offset) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+		if not Level.map.pathfinder.pointIdsByCoord.has(side_pos):
+			continue
+		if _move_open(side_pos):
+			return
 	_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label)
 
 func _drone_cave_has_owned_squidley(cave: Cave) -> bool:
@@ -3377,6 +3432,9 @@ func _resolve_intent(intent: int) -> Dictionary:
 		UpgradeIntent.REPAIR:
 			target = _resolve_chain(REPAIR_UPGRADES, true)
 			target["fulfills"] = target.get("raw_id", &"") == &"domesandrepair"
+		UpgradeIntent.LASER_MOVE:
+			target = _resolve_chain(LASER_MOVE_UPGRADES)
+			target["fulfills"] = true
 		UpgradeIntent.DRILL:
 			target = _resolve_chain(DRILL_UPGRADES, true)
 			target["fulfills"] = true
