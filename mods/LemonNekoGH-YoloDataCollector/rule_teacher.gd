@@ -2263,7 +2263,7 @@ func _run_scanner_cave_task(task: Dictionary) -> void:
 	var receiver = task.get("scanner_receiver")
 	if is_instance_valid(receiver):
 		if carried_iron.is_empty():
-			_wait_for_interaction(task, "Scanner cave did not become usable after accepting two iron")
+			_wait_for_interaction(task, "Scanner cave did not become usable after accepting two iron", false)
 			return
 		if _move_to_cave(receiver.global_position):
 			task.wait_steps = 0
@@ -2272,7 +2272,7 @@ func _run_scanner_cave_task(task: Dictionary) -> void:
 		if is_instance_valid(task.scanner_receiver) and _move_to_cave(task.scanner_receiver.global_position):
 			task.wait_steps = 0
 			return
-		_wait_for_interaction(task, "No route crosses both Scanner cave receivers")
+		_wait_for_interaction(task, "No route crosses both Scanner cave receivers", false)
 		return
 	if carried_iron.size() >= 2:
 		task.scanner_receiver = _scanner_receiver(task)
@@ -2282,7 +2282,7 @@ func _run_scanner_cave_task(task: Dictionary) -> void:
 		if _move_to_cave(task.scanner_receiver.global_position):
 			task.wait_steps = 0
 		else:
-			_wait_for_interaction(task, "No route reaches a Scanner cave receiver")
+			_wait_for_interaction(task, "No route reaches a Scanner cave receiver", false)
 		return
 	_push_task(_new_acquire_resource_task(CONST.IRON, 2, 3), "The Scanner cave requires two iron from a cache containing more than two")
 
@@ -2661,12 +2661,15 @@ func _finish_cave_task(task: Dictionary, reason: String, evidence = null) -> voi
 	ModLoaderLog.info("Completed %s cave side task: %s" % [label, reason], LOG_NAME)
 	_pop_task(reason)
 
-func _wait_for_interaction(task: Dictionary, reason: String) -> void:
+func _wait_for_interaction(task: Dictionary, reason: String, fatal := true) -> void:
 	_release_all()
 	task.wait_steps = int(task.get("wait_steps", 0)) + 1
 	if int(task.wait_steps) <= INTERACTION_WAIT_LIMIT:
 		return
-	_fail(reason)
+	if fatal:
+		_fail(reason)
+	else:
+		_fail_cave_interaction(task, reason)
 
 func _mine_gadget_chamber(task: Dictionary) -> void:
 	var chamber: Chamber = task.target
