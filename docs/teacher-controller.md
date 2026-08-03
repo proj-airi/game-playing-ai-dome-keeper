@@ -36,7 +36,7 @@ resumes; paths and decisions are not restored as stale snapshots.
 | `MINE` | Drill recorded ore until the requested drop count exists at the site | The requested drop count is reached or the vein is exhausted |
 | `INTERACT` | Complete one Chamber or Cave using its exact runtime object | The interaction's visible effect or authoritative handoff is observed |
 | `ACQUIRE_RESOURCE` | Attach a requested number of physical resources from one cache | The requested load is carried |
-| `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver them to the dome | No reachable cached resource remains |
+| `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver one bounded load to the dome | One delivery leg completes; remaining cached Drops wait for a later cleanup or carry window |
 | `UPGRADE` | Buy affordable pending upgrades through the station UI | No affordable pending target remains |
 | `DEFEND` | Reach the Laser station and finish the wave | The wave settles and keeper input returns |
 | `RECOVER` | Try bounded movement probes after a directed-action stall | One tile of progress is observed |
@@ -182,9 +182,11 @@ settles, the controller counts currently reachable cached Drops. It pushes
 full-load count and the root search has no active side task. Cleanup selects only
 cached Drops that cover the current planned upgrade's deficits. If none are
 reachable, it may collect Drops needed by another pending upgrade instead, so a
-repair request cannot indefinitely starve combat growth. Cleanup returns once an
-upgrade becomes affordable and ends when no reachable matching Drop remains.
-An upgrade-funded return continues into the station after
+repair request cannot indefinitely starve combat growth. Cleanup delivers one
+bounded load per push and pops after the first completed delivery leg; a
+remaining cache is collected by the next post-wave cleanup or pre-wave carry
+window instead of a multi-trip expedition, so transport can never starve the
+relic search for minutes at a time. An upgrade-funded return continues into the station after
 automatic resource deposit and ends only after a confirmed purchase. Its
 reserved Drop guides navigation; inside pickup range
 it collects whichever eligible cached Drop the game currently focuses. A Drop
@@ -211,8 +213,9 @@ controller pushes `CARRY_TO_DOME` so the mandatory defense return also delivers
 one bounded load of cached resources. The plan is greedy on outward travel
 time and capped by the safe-load speed floor, so a complex cache layout can
 only contribute drops that still fit before the wave. Defense stacks on top
-when the wave arrives, and the carry resumes after the wave to finish the
-deposit.
+when the wave arrives and marks the carry complete, so the carry deposits
+whatever it already holds and pops instead of chasing the same stale Drops
+across multiple waves while the search waits underneath.
 
 ## Chambers, Caves, and rewards
 
