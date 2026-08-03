@@ -4117,6 +4117,9 @@ func _select_upgrade_target(
 				if not ORE_TYPES.has(resource):
 					unfundable = true
 					break
+				if _nearest_recorded_ore(resource).is_empty() and _reachable_cached_resource_count(resource) <= 0:
+					unfundable = true
+					break
 			if unfundable:
 				continue
 			if best.is_empty() or _upgrade_target_is_better(target, best, available):
