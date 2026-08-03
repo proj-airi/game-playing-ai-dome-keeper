@@ -121,7 +121,10 @@ coordinates, and selected A*/direct approach, and drills only until the
 requested drop count is produced at the site. When a recorded vein is exhausted
 before the requested count is reached, the same `MINE` continues to the next
 nearest recorded vein of that type instead of popping and starting a new
-delivery cycle, so one task can fund a whole upgrade deficit. Upgrade intents
+delivery cycle, so one task can fund a whole upgrade deficit. Upgrade-funded
+`MINE` tasks then carry the produced drops directly back to the station and pop
+only after they are deposited, so the upgrade is bought without a separate
+cleanup round trip. Upgrade intents
 are funded by mining the nearest recorded vein of the missing resource when
 stored inventory and existing cached drops cannot cover the deficit; Cave
 demands (Scanner, Power Core, Portal, and Cave receivers) mine a recorded vein

@@ -1119,6 +1119,7 @@ func _tick_tasks(delta: float) -> void:
 						"vein": coords.duplicate(),
 						"resource_type": resource,
 						"amount": need,
+						"deliver": true,
 					}, "A pending upgrade needs %d %s beyond cached drops" % [need, resource])
 					return
 			else:
@@ -1149,6 +1150,9 @@ func _tick_tasks(delta: float) -> void:
 	if active_type != TaskType.UPGRADE and active_type != TaskType.DEFEND and keeper.isInsideStation:
 		if active_type == TaskType.CLEANUP_RESOURCES:
 			tasks.back().returning_for_upgrade = false
+		elif active_type == TaskType.MINE and bool(tasks.back().get("delivering", false)):
+			_pop_task("The demanded load was deposited at the dome")
+			return
 		_release_all()
 		if _leaf() == "StationInputProcessor":
 			_tap(&"ui_cancel")
@@ -1444,14 +1448,25 @@ func _mine(task: Dictionary) -> void:
 	var resource_type := str(task.get("resource_type", ""))
 	var amount := int(task.get("amount", 0))
 	var vein: Array = task.get("vein", [])
-	if amount > 0 and not resource_type.is_empty() and _site_drop_count(resource_type, task.get("sites", [])) >= amount:
-		_record("ore_mine_complete", "The mined %s cache satisfies the requested amount" % resource_type, {
-			"amount": amount,
-			"resource_type": resource_type,
-			"site": (task.get("sites", []) as Array).front() if not (task.get("sites", []) as Array).is_empty() else null,
-		})
-		_pop_task("The mined %s cache satisfies the requested amount" % resource_type)
-		return
+	if amount > 0 and not resource_type.is_empty():
+		if bool(task.get("delivering", false)):
+			if keeper.isInsideStation:
+				_pop_task("The demanded %s was deposited at the dome" % resource_type)
+				return
+			_travel_to_station()
+			return
+		if _site_drop_count(resource_type, task.get("sites", [])) >= amount:
+			task.delivering = bool(task.get("deliver", false))
+			if not task.delivering:
+				_record("ore_mine_complete", "The mined %s cache satisfies the requested amount" % resource_type, {
+					"amount": amount,
+					"resource_type": resource_type,
+					"site": (task.get("sites", []) as Array).front() if not (task.get("sites", []) as Array).is_empty() else null,
+				})
+				_pop_task("The mined %s cache satisfies the requested amount" % resource_type)
+				return
+			_travel_to_station()
+			return
 	var ore := Vector2i(task.get("ore", NO_COORD))
 	if ore == NO_COORD or not Level.map.getTile(ore) is Tile or not Level.map.isRevealed(ore):
 		task.approach_coord = NO_COORD
