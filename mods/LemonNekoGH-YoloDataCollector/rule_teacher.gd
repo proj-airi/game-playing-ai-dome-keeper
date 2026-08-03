@@ -1072,6 +1072,8 @@ func _tick_tasks(delta: float) -> void:
 			or (active_type != TaskType.CARRY_TO_DOME and _defense_due())
 		)
 	):
+		if active_type == TaskType.CARRY_TO_DOME:
+			tasks.back().carry_complete = true
 		_push_task({"type": TaskType.DEFEND, "saw_wave": _wave("wavepresent") or _wave("wavebattle")}, "Defense requires the keeper at the dome")
 		return
 	if (
@@ -1703,6 +1705,16 @@ func _cleanup_resources(task: Dictionary) -> void:
 			task.returning_for_upgrade = funds_upgrade
 			_travel_to_station()
 			return
+	if carried_resources.is_empty() and int(task.get("trips", 0)) > 0:
+		_record("cleanup_trip_summary", "A single cleanup trip delivered its bounded load", {
+			"planned": int(task.get("planned", 0)),
+			"peak": int(task.get("peak", 0)),
+			"trips": int(task.get("trips", 0)),
+			"detachments": int(task.get("detachments", 0)),
+			"delivered": int(task.get("delivered", 0)),
+		})
+		_pop_task("A single cleanup trip delivered its bounded load")
+		return
 	var target = task.get("target")
 	var ignored: Dictionary = task.ignored
 	if not _available_resource(target) or not cached_resources.has(target) or ignored.has(target):
@@ -4082,7 +4094,7 @@ func _select_upgrade_target(
 	var reserved_resource_types := {}
 	var fallback := {}
 	var intent_classes := INTENT_CLASSES
-	if pending_intents.has(UpgradeIntent.DRILL) and _bought_count(DRILL_UPGRADES) == 0 and _bought_count(ATTACK_UPGRADES) > 0:
+	if pending_intents.has(UpgradeIntent.DRILL) and _bought_count(DRILL_UPGRADES) <= 1 and _bought_count(ATTACK_UPGRADES) > 0:
 		intent_classes = [
 			[UpgradeIntent.REPAIR, UpgradeIntent.DRILL],
 			[UpgradeIntent.COMBAT, UpgradeIntent.LASER_MOVE],
