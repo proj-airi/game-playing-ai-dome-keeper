@@ -1532,7 +1532,18 @@ func _cleanup_resources(task: Dictionary) -> void:
 	)
 	var funds_upgrade := not upgrade_id.is_empty() and deficits.is_empty()
 	if not funds_upgrade:
-		cached_resources = cached_resources.filter(func(resource): return deficits.has(resource.type))
+		var matching_resources := cached_resources.filter(func(resource): return deficits.has(resource.type))
+		if matching_resources.is_empty():
+			var planned_deficits := {}
+			for intent in pending_intents:
+				var target := _resolve_intent(intent)
+				var target_id: String = target.get("id", "")
+				if target_id.is_empty():
+					continue
+				for resource in _resource_deficits(GameWorld.upgrades[target_id].get("cost", {}), available):
+					planned_deficits[resource] = true
+			matching_resources = cached_resources.filter(func(resource): return planned_deficits.has(resource.type))
+		cached_resources = matching_resources
 	if not carried_resources.is_empty():
 		if (
 			carried_resources.size() >= full_load
@@ -1565,7 +1576,7 @@ func _cleanup_resources(task: Dictionary) -> void:
 				"detachments": int(task.get("detachments", 0)),
 				"delivered": int(task.get("delivered", 0)),
 			})
-			_pop_task("No reachable cached resource funds the current upgrade")
+			_pop_task("No reachable cached resource funds the upgrade plan")
 		else:
 			_travel_to_station()
 		return
@@ -3694,6 +3705,9 @@ func _path(from: Vector2, to: Vector2) -> PackedVector2Array:
 	return _map_path(from, to)
 
 func _map_path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	var destination := Vector2(Level.map.getTileCoord(to)) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
+	if not Level.map.pathfinder.pointIdsByCoord.has(destination):
+		return PackedVector2Array()
 	for offset in CONST.PATHFINDING_OFFSETS:
 		var result = Level.map.findPath(from + Vector2(offset), to, keeper.teamId)
 		if result is PackedVector2Array and not result.is_empty():

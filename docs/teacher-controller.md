@@ -148,8 +148,10 @@ Ordinary return-to-dome behavior does not collect resources. After a wave
 settles, the controller counts currently reachable cached Drops. It pushes
 `CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
 full-load count and the root search has no active side task. Cleanup selects only
-cached Drops that cover the current planned upgrade's deficits, returns once the
-upgrade becomes affordable, and ends when no reachable matching Drop remains.
+cached Drops that cover the current planned upgrade's deficits. If none are
+reachable, it may collect Drops needed by another pending upgrade instead, so a
+repair request cannot indefinitely starve combat growth. Cleanup returns once an
+upgrade becomes affordable and ends when no reachable matching Drop remains.
 An upgrade-funded return continues into the station after
 automatic resource deposit and ends only after a confirmed purchase. Its
 reserved Drop guides navigation; inside pickup range
