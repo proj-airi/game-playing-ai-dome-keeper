@@ -151,6 +151,10 @@ in replay events (`cleanup_return_start`, `cleanup_delivery`,
 load, return-leg carried count, dome-entry deliveries, and carried resources
 that detached outside the dome, so towing loss stays distinguishable from
 ordinary pickup, delivery, and absorption.
+Once a delivery leg starts, cleanup stays on the return to the station even if
+a carried Drop detaches mid-route; the detached Drop is collected on a later
+leg instead of turning the keeper back, which previously made the same Drop
+break and get re-picked repeatedly at the same narrow passage.
 
 ## Chambers, Caves, and rewards
 

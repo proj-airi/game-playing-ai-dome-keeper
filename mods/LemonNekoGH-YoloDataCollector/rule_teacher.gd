@@ -1396,6 +1396,7 @@ func _track_cleanup_trip(task: Dictionary, full_load: int, carried: int, cached_
 			task.detachments = int(task.get("detachments", 0)) + 1
 			_record("cleanup_detachment", "A carried resource detached outside the dome", {
 				"before": prev, "after": carried,
+				"coord": Level.map.getTileCoord(keeper.global_position),
 			})
 	task.prev_carried = carried
 	var inside := keeper.isInsideStation
@@ -1424,7 +1425,11 @@ func _cleanup_resources(task: Dictionary) -> void:
 		return candidate is Drop and candidate.carryableType == "resource"
 	)
 	_track_cleanup_trip(task, full_load, carried_resources.size(), cached_resources.is_empty())
-	if not carried_resources.is_empty() and (carried_resources.size() >= full_load or cached_resources.is_empty()):
+	if not carried_resources.is_empty() and (
+		carried_resources.size() >= full_load
+		or cached_resources.is_empty()
+		or bool(task.get("returning", false))
+	):
 		_travel_to_station()
 		return
 	var target = task.get("target")
