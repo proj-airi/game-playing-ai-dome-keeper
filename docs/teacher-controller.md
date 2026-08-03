@@ -192,10 +192,10 @@ invalidates this context.
   ordinary ore veins and post-wave cache cleanup cannot displace it. It does
   not read hidden chamber state.
 - A Relic Chamber is excavated and remembered when it remains locked. The root
-  search then scans the bounded lower half of its generated switch area before
-  returning to global frontiers. Once it opens, the teacher activates the
-  normal usable with no unrelated cargo, carries the exact attached Relic to
-  the dome, and recovers it through the shared
+  search then scans its bounded generated switch area upward before covering
+  the lower half and returning to global frontiers. Once it opens, the teacher
+  activates the normal usable with no unrelated cargo, carries the exact
+  attached Relic to the dome, and recovers it through the shared
   physical-artifact path if it detaches. Stored Relic inventory completes this
   interaction; the game-created final wave then uses the ordinary `DEFEND` task.
 - A Power Core Chamber pushes acquisition of one water before delivering it to

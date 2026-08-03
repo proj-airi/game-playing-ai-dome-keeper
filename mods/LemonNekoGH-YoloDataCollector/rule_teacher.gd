@@ -7,7 +7,7 @@ const GADGET_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollecto
 const SUPPLEMENT_CATALOG = preload("res://mods-unpacked/LemonNekoGH-YoloDataCollector/supplement_catalog.gd")
 
 enum TaskType { SEARCH, MINE, INTERACT, ACQUIRE_RESOURCE, CLEANUP_RESOURCES, UPGRADE, DEFEND, RECOVER, CHOOSE_REWARD, WIDEN_SHAFT }
-enum ExploreMode { DESCEND, BRANCH, BYPASS }
+enum ExploreMode { DESCEND, BRANCH, BYPASS, ASCEND }
 enum MiningOutcome { ACTIVE, BACKTRACK_PENDING, WAITING_WAVE, BLOCKED }
 enum DescentFrontier { CLOSED, OPEN, UNSUPPORTED }
 enum FrontierSearch { READY, WAITING_WAVE, BLOCKED }
@@ -877,6 +877,7 @@ func _new_search_task(goal: String, minimum := 1) -> Dictionary:
 		"minimum": minimum,
 		"mode": ExploreMode.DESCEND,
 		"branch_row": -1000000,
+		"branch_row_direction": 1,
 		"branch_side": 1,
 		"branch_entry_coord": NO_COORD,
 		"bypass_side": 1,
@@ -1072,7 +1073,7 @@ func _search(task: Dictionary) -> void:
 	if resume_coord != NO_COORD:
 		var travel_position: Vector2 = Level.map.getTilePos(resume_coord)
 		var reached := cell == resume_coord
-		if int(task.mode) == ExploreMode.DESCEND:
+		if int(task.mode) in [ExploreMode.DESCEND, ExploreMode.ASCEND]:
 			reached = reached and absf(keeper.global_position.x - travel_position.x) <= 6.0
 		if reached:
 			task.resume_coord = NO_COORD
@@ -1085,6 +1086,14 @@ func _search(task: Dictionary) -> void:
 		_fail("No open path remains to the search task's saved coordinate")
 		return
 
+	if int(task.mode) == ExploreMode.ASCEND:
+		if cell.y > int(task.branch_row):
+			_hold([&"ui_up"])
+			return
+		task.branch_entry_coord = cell
+		task.active_corridor_cells.clear()
+		task.active_corridor_cells[cell] = true
+		task.mode = ExploreMode.BRANCH
 	if int(task.mode) == ExploreMode.DESCEND:
 		if int(task.branch_row) < -1000:
 			task.branch_row = maxi(cell.y + _branch_row_step(), 1)
@@ -1146,15 +1155,25 @@ func _search(task: Dictionary) -> void:
 		if int(task.branch_side) > 0:
 			_record_completed_corridor(task, int(task.branch_row))
 			task.attempted_descent_origins[task.branch_entry_coord] = true
-			task.branch_row = int(task.branch_row) + _branch_row_step()
-			if focus_coord != NO_COORD and int(task.branch_row) > focus_coord.y + focus_radius:
+			var row_direction := int(task.get("branch_row_direction", 1))
+			task.branch_row = int(task.branch_row) + _branch_row_step() * row_direction
+			if (
+				focus_coord != NO_COORD
+				and row_direction < 0
+				and int(task.branch_row) < focus_coord.y - focus_radius
+			):
+				task.branch_row_direction = 1
+				task.branch_row = focus_coord.y
+				task.mode = ExploreMode.DESCEND
+			elif focus_coord != NO_COORD and int(task.branch_row) > focus_coord.y + focus_radius:
 				task.focus_coord = NO_COORD
 				task.focus_radius = 0
 				task.resume_coord = NO_COORD
 				task.mining_outcome = MiningOutcome.BACKTRACK_PENDING
 				task.mining_outcome_reason = "The bounded relic switch search was exhausted"
 				return
-			task.mode = ExploreMode.DESCEND
+			else:
+				task.mode = ExploreMode.ASCEND if row_direction < 0 else ExploreMode.DESCEND
 			_reset_progress()
 		delay = 0.2
 		return
@@ -1293,6 +1312,14 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 			if first_discovery:
 				_record("relic_chamber_excavated", "The Relic Chamber remains locked after excavation", null)
 			_pop_task("The excavated Relic Chamber has not opened")
+			search.focus_coord = chamber_cell
+			search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
+			_adopt_ascent_frontier(
+				search,
+				Level.map.getTileCoord(keeper.global_position),
+				Level.map.getTileCoord(keeper.global_position).y,
+				"A locked Relic Chamber focused the search on its surrounding switches"
+			)
 		Chamber.State.OPENING:
 			_wait_for_interaction(task, "Relic Chamber did not finish opening")
 		Chamber.State.OPEN:
@@ -3910,6 +3937,7 @@ func _adopt_descent_frontier(task: Dictionary, coord: Vector2i, target_row: int,
 	task.mining_outcome = MiningOutcome.ACTIVE
 	task.mining_outcome_reason = ""
 	task.branch_row = target_row
+	task.branch_row_direction = 1
 	task.branch_side = 1
 	task.branch_entry_coord = NO_COORD
 	task.active_corridor_cells.clear()
@@ -3922,6 +3950,24 @@ func _adopt_descent_frontier(task: Dictionary, coord: Vector2i, target_row: int,
 	task.shaft_row = -1
 	_release_all()
 	_record("search_route_changed", reason, {"mode": "descend", "coord": coord})
+	_reset_progress()
+	delay = 0.2
+
+func _adopt_ascent_frontier(task: Dictionary, coord: Vector2i, target_row: int, reason: String) -> void:
+	task.attempted_descent_origins[coord] = true
+	task.mining_outcome = MiningOutcome.ACTIVE
+	task.mining_outcome_reason = ""
+	task.branch_row = target_row
+	task.branch_row_direction = -1
+	task.branch_side = 1
+	task.branch_entry_coord = NO_COORD
+	task.active_corridor_cells.clear()
+	task.bypass_side = 1
+	task.bypass_reversed = false
+	task.resume_coord = coord
+	task.mode = ExploreMode.ASCEND
+	_release_all()
+	_record("search_route_changed", reason, {"mode": "ascend", "coord": coord})
 	_reset_progress()
 	delay = 0.2
 
