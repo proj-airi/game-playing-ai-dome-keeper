@@ -85,6 +85,17 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 - Prove and clean up the supported manually started, single-player Engineer and Laser rule-teacher loop before designing detailed Lower-Agent contracts or selecting its implementation.
 
+## Unattended Long-Run Optimization
+
+- Review both the result and the route taken. Completing a run does not by itself show that the process or a strategy change was good.
+- Pay particular attention to prolonged lack of movement or task progress, repeated under-filled resource returns, unusually deep or repetitive task stacks, losses at high waves, and repair spending that substantially outpaces health or attack growth.
+- Treat these as prompts to inspect the existing recording and status output, not as runtime requirements. Do not add watchdogs, counters, task metadata, fallback branches, or extra telemetry solely to detect or prevent a hypothetical occurrence.
+- Change the controller only when the observed root cause is reproducible and the proposed change has a direct, explainable relationship to completion. Otherwise leave the behavior unchanged and record the observation for later comparison.
+- Keep behavior corrections separate from strategy experiments. Evaluate strategy experiments against the unchanged same-seed baseline; one successful run is not evidence that a strategy is better.
+- After an unattended optimization change, resume from the relevant save checkpoint so the observed situation remains reproducible. Start a different run only when the recording provides concrete evidence that the seed itself is unlikely to be completable, such as excessive hard blocks, unusually scarce minerals, repeated gadget or supplement rerolls, pathological terrain, or an exceptionally remote Relic Switch.
+- Treat one completed run as a capability check. Require three consecutive completions on different seeds before describing the controller as stable or low in known bugs.
+- Prefer a small local correction or deletion over generalized defensive handling. Stop optimizing when the available evidence does not identify a concrete problem.
+
 ## Non-Binding Dreams
 
 - Do not read or apply [`docs/dreams/`](docs/dreams/README.md) during normal project work unless the user explicitly asks about a dream.
