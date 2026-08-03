@@ -14,6 +14,7 @@ const { values } = parseArgs({
   options: {
     fps: { type: 'string' },
     load: { type: 'string' },
+    movie: { type: 'boolean' },
     save: { type: 'boolean' },
     seed: { type: 'string' },
   },
@@ -42,17 +43,22 @@ const replay = path.join(sessionDir, 'recording.jsonl')
 
 await mkdir(sessionDir, { recursive: true })
 console.log(`Recording to ${sessionDir}`)
+const startedAt = performance.now()
 await run(godot, [
   '--path',
   project,
-  '--render-thread',
-  'safe',
-  '--disable-vsync',
-  '--windowed',
-  '--resolution',
-  recordingResolution,
-  '--write-movie',
-  avi,
+  ...(values.movie
+    ? [
+        '--render-thread',
+        'safe',
+        '--disable-vsync',
+        '--windowed',
+        '--resolution',
+        recordingResolution,
+        '--write-movie',
+        avi,
+      ]
+    : ['--headless']),
   '--fixed-fps',
   String(fps),
   '--',
@@ -65,23 +71,30 @@ await run(godot, [
 ], 'Godot recording failed; the incomplete session was kept')
 
 if (!existsSync(replay))
-  fail(`No replay JSONL was written. The incomplete movie was kept: ${avi}`)
+  fail(`No replay JSONL was written in the incomplete session: ${sessionDir}`)
 
-await requireCompletedReplay(replay)
+const finalEvent = await requireCompletedReplay(replay)
+const wallSeconds = (performance.now() - startedAt) / 1000
+const gameSeconds = Number(finalEvent.state?.run_time_seconds)
+console.log(`Godot wall time: ${wallSeconds.toFixed(1)} seconds`)
+if (Number.isFinite(gameSeconds))
+  console.log(`Game time: ${gameSeconds.toFixed(1)} seconds (${(gameSeconds / wallSeconds).toFixed(2)}x wall time)`)
 
-await run('ffmpeg', [
-  '-i',
-  avi,
-  '-c:v',
-  'libx264',
-  '-pix_fmt',
-  'yuv420p',
-  '-c:a',
-  'aac',
-  mp4,
-], 'FFmpeg conversion failed; the AVI and replay JSONL were kept')
+if (values.movie) {
+  await run('ffmpeg', [
+    '-i',
+    avi,
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    mp4,
+  ], 'FFmpeg conversion failed; the AVI and replay JSONL were kept')
+}
 
-console.log(`Replay ready: ${replay}`)
+console.log(`${values.movie ? 'Movie replay' : 'Headless replay'} ready: ${replay}`)
 
 async function run(command: string, args: string[], failure: string): Promise<void> {
   try {
@@ -94,7 +107,7 @@ async function run(command: string, args: string[], failure: string): Promise<vo
   }
 }
 
-async function requireCompletedReplay(replayPath: string): Promise<void> {
+async function requireCompletedReplay(replayPath: string): Promise<{ state?: { run_time_seconds?: number }, type?: string }> {
   const lines = createInterface({ input: createReadStream(replayPath), crlfDelay: Infinity })
   let lineNumber = 0
   let finalEvent: { type?: string } | undefined
@@ -112,6 +125,7 @@ async function requireCompletedReplay(replayPath: string): Promise<void> {
     fail(`Replay JSONL has no terminal event; the incomplete session was kept: ${replayPath}`)
   if (finalEvent.type !== 'run_won' && finalEvent.type !== 'run_lost')
     fail(`Replay JSONL has no terminal run outcome; the incomplete session was kept: ${replayPath}`)
+  return finalEvent
 }
 
 function fail(message: string): never {

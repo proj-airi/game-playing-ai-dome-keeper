@@ -33,9 +33,10 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 - Reduce the identified candidate bottlenecks while preserving exact
   fixed-frame replay synchronization, complete observer and aim telemetry, and
   the existing YOLO image-label contract whenever YOLO capture is enabled.
-  Repository recording runs are replay-only, persist batched events directly to
-  the final append-only JSONL, and record Movie Maker output at `1280x720` with
-  VSync forced off only for the recording process.
+  Repository configured runs are replay-only and persist batched events directly
+  to the final append-only JSONL. Headless fixed-FPS runs omit video; optional
+  Movie Maker runs record at `1280x720` with VSync forced off only for that
+  process.
   Keep the declared FPS unchanged within each performance comparison, and do
   not present a lower capture rate or dropped confirmed telemetry as a fix for
   the underlying slowdown. Preserve ordinary manual YOLO collection for later
@@ -50,16 +51,16 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 
 ## Automated Recording Lifecycle Validation
 
-- Validate the repository recording command's automatic lifecycle in fresh won
-  and lost runs. It waits for the supported single-player Engineer and Laser
+- Validate the repository replay command's headless and Movie Maker lifecycles
+  in fresh won and lost runs. It waits for the supported single-player Engineer and Laser
   run's Keeper input to become active, starts the rule teacher and replay without
   the pause-menu button, treats authoritative `game.over` values as terminal,
   appends `run_won` or `run_lost` with the final complete snapshot, flushes the
   JSONL, and requests a normal Godot shutdown. Confirm ordinary launches and
   manually started YOLO collection remain unchanged. Confirm invalid recording
-  configuration, an unsupported run, teacher failure, manual window closure,
-  malformed JSONL, and a missing terminal event all preserve incomplete
-  artifacts, report failure, and skip MP4 conversion.
+  configuration, an unsupported run, teacher failure, manual window closure in
+  Movie Maker mode, malformed JSONL, and a missing terminal event all preserve
+  incomplete artifacts and report failure. Movie Maker failures skip MP4 conversion.
 - After Godot has exited successfully, transcode only that session's exact AVI
   to its MP4 destination and verify that the conversion completed successfully.
   Delete that exact AVI only after the MP4 passes the chosen validation; keep
