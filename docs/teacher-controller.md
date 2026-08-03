@@ -235,7 +235,9 @@ invalidates this context.
   interaction then pops, recenters the existing bounded search on the Chamber,
   and resumes its current row and downward direction without restarting the
   search. Optional ore, caves, and post-wave cache cleanup cannot displace this
-  bounded finish. Once the Chamber opens, the teacher
+  bounded finish. The bounded search radius covers the game's relic-switch
+  placement range (10–25 tiles from the Chamber), so a remote switch is not
+  left unreachable. Once the Chamber opens, the teacher
   activates the normal usable with no unrelated cargo, carries the exact
   attached Relic to the dome, and recovers it through the shared
   physical-artifact path if it detaches. Stored Relic inventory completes this
