@@ -237,11 +237,16 @@ invalidates this context.
   Revisit navigation targets a live traversed pathfinding cell.
 - A Relic Chamber is excavated and remembered when it remains locked. The root
   interaction then pops, recenters the existing bounded search on the Chamber,
-  and resumes its current row and downward direction without restarting the
-  search. Optional ore, caves, and post-wave cache cleanup cannot displace this
-  bounded finish. The bounded search radius covers the game's relic-switch
-  placement range (10–25 tiles from the Chamber), so a remote switch is not
-  left unreachable. Once the Chamber opens, the teacher
+  and restarts the sweep from the Chamber's own row, going upward first and
+  descending after the band is exhausted. The same directional reset applies
+  after a Relic Switch activation (sweep downward from the Switch to find an
+  unexcavated Chamber). Optional ore, caves, and post-wave cache cleanup cannot
+  displace this bounded finish. The band covers the game's relic-switch
+  placement range (measured 7–14 tiles from the Chamber; every run observed so
+  far falls inside it), so a remote switch is not
+  left unreachable. All relic switches in the Chamber's group must be activated
+  (`RelicChamber.on_switch_activated` requires every switch EMPTY) before the
+  Chamber opens. Once it opens, the teacher
   activates the normal usable with no unrelated cargo, carries the exact
   attached Relic to the dome, and recovers it through the shared
   physical-artifact path if it detaches. Stored Relic inventory completes this

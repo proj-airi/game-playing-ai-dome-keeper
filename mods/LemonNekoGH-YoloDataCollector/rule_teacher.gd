@@ -43,6 +43,7 @@ const WIDE_SHAFT_MIN_LOAD := 5
 const STALL_SECONDS := 4.0
 const INTERACTION_RADIUS_TILES := 10.0
 const RELIC_SWITCH_SEARCH_RADIUS := 30
+const RELIC_FOCUS_BAND := 16
 const DEFAULT_REVEAL_DISTANCE := 1
 const SCANNER_REVEAL_DISTANCE := 2
 const SCANNER_CAVE_SCRIPT := "res://content/caves/scannercave/ScannerCave.gd"
@@ -81,7 +82,7 @@ const RESOURCE_CAVE_DROP_TYPES := {
 const SQUIDLEY_SCRIPT := "res://content/gadgets/droneyard/Squidley.gd"
 const DRILL_HIT_INTENT_THRESHOLD := 5
 const WAVE_NET_HEALTH_LOSS_RATIO_THRESHOLD := 0.15
-const REPAIR_HEALTH_RESERVE_RATIO := 0.4
+const REPAIR_HEALTH_RESERVE_RATIO := 0.65
 const CARRY_PREVIEW_INTERVAL := 1.0
 const NO_COORD := Vector2i(1 << 30, 1 << 30)
 const ORE_TYPES: Array[String] = [CONST.IRON, CONST.SAND, CONST.WATER]
@@ -144,6 +145,7 @@ var carry_preview_refresh_at := 0.0
 var caches: Array[Vector2] = []
 var ore_caches: Array[Dictionary] = []
 var blocked_drop_uids: Dictionary = {}
+var blocked_resource_types := {}
 var shaft_widen_done := false
 var tick_time := 0.0
 var delay := 0.0
@@ -1192,7 +1194,10 @@ func _search(task: Dictionary) -> void:
 		return
 	if outcome == MiningOutcome.BLOCKED:
 		if goal != "relic":
-			_fail("No reachable physical %s remains for the active resource task" % goal)
+			blocked_resource_types[goal] = true
+			var reason := "No reachable physical %s remains for the active resource task" % goal
+			_record("resource_search_blocked", reason, {"resource": goal})
+			_pop_task(reason)
 		else:
 			_release_all()
 		return
@@ -1292,6 +1297,17 @@ func _search(task: Dictionary) -> void:
 				task.mining_outcome = MiningOutcome.BACKTRACK_PENDING
 				task.mining_outcome_reason = "The bounded relic search was exhausted"
 				return
+			if (
+				focus_coord != NO_COORD
+				and row_direction < 0
+				and int(task.branch_row) < focus_coord.y - RELIC_FOCUS_BAND
+			):
+				task.branch_row_direction = 1
+				task.branch_row = focus_coord.y
+				task.mode = ExploreMode.DESCEND
+				task.resume_coord = NO_COORD
+				_reset_progress()
+				return
 			task.mode = ExploreMode.ASCEND if row_direction < 0 else ExploreMode.DESCEND
 			_reset_progress()
 		delay = 0.2
@@ -1338,6 +1354,16 @@ func _interact(task: Dictionary) -> void:
 	else:
 		_mine_gadget_chamber(task)
 
+func _focus_search_band(search: Dictionary, focus: Vector2i, downward_first: bool) -> void:
+	search.branch_row = focus.y
+	search.branch_row_direction = 1 if downward_first else -1
+	search.mode = ExploreMode.DESCEND if downward_first else ExploreMode.ASCEND
+	search.resume_coord = NO_COORD
+	search.branch_entry_coord = NO_COORD
+	search.mining_outcome = MiningOutcome.ACTIVE
+	search.mining_outcome_reason = ""
+
+
 func _run_relic_switch_task(task: Dictionary) -> void:
 	var relic_switch: Chamber = task.target
 	match relic_switch.currentState:
@@ -1361,6 +1387,7 @@ func _run_relic_switch_task(task: Dictionary) -> void:
 			else:
 				search.focus_coord = Vector2i(relic_switch.coord)
 				search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
+				_focus_search_band(search, Vector2i(relic_switch.coord), true)
 		_:
 			_fail("Relic switch returned to an unsupported state")
 
@@ -1424,6 +1451,7 @@ func _run_relic_chamber_task(task: Dictionary) -> void:
 				_record("relic_chamber_excavated", "The Relic Chamber remains locked after excavation", null)
 				search.focus_coord = Vector2i(chamber.coord)
 				search.focus_radius = RELIC_SWITCH_SEARCH_RADIUS
+				_focus_search_band(search, Vector2i(chamber.coord), false)
 			_pop_task("The excavated Relic Chamber has not opened")
 		Chamber.State.OPENING:
 			_wait_for_interaction(task, "Relic Chamber did not finish opening")
@@ -1553,6 +1581,9 @@ func _acquire_resource(task: Dictionary) -> void:
 	if not site is Vector2:
 		site = _resource_site(resource_type, int(task.site_minimum))
 		if not site is Vector2:
+			if blocked_resource_types.has(resource_type):
+				_pop_task("No reachable physical %s remains" % resource_type)
+				return
 			var vein := _nearest_recorded_ore(resource_type)
 			if not vein.is_empty():
 				var coords: Array = vein.get("coords", [])
@@ -2187,6 +2218,10 @@ func _run_power_core_task(task: Dictionary) -> void:
 			return
 		var water := _carried_resource(CONST.WATER)
 		if not is_instance_valid(water):
+			if blocked_resource_types.has(CONST.WATER):
+				_record("cave_interaction_failed", "The Power Core chamber needs water that is no longer reachable", null)
+				_pop_task("The Power Core chamber needs water that is no longer reachable")
+				return
 			_push_task(_new_acquire_resource_task(CONST.WATER, 1), "The Power Core chamber requires one water")
 			return
 		task.resource = water
@@ -2212,7 +2247,10 @@ func _prepare_power_core_receiver(task: Dictionary, grabber: ResourceGrabber) ->
 		not ARTIFACT_CLEARANCE_TILE_TYPES.has(tile.type)
 		or not tile.get_meta("destructable", false)
 	):
-		_fail("The Power Core water receiver is blocked by an unsupported tile")
+		_record("cave_interaction_failed", "The Power Core water receiver is blocked by an unsupported tile", {
+			"coord": Vector2i(target),
+		})
+		_pop_task("The Power Core water receiver is blocked by an unsupported tile")
 		return false
 	var target_position: Vector2 = Level.map.getTilePos(target)
 	if (
@@ -2230,7 +2268,10 @@ func _prepare_power_core_receiver(task: Dictionary, grabber: ResourceGrabber) ->
 	)
 	if approach != NO_COORD and Level.map.getTileCoord(keeper.global_position) != approach:
 		if not _move_open(Level.map.getTilePos(approach)):
-			_fail("The Power Core water receiver clearance approach became unreachable")
+			_record("cave_interaction_failed", "The Power Core water receiver clearance approach became unreachable", {
+				"coord": Vector2i(target),
+			})
+			_pop_task("The Power Core water receiver clearance approach became unreachable")
 			return false
 		return false
 	_hold(_axis(Level.map.getTilePos(target)))
@@ -2474,7 +2515,7 @@ func _run_drone_cave_task(task: Dictionary) -> void:
 		return
 	var receiver := cave.get_node_or_null("ResourceGrabber") as ResourceGrabber
 	if not is_instance_valid(receiver):
-		_fail("Drone cave does not expose its exact water receiver")
+		_fail_cave_interaction(task, "Drone cave does not expose its exact water receiver")
 		return
 	if bool(receiver.spent):
 		task.resource = null
@@ -2631,7 +2672,7 @@ func _run_resource_cave_task(task: Dictionary) -> void:
 				_fail("The %s cave reward attached to a non-exclusive load" % label)
 				return
 			if int(task.wait_steps) >= INTERACTION_WAIT_LIMIT:
-				_fail("The %s cave reward did not detach through configured input" % label)
+				_fail_cave_interaction(task, "The %s cave reward did not detach through configured input" % label)
 				return
 			_release_all()
 			_tap(&"keeper1_drop")
@@ -2775,14 +2816,14 @@ func _run_cave_resource_delivery(task: Dictionary, required_type: String, owner_
 func _deliver_cave_resource(task: Dictionary, owner_label: String, receiver: ResourceGrabber) -> void:
 	if not keeper.carriedCarryables.has(task.resource):
 		task.resource = null
-		_wait_for_interaction(task, "The reserved %s resource attached to an unexpected carrier" % owner_label)
+		_wait_for_interaction(task, "The reserved %s resource attached to an unexpected carrier" % owner_label, false)
 		return
 	var receiver_coord: Vector2i = Level.map.getTileCoord(receiver.global_position)
 	if Level.map.getTileCoord(keeper.global_position) != receiver_coord:
 		if _move_to_cave(receiver.global_position):
 			task.wait_steps = 0
 			return
-		_wait_for_interaction(task, "No open path reaches the %s resource receiver" % owner_label)
+		_wait_for_interaction(task, "No open path reaches the %s resource receiver" % owner_label, false)
 		return
 	var actions := _axis(receiver.global_position)
 	if not actions.is_empty():
@@ -2794,7 +2835,7 @@ func _deliver_cave_resource(task: Dictionary, owner_label: String, receiver: Res
 	# drops drag across the receiver instead of failing at the first stop.
 	task.receiver_passes = int(task.get("receiver_passes", 0)) + 1
 	if int(task.receiver_passes) > 30:
-		_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label)
+		_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label, false)
 		return
 	for offset in CARDINAL_OFFSETS:
 		var side_pos := Vector2(receiver_coord + offset) * GameWorld.TILE_SIZE + CONST.TILE_OFFSET
@@ -2802,7 +2843,7 @@ func _deliver_cave_resource(task: Dictionary, owner_label: String, receiver: Res
 			continue
 		if _move_open(side_pos):
 			return
-	_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label)
+	_wait_for_interaction(task, "The %s receiver did not accept its exact physical resource" % owner_label, false)
 
 func _drone_cave_has_owned_squidley(cave: Cave) -> bool:
 	var dispatcher = cave.get_node_or_null("DroneDispatcher")
