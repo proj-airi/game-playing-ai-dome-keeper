@@ -32,10 +32,11 @@ resumes; paths and decisions are not restored as stale snapshots.
 | Task | Responsibility | Completion |
 | --- | --- | --- |
 | `SEARCH` | Fishbone search for the relic or a requested ore type | The requested cache exists; the root relic search does not pop |
-| `MINE` | Drill one revealed connected ore vein and record its cache site | No revealed adjacent ore remains |
+| `RECORD_ORE` | Dig the dirt perimeter around a revealed ore block so the whole connected vein is revealed, then record it as a mineral cache point | The vein perimeter is fully revealed or the dig budget is reached |
+| `MINE` | Drill recorded ore until the requested drop count exists at the site | The requested drop count is reached or the vein is exhausted |
 | `INTERACT` | Complete one Chamber or Cave using its exact runtime object | The interaction's visible effect or authoritative handoff is observed |
 | `ACQUIRE_RESOURCE` | Attach a requested number of physical resources from one cache | The requested load is carried |
-| `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver them to the dome | No reachable cached resource remains |
+| `CLEANUP_RESOURCES` | Collect cached resources after a wave and deliver one bounded load to the dome | One delivery leg completes; remaining cached Drops wait for a later cleanup or carry window |
 | `UPGRADE` | Buy affordable pending upgrades through the station UI | No affordable pending target remains |
 | `DEFEND` | Reach the Laser station and finish the wave | The wave settles and keeper input returns |
 | `RECOVER` | Try bounded movement probes after a directed-action stall | One tile of progress is observed |
@@ -61,11 +62,13 @@ Each fixed control tick applies these rules in order:
    `UPGRADE` from any ordinary task.
 4. `SEARCH` and `ACQUIRE_RESOURCE` scan for nearby interactables, prioritizing
    revealed Relic Switch and Relic Chambers before optional side interactions.
+   Resource searches skip optional interactions and scan only relic-critical
+   chambers plus their requested ore type.
    `CLEANUP_RESOURCES` does not scan: a full return haul must not be suspended
    by a side interaction, which would force-drop the carried load at the target.
 5. The active task performs one normal-input step.
 
-Consequently a resource search may be interrupted by another interaction, and
+Consequently a resource search may be interrupted by a relic interaction, and
 any of those tasks may be interrupted by defense. Popping defense resumes the
 exact interaction, acquisition, or search task underneath without a separate
 "resume" state.
@@ -93,20 +96,47 @@ The root task searches for the relic with a deterministic fishbone pattern:
 
 - descend a central shaft;
 - mine alternating horizontal corridors spaced by the current reveal radius;
+- reverse directly through each already-open corridor to scan the other side,
+  then return to its main-shaft intersection before changing rows;
 - bypass a revealed border laterally until downward progress is possible;
 - record completed corridor cells as possible future descent frontiers;
-- choose the nearest reachable, wave-safe untried frontier when a descent ends.
+- when a descent ends, spread attempts across the deepest completed corridor
+  band before filling adjacent reachable, wave-safe untried frontiers.
 
 A resource `SEARCH` uses the same geometry but scans only the requested ore
 type, while still allowing Chambers and Caves to interrupt it. It first returns
 to the root relic search's saved central-shaft intersection and continues that
 shaft instead of starting a second shaft beside the requesting interaction.
-`MINE` owns the target coordinate, connected-vein coordinates, and selected
-A*/direct approach. After the vein clears it records the first mined coordinate
-as a cache site and pops. The parent resource search completes only when a cache
-contains the required amount. Before another task diverts the keeper, the active
-search stores its current corridor coordinate; after the diversion it follows a
-fresh A* path back there and continues the same fishbone phase.
+Before another task diverts the keeper, the active search stores its current
+coordinate until it has a known-open shaft intersection, then always resumes
+from that intersection; after the diversion it follows a fresh A* path back
+there and continues the same fishbone phase.
+
+The root relic search never mines revealed ore. When a revealed ore block enters
+the interaction scan, `RECORD_ORE` digs the surrounding dirt instead — dirt
+spawns no drops and does not raise run weight — until the connected vein is
+fully revealed, then records it in `ore_caches` as a mineral cache point
+(`{type, site, coords}`). `MINE` owns the target coordinate, recorded-vein
+coordinates, and selected A*/direct approach, and drills only until the
+requested drop count is produced at the site. When a recorded vein is exhausted
+before the requested count is reached, the same `MINE` continues to the next
+nearest recorded vein of that type instead of popping and starting a new
+delivery cycle, so one task can fund a whole upgrade deficit. Upgrade-funded
+`MINE` tasks then carry the produced drops directly back to the station and pop
+only after they are deposited, so the upgrade is bought without a separate
+cleanup round trip. Upgrade intents
+are funded by mining the nearest recorded vein of the missing resource when
+stored inventory and existing cached drops cannot cover the deficit; Cave
+demands (Scanner, Power Core, Portal, and Cave receivers) mine a recorded vein
+of their requested type first and fall back to a dedicated fishbone search only
+when no vein is recorded. A vein is therefore never cleared just because it was
+found, and the parent resource search completes only when a cache contains the
+required amount.
+Upgrade-funded `MINE` tasks carry their own load home, so the scheduler never
+re-pushes `CLEANUP_RESOURCES` for the same deficit; drops that were already
+mined and cached are delivered by the pre-wave `CARRY_TO_DOME` and post-wave
+cleanup paths, which keeps the teacher from repeatedly walking to drops it
+cannot collect.
 
 When defense interrupts a direct-dig `MINE`, that task likewise stores the
 keeper's current mining coordinate. After defense it follows an open path back
@@ -121,6 +151,14 @@ down at every row until the shaft bottom, so the already-dug main shaft becomes
 three tiles wide. Waves and upgrades suspend and resume it through the ordinary
 task stack. Every descent after that widens its own column the same way while
 digging, so no further widening task is needed.
+
+Relic Hunt wave strength is not fixed by the seed alone: accumulated mined and
+carried resources raise the run weight used by wave generation, so a search
+policy that keeps digging without delivering measurably increases pressure on
+later defense windows. This is an empirical observation from the locally
+recovered wave-generation behavior, corroborated by the community-documented
+run weight linked in [`references.md`](references.md#project-and-game); the
+exact formula is deliberately not reproduced here.
 
 ## Resource acquisition and cleanup
 
@@ -141,13 +179,21 @@ resource. Pickup and delivery always use physical Drops and normal input.
 Ordinary return-to-dome behavior does not collect resources. After a wave
 settles, the controller counts currently reachable cached Drops. It pushes
 `CLEANUP_RESOURCES` when that live count reaches the Engineer's current bounded
-full-load count. Cleanup fills a supported load, delivers it, and repeats until
-no reachable cached Drop remains. Its reserved Drop guides navigation; inside
-pickup range it collects whichever eligible cached Drop the game currently
-focuses. A Drop that leaves every recorded cache loses its reservation, and
-repeatedly unreachable Drops are ignored only by that cleanup task. Cleanup
-also abandons a Drop when its path distance stops decreasing before pickup,
-which covers Drops wedged into or physically blocked inside narrow pockets.
+full-load count and the root search has no active side task. Cleanup selects only
+cached Drops that cover the current planned upgrade's deficits. If none are
+reachable, it may collect Drops needed by another pending upgrade instead, so a
+repair request cannot indefinitely starve combat growth. Cleanup delivers one
+bounded load per push and pops after the first completed delivery leg; a
+remaining cache is collected by the next post-wave cleanup or pre-wave carry
+window instead of a multi-trip expedition, so transport can never starve the
+relic search for minutes at a time. An upgrade-funded return continues into the station after
+automatic resource deposit and ends only after a confirmed purchase. Its
+reserved Drop guides navigation; inside pickup range
+it collects whichever eligible cached Drop the game currently focuses. A Drop
+that leaves every recorded cache loses its reservation, and repeatedly
+unreachable Drops are ignored only by that cleanup task. Cleanup also abandons
+a Drop when its path distance stops decreasing before pickup, which covers
+Drops wedged into or physically blocked inside narrow pockets.
 Because cleanup never claims side interactions, a delivery leg cannot be
 interrupted by a Chamber or Cave that would otherwise drop the carried load and
 make the controller walk back for it. Each cleanup task records trip evidence
@@ -161,6 +207,16 @@ a carried Drop detaches mid-route; the detached Drop is collected on a later
 leg instead of turning the keeper back, which previously made the same Drop
 break and get re-picked repeatedly at the same narrow passage.
 
+Before an imminent wave, when a carry window opens (the remaining wave time
+fits the planned collection, load-weighted return, and station entry), the
+controller pushes `CARRY_TO_DOME` so the mandatory defense return also delivers
+one bounded load of cached resources. The plan is greedy on outward travel
+time and capped by the safe-load speed floor, so a complex cache layout can
+only contribute drops that still fit before the wave. Defense stacks on top
+when the wave arrives and marks the carry complete, so the carry deposits
+whatever it already holds and pops instead of chasing the same stale Drops
+across multiple waves while the search waits underneath.
+
 ## Chambers, Caves, and rewards
 
 `INTERACT` owns its runtime target and all in-progress evidence. Defense never
@@ -169,18 +225,30 @@ invalidates this context.
 - Gadget Chambers and Power Core Chambers excavate revealed cover, activate
   the normal usable, carry the exact artifact directly to the dome, recover a
   detached artifact by clearing its neighboring tiles, and wait for the
-  mandatory choice popup. A finite open A* path is sufficient for a cover
-  approach, including Chamber-cleared empty cells outside the revealed-tile
-  registry.
+  mandatory choice popup. Cover selection accepts live Chamber-cover cells and
+  keeps the selected cell fixed until it is destroyed.
 - Relic Switch Chambers excavate revealed cover, activate the normal usable,
   and complete when their live Chamber state is empty and activation has removed
   the usable. A remembered excavated Relic Chamber is then revisited once to
-  observe whether it opened. Revisit navigation first targets the nearest
-  registered corridor cell as the saved approach and only then performs the
-  open check, because the Chamber scene node itself sits between A* cells.
-- A Relic Chamber is excavated and remembered when it remains locked. Once it
-  opens, the teacher activates the normal usable with no unrelated cargo, carries
-  the exact attached Relic to the dome, and recovers it through the shared
+  observe whether it opened; if it remains locked, the interaction pops and the
+  interrupted root fishbone search resumes from its saved main-shaft cell. Before
+  a Relic Chamber is known, the first activated switch bounds that same root
+  search to its surrounding mine; it does not create a second search task.
+  Revisit navigation targets a live traversed pathfinding cell.
+- A Relic Chamber is excavated and remembered when it remains locked. The root
+  interaction then pops, recenters the existing bounded search on the Chamber,
+  and restarts the sweep from the Chamber's own row, going upward first and
+  descending after the band is exhausted. The same directional reset applies
+  after a Relic Switch activation (sweep downward from the Switch to find an
+  unexcavated Chamber). Optional ore, caves, and post-wave cache cleanup cannot
+  displace this bounded finish. The band covers the game's relic-switch
+  placement range (measured 7–14 tiles from the Chamber; every run observed so
+  far falls inside it), so a remote switch is not
+  left unreachable. All relic switches in the Chamber's group must be activated
+  (`RelicChamber.on_switch_activated` requires every switch EMPTY) before the
+  Chamber opens. Once it opens, the teacher
+  activates the normal usable with no unrelated cargo, carries the exact
+  attached Relic to the dome, and recovers it through the shared
   physical-artifact path if it detaches. Stored Relic inventory completes this
   interaction; the game-created final wave then uses the ordinary `DEFEND` task.
 - A Power Core Chamber pushes acquisition of one water before delivering it to
@@ -212,8 +280,17 @@ chosen result fails the teacher.
 Upgrade intents are persistent knowledge, not controller states:
 
 - repeated drill hits request drill strength;
-- combat improvement is pending from run start, alternating attack strength
-  and dome health, and material wave damage reinforces it;
+- the baseline drill-strength improvement reserves its iron before later
+  combat or Laser spending after the baseline combat upgrade, while an active
+  repair request remains eligible alongside it;
+- combat improvement stays pending from run start and alternates attack
+  strength with dome health, so the defense chain keeps funding itself instead
+  of going dormant after the first attack arm; material wave damage reinforces
+  it with repairs;
+- upgrade targets whose remaining deficit includes a resource the teacher
+  cannot mine on demand (such as cobalt, which only Caves produce) are skipped,
+  so the resource budget is not parked on an unfundable purchase while the dome
+  still needs mineable defense upgrades;
 - laser movement is a standing combat-class intent that buys the next
   `laserMove` chain upgrade whenever it is the cheapest affordable combat
   target;
@@ -226,7 +303,9 @@ target pushes `UPGRADE`. The task freezes one exact target while navigating the
 UI so new observations cannot redirect a purchase mid-popup. Confirmed purchase
 removes a fulfilled intent and immediately re-evaluates the next affordable
 target. Within the combat intent class, attack, health, and laser movement
-targets rotate by affordability and total resource cost. A wave closes the
+targets rotate by affordability and total resource cost. A combat request that
+reaches its defensive arm stays pending until the following attack arm is also
+purchased, so health does not consume the weapon reserve. A wave closes the
 menu and then pushes defense.
 
 ## Defense and recovery

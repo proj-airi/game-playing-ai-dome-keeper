@@ -74,6 +74,9 @@ func _configure_direct_normal_run(scene: Node) -> Node:
 func install_script_extensions() -> void:
 	extensions_dir_path = mod_dir_path.path_join("extensions")
 	ModLoaderMod.install_script_extension(
+		extensions_dir_path.path_join("game/GameWorld.gd")
+	)
+	ModLoaderMod.install_script_extension(
 		extensions_dir_path.path_join("content/techtree/TechTreePopup.gd")
 	)
 	ModLoaderMod.install_script_extension(

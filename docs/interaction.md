@@ -23,7 +23,8 @@ interaction-type state machine.
    game state says work remains and the teacher supports that subtype.
 3. Select one target in priority order: Relic Switch Chamber, Relic Chamber,
    Supply Chamber, Gadget Chamber, supported Cave, then ordinary ore. Within a
-   category choose the nearest target.
+   category choose the nearest target. A requested-resource search considers
+   only relic-critical chambers and the requested ore type.
 4. Lock that target until completion or invalidation. A wave suspends rather
    than discards the task. Do not rerank while the interaction remains active.
 5. Estimate the travel time of the shortest A* route to a reachable interaction
@@ -148,13 +149,17 @@ A revealed Relic Switch Chamber is excavated and activated through its exact
 usable. It completes when its live Chamber state becomes `EMPTY` and the
 activation animation removes that usable. If the root search already remembers
 an excavated Relic Chamber, completing a switch immediately revisits that chamber
-to observe whether it opened; otherwise the teacher resumes the interrupted
-search.
+to observe whether it opened; otherwise the root fishbone search scans a bounded
+14-tile area from the Engineer's open tile beside the switch before resuming its
+global frontier search. This matches the supported map's generated switch range
+without reading the hidden Relic Chamber position. Ordinary ore veins and
+post-wave cache cleanup do not interrupt this bounded search.
 
 A revealed Relic Chamber is excavated and observed after one bounded state
 settling interval. If it remains locked, the root relic search remembers the
-exact chamber and resumes its existing fishbone route. The remembered locked
-chamber is not reclaimed by the periodic local scan. Each later switch
+exact chamber and scans its bounded generated switch area upward and then
+downward before resuming global frontiers. The remembered locked chamber is not
+reclaimed by the periodic local scan. Each later switch
 activation triggers one explicit revisit instead, so the teacher neither reads
 hidden switch positions nor hard-codes a switch count.
 
