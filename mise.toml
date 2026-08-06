@@ -6,7 +6,7 @@ lockfile = true
 
 [tools]
 bun = "1.3.14"
-node = "24.18.0"
+node = "24.18.0" # TODO: use bun instead, dashboard depends on node
 python = "3.12.13"
 "aqua:astral-sh/uv" = "0.11.32"
 
@@ -46,7 +46,7 @@ depends = ["godot:check", "lint", "typecheck"]
 
 [tasks.decompile]
 description = "Decompile Dome Keeper and link repository mods"
-run = "bun run decompile"
+run = "bun scripts/decompile-domekeeper.ts"
 
 [tasks."godot:open"]
 description = "Open the decompiled project in Godot"
@@ -54,15 +54,11 @@ run = "\"{{ env.GODOT_BIN }}\" ./external/domekeeper-decompiled/$DOMEKEEPER_VERS
 
 [tasks."godot:check"]
 description = "Check that repository mods load in an isolated headless game"
-run = "bun run check:godot"
+run = "bun scripts/check-domekeeper-mod.ts"
 
 [tasks."godot:run"]
-description = "Run the decompiled project in Godot"
-run = "\"{{ env.GODOT_BIN }}\" --path ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION"
-
-[tasks."godot:record"]
 description = "Record a frame-synchronized Dome Keeper replay"
-run = "bun run record"
+run = "bun run build && bun scripts/run-domekeeper.ts"
 
 [tasks.train]
 description = "Train an Ultralytics detection model"

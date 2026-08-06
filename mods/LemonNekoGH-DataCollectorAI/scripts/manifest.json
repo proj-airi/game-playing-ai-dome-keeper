@@ -1,0 +1,25 @@
+{
+  "name": "DataCollectorAI",
+  "namespace": "LemonNekoGH",
+  "version_number": "0.0.1",
+  "description": "An AI mod that plays the game for collecting training data for AIRI.",
+  "website_url": "",
+  "dependencies": [],
+  "extra": {
+    "godot": {
+      "authors": [
+        "LemonNekoGH"
+      ],
+      "optional_dependencies": [],
+      "load_before": [],
+      "incompatibilities": [],
+      "compatible_mod_loader_version": [
+        "7.0.1"
+      ],
+      "compatible_game_version": [
+        "5.0.5"
+      ],
+      "config_schema": {}
+    }
+  }
+}
