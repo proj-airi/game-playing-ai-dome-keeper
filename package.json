@@ -4,14 +4,13 @@
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "mods/*"
   ],
   "scripts": {
-    "check:godot": "bun scripts/check-domekeeper-mod.ts",
-    "decompile": "bun scripts/decompile-domekeeper.ts",
-    "record": "bun scripts/record-domekeeper.ts",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json && bun run --cwd packages/status-dashboard typecheck"
+    "typecheck": "tsc -p tsconfig.json && bun run --cwd packages/status-dashboard typecheck",
+    "build": "bun run --parallel --filter '*' build"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^7.4.2",

@@ -7,7 +7,9 @@
 > This project is part of Project AIRI. We aim to build a LLM‑driven digital companion that can play games and interact with the world.
 > Learn more at [Project AIRI](https://github.com/moeru-ai/airi) and the [AIRI live demo](https://airi.moeru.ai).
 
-AI plays the game **Dome Keeper** with CV & LLM combined. Powered by YOLO.
+AI plays the game **Dome Keeper** with CV & LLM combined. The current capture
+and detection pipeline is powered by YOLO, while the replacement AI mod is
+authored in TypeScript and converted to GDScript for Godot.
 
 ## Models
 
@@ -60,6 +62,18 @@ Then run:
 mise run decompile
 ```
 
+The new `DataCollectorAI` mod will replace the old `YoloDataCollector` mod. Its
+TypeScript source is under `mods/LemonNekoGH-DataCollectorAI/src/`; build the
+workspace before opening or checking Godot so `tstogd` generates the runtime
+GDScript under that mod's `scripts/` directory:
+
+```bash
+bun run build
+```
+
+See its [README](mods/LemonNekoGH-DataCollectorAI/README.md) for the planner,
+task, and `Quark Action` structure.
+
 3. Open the decompiled project.
 
 ```bash
@@ -74,7 +88,20 @@ mise run godot:open
 - Frames are letterboxed to `640×640` with gray padding.
 - Accepted captures are split into `train/val/test` every 60 images, cycling `4/1/1`.
 
-### 2. Train a Baseline (Ultralytics)
+### 2. Run a Replay
+
+The repository replay entry point is `mise run godot:run`. It builds the Bun
+workspace first, then runs the fixed-frame recorder. The default is a windowed
+replay; use `--headless` for JSONL-only validation or `--movie` for video output.
+
+```bash
+mise run godot:run -- --headless --fps 10
+```
+
+Replay sessions are written under `recordings/`. Checkpoint and seed options
+are documented in [`docs/development.md`](docs/development.md).
+
+### 3. Train a Baseline (Ultralytics)
 
 We use the Ultralytics CLI (`yolo`) for training and export.
 
@@ -103,11 +130,12 @@ The Dome Keeper Editor assets are pinned to the SHA-256 digests published by the
 official GitHub release; review URL, digest, and asset-size changes together.
 
 mise owns development-tool versions (including the Node runtime used by npm
-package executables) and repository-level tasks. Bun owns JavaScript
-dependencies through `package.json` and `bun.lock`; uv owns Python dependencies
-and the project environment through `pyproject.toml`, `uv.lock`, and `.venv`.
-Run Python tools through `uv run` or a mise task rather than using bare
-`python`, `pip`, or `yolo` commands.
+package executables) and repository-level tasks. Bun owns JavaScript and
+TypeScript workspace dependencies through `package.json` and `bun.lock`; this
+includes the TypeScript-authored Godot mod under `mods/*`. uv owns Python
+dependencies and the project environment through `pyproject.toml`, `uv.lock`,
+and `.venv`. Run Python tools through `uv run` or a mise task rather than using
+bare `python`, `pip`, or `yolo` commands.
 
 ## Note
 
@@ -129,4 +157,6 @@ If you find our works useful for your research, please consider citing:
 
 ## About
 
-AI plays the game Dome Keeper with CV & LLM combined. Powered by YOLO.
+AI plays the game Dome Keeper with CV & LLM combined. The new TypeScript AI mod
+will replace the YOLO collector and rule teacher, with the planner, task, and
+`Quark Action` layers described in its project README.

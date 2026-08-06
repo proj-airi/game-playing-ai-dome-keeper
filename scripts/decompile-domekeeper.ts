@@ -71,6 +71,8 @@ if (existsSync(modsRoot)) {
     .map(entry => path.join(modsRoot, entry))
     .filter(entryPath => statSync(entryPath).isDirectory())
 
+  modEntries.push(path.join(repoRoot, 'mods-unpacked', 'LemonNekoGH-AI', 'scripts'))
+
   for (const modPath of modEntries) {
     const modName = path.basename(modPath)
     const modTarget = path.join(modsUnpackedDir, modName)

@@ -12,17 +12,19 @@ unless explicitly marked as planned, future, or historical.
 
 - Dome Keeper mods use the GDScript Mod Loader and require decompiling/importing the game into Godot, then placing mods under `res://mods-unpacked/Author-ModName` with `manifest.json` and `mod_main.gd`.
 - The modding wiki recommends reviewing Mod Loader docs and proceeding to "Game Investigation" after the first mod setup.
-- YOLO data collection mod targets Dome Keeper game version 5.0.5.19, Godot 4.3.1, and the official Dome Keeper Editor 5.1 custom build.
+- The current validated YOLO data collection and rule-teacher mod targets Dome Keeper game version 5.0.5.19, Godot 4.3.1, and the official Dome Keeper Editor 5.1 custom build.
+- `LemonNekoGH-DataCollectorAI` is the replacement TypeScript-authored Godot mod. Its source lives in `src/`; `tstogd convert` emits the loadable GDScript into `scripts/`, while the mod manifest remains tracked there. The generated GDScript is ignored. Its structure is divided into a planner, task executor, and `Quark Action` executor, replacing the old YOLO collector and rule-teacher organization.
 
 ## Mod Dev Workflow
 
-- Keep mod source in this repo under `mods/<Author>-<ModName>/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing.
+- Keep mod source in this repo under `mods/<Author>-<ModName>/`, and link or copy it into the decompiled Godot project at `res://mods-unpacked/<Author>-<ModName>/` for testing. Build the TypeScript-authored mod first so its generated `scripts/` directory contains the runtime GDScript and manifest.
 - Do not use Mod Loader script extensions for base scripts that declare `class_name`; Godot 4 global classes are unsupported by that mechanism. Remove nonessential extensions instead of retaining a known parse failure, and use a script hook only when the behavior is required.
 - For editor test runs, use a Mod Loader scene extension to disable `Game.devMode` while selecting the built-in custom-editor Level entry in memory. This keeps direct-to-level startup without development resources or disabled monster waves, does not persist editor configuration, and leaves retail startup unchanged.
-- Run `mise run godot:check` after changing a Dome Keeper mod. The task starts the target project headlessly with an isolated temporary user-data directory, fails when a repository mod script reports a parse/load error or the YOLO collector does not enter the scene tree, and ignores known decompiled-project errors outside the repository mod boundary. Keep it in the aggregate `mise run check` task because Godot may exit successfully even after reporting a GDScript parse error.
+- Run `mise run godot:check` after changing a Dome Keeper mod. The task starts the target project headlessly with an isolated temporary user-data directory, fails when a repository mod script reports a parse/load error or the current collector does not enter the scene tree, and ignores known decompiled-project errors outside the repository mod boundary. Build TypeScript-authored mods before this check. Keep it in the aggregate `mise run check` task because Godot may exit successfully even after reporting a GDScript parse error.
 - Add a pause-menu toggle that starts/stops collection; the collector owns this integration and injects the button when `SceneTree.node_added` reports a PauseMenu instance, avoiding a script extension of the game's preloaded PauseMenu. During an ordinary launch the toggle starts the teacher and creates `user://yolo_data/session_<timestamp>/` with `images/` and `labels/`, saving screenshots + YOLO labels at a fixed interval using object-tree queries. A configured replay run instead waits for the supported run's Keeper input to become active, automatically starts only the teacher and replay, records the authoritative `game.over` outcome, flushes the JSONL, and normally exits Godot so unsettled YOLO label choices do not add capture work. Replay runs render windowed at `1280x720` with VSync disabled by default; pass `--headless` to skip rendering for the fastest JSONL-only validation, or `--movie` to add Movie Maker AVI output and MP4 conversion for visual review. In the explicitly configured Movie Maker process, extend the game's non-`class_name` Options script so its persisted fullscreen, VSync, and pause-on-focus-loss preferences cannot override the command's windowed `1280x720`, VSync-disabled requirements; do not rewrite the saved preferences or change ordinary launches.
 - Pass `--save` to the recording task to create a named debug checkpoint after every fully settled wave. Each ID is `<recording-session-id>_wave_<completed-wave-count>` and names a `user://` folder containing the game's official slot-zero save files plus `teacher.json`. Pass an ID unchanged through `--load <ID>` to load the official save, restore the teacher sidecar, and begin a new recording; combine both flags to continue creating checkpoints under the new recording session ID. Missing or malformed saves fail startup instead of falling back to a new run.
 - Pass `--seed <integer>` to start a new recording with the game's normal `Level.setSeed` path. This is intended for reproducible behavior checks; it does not apply when loading a checkpoint.
+- Run the repository replay through `mise run godot:run`, which builds all Bun workspaces and invokes `scripts/run-domekeeper.ts`. The old `scripts/record-domekeeper.ts` filename and root `record` script are no longer entry points. Pass recorder options after `--`, for example `mise run godot:run -- --headless --fps 10`.
 - On session start, create a `data.yaml` alongside `images/` and `labels/` with YOLO dataset fields (`path`, `train`, `val`, `names`) for the captured classes.
 - On session stop, open the capture folder in the OS file manager using Godot's `OS.shell_open`.
 - Pause capture while the pause menu is visible by having the collector tag the dynamically observed menu panel with a group and check `CanvasItem.is_visible_in_tree()`.
@@ -46,19 +48,22 @@ unless explicitly marked as planned, future, or historical.
 
 - It is acceptable to commit a local decompilation script as long as it does not include or distribute any game assets or decompiled outputs, and only operates on the user's local installation.
 - Manage the required official Dome Keeper Editor with mise's GitHub backend. For the repository's Dome Keeper 5.0.5.19 target, pin editor release 5.1, a custom Godot 4.3.1 build containing the multiplayer modules used by the 5.0 update. Select exact editor assets and published SHA-256 digests for macOS arm64/x64, Linux x64, and Windows x64; unsupported architectures must fail instead of falling back to a mismatched artifact. Do not substitute a regular Godot or generic GodotSteam build, and keep the complete extracted bundle so its native Steam and multiplayer libraries remain beside the editor.
-- The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links all repo mods under `mods/` into the decompiled `mods-unpacked/` directory.
+- The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links all repo mods under `mods/` into the decompiled `mods-unpacked/` directory. It does not build TypeScript-authored mods; run the workspace build before Godot loads them.
 - Decompile script machine-local inputs are provided through `DOMEKEEPER_GAME_DIR`, `GDRETOOLS_BIN`, and optional `DOMEKEEPER_OUT_ROOT`, read via `import.meta.env`; mise provides the repository-owned `DOMEKEEPER_VERSION`. Godot tasks use the mise-managed editor and must not require a user-supplied `GODOT_BIN`.
 - For macOS stability, set the project rendering method to `forward_plus` in `project.godot` (rendering/renderer/rendering_method).
 
 ## Repo Structure
 
-- Store each GDScript mod under `mods/<Author>-<ModName>/` (not under `crates/`).
+- Keep the existing GDScript collector and teacher under `mods/LemonNekoGH-YoloDataCollector/` while it is being replaced.
+- Store the replacement TypeScript-authored Godot AI mod under `mods/LemonNekoGH-DataCollectorAI/`; keep TypeScript source in `src/` and generated GDScript in `scripts/`.
+- Do not put Godot mods under `crates/`.
 
 ## Tooling
 
 - Use mise as the repository-level development-tool manager and task entry point. Pin tool versions in `mise.toml`; mise tasks delegate dependency-specific work to the owning package manager. Pin an LTS Node.js runtime because npm package executables such as ESLint and TypeScript use Node shebangs even when Bun launches their package scripts. Keep mise tool paths ahead of ambient package-manager paths so child-process shebangs resolve the pinned tools.
 - Enable mise lockfiles, commit `mise.lock`, and run `mise lock` whenever tool configuration changes so tool URLs and supported checksums remain reproducible. Commit `mise.toml` and `mise.lock` together.
 - Use Bun for JavaScript dependency installation and lockfile management. Keep `package.json` and `bun.lock`, and run TypeScript scripts with Bun.
+- The root Bun workspace includes `apps/*`, `packages/*`, and `mods/*`. Use `bun run build` to build every workspace that exposes a build script; this currently includes the TypeScript-to-GDScript AI mod and the status dashboard.
 
 ## Linting
 
@@ -83,7 +88,8 @@ unless explicitly marked as planned, future, or historical.
 The listed application and crate paths are reserved target locations unless they already contain implemented project code.
 - `apps/airi-plugin/` for the AIRI plugin (TypeScript + Bun).
 - `crates/capture/` for Rust performance-sensitive modules (capture/input/inference helpers).
-- `mods/<Author>-<ModName>/` for the GDScript mod (auto-labeling/metadata export).
+- `mods/LemonNekoGH-YoloDataCollector/` for the existing GDScript mod (teacher and YOLO auto-labeling).
+- `mods/LemonNekoGH-DataCollectorAI/` for the replacement TypeScript-authored AI mod and its generated GDScript.
 - `packages/shared/` for shared types/protocols/schema.
 - `packages/status-dashboard/` for the local Vue status observer.
 - `scripts/` for Bun-executable TypeScript automation scripts.

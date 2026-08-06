@@ -16,3 +16,4 @@ packages/status-dashboard/dist/
 runs/
 
 *.local.code-workspace
+*.uid

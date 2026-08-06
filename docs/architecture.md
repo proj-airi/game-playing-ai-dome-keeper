@@ -17,6 +17,11 @@ implements its Dome Keeper game-playing integration.
 - The Godot mod exposes manual collection controls and connects the YOLO
   collector to one in-process rule teacher driven by an interruptible task
   stack.
+- `LemonNekoGH-YoloDataCollector` is the existing collector and teacher
+  implementation. `LemonNekoGH-DataCollectorAI` is the replacement Godot mod,
+  authored in TypeScript and converted to GDScript during the build. Its
+  planner, task, and `Quark Action` layers replace the old collector/teacher
+  structure.
 - The rule teacher currently combines high-level task selection, navigation,
   upgrades, defense, and near-real-time control. It reads privileged Godot
   runtime state and emits normal configured game input actions. It is currently
@@ -52,6 +57,10 @@ implements its Dome Keeper game-playing integration.
 The target information flow is Vision to both Agent layers, Upper Agent tasks
 to the Lower Agent, Lower Agent actions to the game, and Upper Agent status to
 AIRI.
+
+The TypeScript AI mod is the new implementation direction for the planner, task,
+and `Quark Action` execution layers. It will replace the old YOLO collector and
+rule teacher as the gameplay mod evolves toward the target Agent architecture.
 
 ## Evidence for Target Design
 

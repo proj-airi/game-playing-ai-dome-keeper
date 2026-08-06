@@ -10,6 +10,15 @@ unless an explicit project decision says so.
 
 ## Planned Milestones
 
+### Replace the Existing Collector with the TypeScript AI Mod
+
+- Develop `LemonNekoGH-DataCollectorAI` as the TypeScript-authored Godot
+  replacement for `LemonNekoGH-YoloDataCollector`, using the planner, task, and
+  `Quark Action` executor structure described in its README.
+- Keep the TypeScript-to-GDScript build boundary and generated runtime files
+  explicit while the new AI takes over the existing gameplay and data-collection
+  responsibilities.
+
 ### Use Revealed Natural Cave Rewards
 
 - `ScannerCave`, `DroneCave`, `IronTreeCave`, `WaterCave`, `MushroomCave`,
