@@ -89,6 +89,7 @@ This page collects external resources useful for understanding and maintaining t
 - [Bun ImportMeta Environment Reference](https://bun.com/reference/globals/ImportMeta) — The `import.meta.env` API reference used by the project's TypeScript scripts to read machine-local inputs.
 - [Bun Package Installation](https://bun.sh/docs/pm/cli/install) — Documentation for Bun package installation and lockfiles, which the project uses for JavaScript dependencies and `bun.lock`.
 - [Bun TypeScript Runtime](https://bun.sh/docs/runtime/typescript) — Documentation for running TypeScript directly with Bun, used by automation under `scripts/` without a compile step.
+- [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` to author Godot-compatible code in TypeScript and emit runtime GDScript.
 - [Node.js Release Schedule](https://nodejs.org/en/about/previous-releases) — The Node.js release and LTS schedule used to select the pinned runtime for npm package executables.
 - [Node.js File-System Promises API](https://nodejs.org/api/fs.html#promises-api) — The asynchronous file-system API used by the status dashboard development server to read live snapshots.
 - [Node.js OS Temporary Directory](https://nodejs.org/api/os.html#ostmpdir) — Documentation for `os.tmpdir()`, used to align the Godot snapshot location with the Node.js reader.

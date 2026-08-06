@@ -1,12 +1,21 @@
 # LemonNekoGH-DataCollectorAI
 
-An AI mod that plays the game for collecting training data for AIRI.
+The replacement TypeScript-authored Godot AI mod for AIRI. TypeScript is the
+authoring layer; `tstogd convert` emits the GDScript that Godot loads from
+`scripts/`, alongside the tracked mod manifest. It replaces
+`LemonNekoGH-YoloDataCollector`.
 
 ## Structure
 
-- `src/planner/index.ts` - Planner, generate plans to execute.
-- `src/executor/task.ts` - Break the plan into executable tasks.
-- `src/executor/action.ts` - Execute the `Quark Action` in the plan.
+- `src/planner/index.ts` - Planner for generating executable plans.
+- `src/executor/task.ts` - Breaks plans into executable tasks.
+- `src/executor/action.ts` - Executes the `Quark Action`s in a plan.
+
+Build the generated runtime files with:
+
+```bash
+bun run build
+```
 
 ### Terms
 
