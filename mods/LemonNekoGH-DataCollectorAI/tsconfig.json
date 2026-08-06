@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
     "noLib": true,
+    "types": [],
     "strict": true,
     "noEmit": true,
-    "types": []
+    "skipLibCheck": true
   },
   "include": [
     "node_modules/typescript-to-gdscript/typings",

@@ -62,6 +62,18 @@ catch (error) {
   process.exit(1)
 }
 
+console.log('\nGenerating TypeScript declarations for the decompiled game...')
+try {
+  await x('bun', ['run', path.join(repoRoot, 'scripts/generate-domekeeper-typings.ts'), outDir], {
+    nodeOptions: { stdio: 'inherit' },
+  })
+}
+catch (error) {
+  console.error('Failed to generate TypeScript declarations.')
+  console.error(error)
+  process.exit(1)
+}
+
 const modsRoot = path.join(repoRoot, 'mods')
 if (existsSync(modsRoot)) {
   const modsUnpackedDir = path.join(outDir, 'mods-unpacked')

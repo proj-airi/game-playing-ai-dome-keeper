@@ -1,5 +1,5 @@
 export class ModMain extends Node {
   _ready() {
-    print("Hello from typescript!")
+    ModLoaderLog.info('Hello world!', 'DataCollectorAI')
   }
 }
