@@ -62,6 +62,49 @@ The TypeScript AI mod is the new implementation direction for the planner, task,
 and `Quark Action` execution layers. It will replace the old YOLO collector and
 rule teacher as the gameplay mod evolves toward the target Agent architecture.
 
+## Frozen TaskExecutor Design
+
+The TypeScript AI mod uses a recursive hierarchical task-execution design
+inspired by Hierarchical Task Networks (HTNs). It borrows the useful concepts of
+compound tasks, methods, subtasks, and primitive tasks, but it is not intended to
+be a complete HTN planner or a formally compliant HTN implementation. This
+design is frozen at the responsibility and control-flow level; the concrete
+TypeScript data types and world-state fields remain open.
+
+`TaskExecutor` owns one task. A compound task resolves a task method and creates
+child `TaskExecutor` instances for its subtasks. A child executor keeps its own
+method and current method step, and the parent advances only after the child
+reports its result. This replaces a single global task stack with a recursive
+executor tree.
+
+Only the active primitive-task executor owns gameplay input. Compound executors
+coordinate method selection and child lifecycle but do not compete for input.
+Quark actions are declarative control results rather than side-effecting
+operations: they describe what the controller should currently hold, release,
+or pulse. The executor performs the input side effects and observes the game
+state to determine completion or failure.
+
+The initial design may use ordered method steps. Recursive child executors are
+required even in that form so that a method step can itself be a compound task.
+Formal HTN completeness, planner search, partial ordering, method-effect
+semantics, and alternative-method backtracking are not project requirements.
+The HTN literature is a design reference, not an implementation contract.
+
+## Planned Package Topology
+
+The future implementation is organized into three packages:
+
+- `mods/LemonNekoGH-DataCollectorAI/` — the in-game Godot runtime, including
+  `TaskExecutor`, collection, normal input, and the game-side test bridge;
+- `packages/vikeeper/` — the external test runner, including test discovery,
+  scheduling, game-process orchestration, assertions, and reports;
+- `packages/data-collector-ai-tests/` — the DataCollectorAI-specific scenarios,
+  fixtures, test configuration, and expected behavior.
+
+The Mod does not depend on the `vikeeper` runner. The runner communicates with
+the Mod through a test bridge, while screenshots, traces, and other large
+collection artifacts remain files managed by the run.
+
 ## Evidence for Target Design
 
 The rule teacher establishes realizable behavior and produces evidence about

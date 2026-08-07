@@ -5,11 +5,31 @@ authoring layer; `tstogd convert` emits the GDScript that Godot loads from
 `scripts/`, alongside the tracked mod manifest. It replaces
 `LemonNekoGH-YoloDataCollector`.
 
-## Structure
+## Runtime design
 
-- `src/planner/index.ts` - Planner for generating executable plans.
-- `src/executor/task.ts` - Breaks plans into executable tasks.
-- `src/executor/action.ts` - Executes the `Quark Action`s in a plan.
+The runtime is centered on one recursive `TaskExecutor` abstraction. Its design
+is inspired by Hierarchical Task Networks (HTNs), but it is not a complete HTN
+planner or a formally compliant HTN implementation:
+
+- a compound task resolves a task method;
+- the method creates child `TaskExecutor` instances for its subtasks;
+- a primitive task resolves a declarative `Quark Action` from the current world
+  state;
+- the active primitive executor applies the resulting control state through
+  normal configured game inputs.
+
+Each executor owns its current method and method step. Only the active
+primitive-task executor owns gameplay input.
+
+The project borrows HTN's useful hierarchical vocabulary without adopting formal
+planner completeness, search semantics, partial ordering, or method-effect
+semantics. The exact source-file layout and the TypeScript data types are not
+frozen yet.
+
+The future repository-level test runner is separate from this Mod:
+`packages/vikeeper/` provides the runner, and
+`packages/data-collector-ai-tests/` provides DataCollectorAI-specific scenarios
+and fixtures.
 
 Build the generated runtime files with:
 

@@ -17,6 +17,7 @@ This page collects external resources useful for understanding and maintaining t
 
 - [The AI Systems of Left 4 Dead](https://steamcdn-a.akamaihd.net/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) — Michael Booth's Valve presentation describing the `Continue`, `ChangeTo`, `SuspendFor`, and `Done` Action transitions, including suspended Action resumption and reason strings for runtime debugging; it is the design reference for the teacher's interruptible task stack.
 - [Source SDK 2013: `NextBotBehavior.h`](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/server/NextBot/NextBotBehavior.h) — Valve's public NextBot Action and Behavior implementation, used as the upstream code reference for stack-based task suspension, completion, and resumption without retaining a separate top-level state machine.
+- [SHOP / SHOP2](https://www.cs.umd.edu/projects/shop/description.html) — The University of Maryland description of ordered Hierarchical Task Network planning, where methods decompose nonprimitive tasks into subtasks when their preconditions are satisfied; this is a conceptual reference for the recursive `TaskExecutor`, not a claim that the project implements formal HTN planning.
 
 ## Mod Development and Godot 4.3
 
