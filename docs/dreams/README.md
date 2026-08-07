@@ -12,3 +12,4 @@ No project milestone is a prerequisite for a dream, and no dream is a
 prerequisite for a project milestone.
 
 - [Continuous self-learning experiment](continuous-self-learning.md)
+- [Action-model-driven AUV Dome Keeper](auv-dome-keeper-action-model.md)

@@ -10,6 +10,19 @@ unless an explicit project decision says so.
 
 ## Planned Milestones
 
+### Build Vikeeper for In-Game Tests
+
+- Build the first useful Vikeeper test-execution path for Dome Keeper, with
+  scenarios that can observe game state and assert initial conditions,
+  transitions, and outcomes from inside the game test environment.
+- Use Vikeeper to test the frozen recursive `TaskExecutor` design, including
+  compound-task method steps, child executor lifecycle, primitive Quark Action
+  resolution and execution, and succeeded or failed task results.
+- Treat this milestone as a prerequisite for implementing
+  `LemonNekoGH-DataCollectorAI`: the DataCollectorAI runtime may be designed in
+  advance, but its `TaskExecutor` implementation should be developed against
+  executable Vikeeper tests.
+
 ### Replace the Existing Collector with the TypeScript AI Mod
 
 - Develop `LemonNekoGH-DataCollectorAI` as the TypeScript-authored Godot
