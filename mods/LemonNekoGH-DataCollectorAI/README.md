@@ -26,10 +26,11 @@ planner completeness, search semantics, partial ordering, or method-effect
 semantics. The exact source-file layout and the TypeScript data types are not
 frozen yet.
 
-The future repository-level test runner is separate from this Mod:
-`packages/vikeeper/` provides the runner, and
-`packages/data-collector-ai-tests/` provides DataCollectorAI-specific scenarios
-and fixtures.
+ViDot will test this Mod through ordinary Godot methods and signals exposed by
+its runtime. DataCollectorAI does not depend on or register APIs with ViDot.
+DataCollectorAI-specific Vitest files and their explicitly imported Node.js
+fixtures remain with this Mod; the fixtures use ViDot's temporary Autoload and
+loopback WebSocket bridge to prepare and inspect the game.
 
 Build the generated runtime files with:
 

@@ -13,7 +13,7 @@ connection.
 The `godot-remote-debugger` / `vidot` / Godot-specific AUV adapter stack is
 intentionally deferred here. It is a much larger and more general project than
 the immediate game-internal testing work, and should not be treated as a
-prerequisite for `vikeeper`, DataCollectorAI, or the first `auv-dome-keeper`
+prerequisite for ViDot, DataCollectorAI, or the first `auv-dome-keeper`
 experiments.
 
 When this dream is revived, revisit from the then-current action-model

@@ -71,6 +71,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Confirmed maintenance and behavior-correction tasks: [`docs/todo.md`](docs/todo.md).
 - Capability milestones, sequencing, and open design decisions: [`docs/roadmap.md`](docs/roadmap.md).
 - Detection, datasets, training, inference, playground, and Electron vision integration: [`docs/vision.md`](docs/vision.md).
+- ViDot Godot automation and Vitest integration design: [`docs/vidot.md`](docs/vidot.md).
 - Detailed Mod, decompilation, tool rationale, specialized workflows, and planned layout: [`docs/development.md`](docs/development.md).
 - Status and replay producer/consumer contract: [`packages/status-dashboard/README.md`](packages/status-dashboard/README.md).
 - External sources supporting project decisions: [`docs/references.md`](docs/references.md).

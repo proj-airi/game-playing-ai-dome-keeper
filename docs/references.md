@@ -19,6 +19,18 @@ This page collects external resources useful for understanding and maintaining t
 - [Source SDK 2013: `NextBotBehavior.h`](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/server/NextBot/NextBotBehavior.h) — Valve's public NextBot Action and Behavior implementation, used as the upstream code reference for stack-based task suspension, completion, and resumption without retaining a separate top-level state machine.
 - [SHOP / SHOP2](https://www.cs.umd.edu/projects/shop/description.html) — The University of Maryland description of ordered Hierarchical Task Network planning, where methods decompose nonprimitive tasks into subtasks when their preconditions are satisfied; this is a conceptual reference for the recursive `TaskExecutor`, not a claim that the project implements formal HTN planning.
 
+## Godot Testing and Automation
+
+- [Vitest](https://vitest.dev/) — The test runner that owns ViDot's collection, filtering, watch mode, scheduling, assertions, and reporting.
+- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The extensible per-test context that informs `@vidot/vitest` without requiring global APIs.
+- [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI or configuration file.
+- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by ViDot.
+- [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
+- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request, response, error, and notification model used as the basis for ViDot's small JSON-RPC-like WebSocket protocol.
+- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility used to load ViDot's temporary bridge runtime before project scenes.
+- [Godot 4.3: WebSocketPeer](https://docs.godotengine.org/en/4.3/classes/class_websocketpeer.html) — The WebSocket peer API used by the ViDot Autoload, including its required polling model.
+- [Godot 4.3: TCPServer](https://docs.godotengine.org/en/4.3/classes/class_tcpserver.html) — The loopback server accepted by `WebSocketPeer` for ViDot's single-client bridge.
+
 ## Mod Development and Godot 4.3
 
 - [Dome Keeper Mods: Getting Started](https://github.com/DomeKeeperMods/Docs/wiki/Getting-Started) — The official environment setup guide used to define this repository's Dome Keeper modding workflow.
@@ -90,7 +102,9 @@ This page collects external resources useful for understanding and maintaining t
 - [Bun ImportMeta Environment Reference](https://bun.com/reference/globals/ImportMeta) — The `import.meta.env` API reference used by the project's TypeScript scripts to read machine-local inputs.
 - [Bun Package Installation](https://bun.sh/docs/pm/cli/install) — Documentation for Bun package installation and lockfiles, which the project uses for JavaScript dependencies and `bun.lock`.
 - [Bun TypeScript Runtime](https://bun.sh/docs/runtime/typescript) — Documentation for running TypeScript directly with Bun, used by automation under `scripts/` without a compile step.
-- [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` to author Godot-compatible code in TypeScript and emit runtime GDScript.
+- [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` and ViDot to author Godot-compatible code in TypeScript and emit runtime GDScript.
+- [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used for ViDot's TypeScript-authored Autoload.
+- [typescript-to-gdscript Transform Rules](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/transform-rules.md) — The documented TypeScript-to-GDScript transform boundary used alongside direct target-Godot validation.
 - [Node.js Release Schedule](https://nodejs.org/en/about/previous-releases) — The Node.js release and LTS schedule used to select the pinned runtime for npm package executables.
 - [Node.js File-System Promises API](https://nodejs.org/api/fs.html#promises-api) — The asynchronous file-system API used by the status dashboard development server to read live snapshots.
 - [Node.js OS Temporary Directory](https://nodejs.org/api/os.html#ostmpdir) — Documentation for `os.tmpdir()`, used to align the Godot snapshot location with the Node.js reader.

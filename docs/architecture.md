@@ -90,20 +90,23 @@ Formal HTN completeness, planner search, partial ordering, method-effect
 semantics, and alternative-method backtracking are not project requirements.
 The HTN literature is a design reference, not an implementation contract.
 
-## Planned Package Topology
+## Planned ViDot Test Topology
 
-The future implementation is organized into three packages:
+ViDot supplies the Godot boundary for Vitest rather than owning a second test
+runner. Test and fixture modules execute in Node.js and use `@vidot/vitest` to
+control an editable Godot project through a temporary TypeScript-authored
+Autoload and a loopback WebSocket bridge.
 
-- `mods/LemonNekoGH-DataCollectorAI/` — the in-game Godot runtime, including
-  `TaskExecutor`, collection, normal input, and the game-side test bridge;
-- `packages/vikeeper/` — the external test runner, including test discovery,
-  scheduling, game-process orchestration, assertions, and reports;
-- `packages/data-collector-ai-tests/` — the DataCollectorAI-specific scenarios,
-  fixtures, test configuration, and expected behavior.
+One Vitest test file owns one Godot process. Tests in that file run sequentially
+with automatic fixture teardown, while different files may run in parallel in
+separate processes. The Autoload calls ordinary project methods and observes
+signals and state; project code does not depend on ViDot.
 
-The Mod does not depend on the `vikeeper` runner. The runner communicates with
-the Mod through a test bridge, while screenshots, traces, and other large
-collection artifacts remain files managed by the run.
+DataCollectorAI is the first runtime tested through this boundary. Its
+project-specific fixtures remain with the Mod, and its first end-to-end test
+executes a Move Quark Action through `TaskExecutor` before asserting the
+character's final tile. [`vidot.md`](vidot.md) owns the detailed framework,
+process, protocol, and lifecycle design.
 
 ## Evidence for Target Design
 

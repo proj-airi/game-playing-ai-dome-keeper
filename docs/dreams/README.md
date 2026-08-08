@@ -13,3 +13,4 @@ prerequisite for a project milestone.
 
 - [Continuous self-learning experiment](continuous-self-learning.md)
 - [Action-model-driven AUV Dome Keeper](auv-dome-keeper-action-model.md)
+- [ViDot as a code-as-policy game driver](vidot-code-as-policy.md)

@@ -10,18 +10,18 @@ unless an explicit project decision says so.
 
 ## Planned Milestones
 
-### Build Vikeeper for In-Game Tests
+### Build the First ViDot Godot Test
 
-- Build the first useful Vikeeper test-execution path for Dome Keeper, with
-  scenarios that can observe game state and assert initial conditions,
-  transitions, and outcomes from inside the game test environment.
-- Use Vikeeper to test the frozen recursive `TaskExecutor` design, including
-  compound-task method steps, child executor lifecycle, primitive Quark Action
-  resolution and execution, and succeeded or failed task results.
-- Treat this milestone as a prerequisite for implementing
-  `LemonNekoGH-DataCollectorAI`: the DataCollectorAI runtime may be designed in
-  advance, but its `TaskExecutor` implementation should be developed against
-  executable Vikeeper tests.
+- Add ViDot to the monorepo as an explicit `@vidot/vitest` integration. Vitest
+  owns test collection, scheduling, assertions, and reporting; ViDot owns the
+  temporary Autoload, Godot process, and loopback WebSocket bridge.
+- Prove one DataCollectorAI Move test with one explicitly imported map fixture,
+  one Quark Action executed through `TaskExecutor`, signal-first completion
+  waiting, and a final assertion that the character is inside the target tile.
+- Use one Godot process per test file, sequential tests within a file, automatic
+  fixture teardown, and separate processes for cross-file parallelism.
+- Treat this proof as a prerequisite for expanding the recursive `TaskExecutor`
+  implementation to more actions and compound-task behavior.
 
 ### Replace the Existing Collector with the TypeScript AI Mod
 
