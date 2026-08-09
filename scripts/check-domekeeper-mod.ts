@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
-import { x } from 'tinyexec'
+import { execa } from 'execa'
 
 const godot = import.meta.env.GODOT_BIN
 const version = import.meta.env.DOMEKEEPER_VERSION
@@ -21,7 +21,7 @@ const userDataDir = await mkdtemp(path.join(tmpdir(), 'airi-domekeeper-godot-che
 let failure: string | null = null
 
 try {
-  const result = await x(godot, [
+  const result = await execa(godot, [
     '--headless',
     '--path',
     project,
@@ -31,10 +31,11 @@ try {
     '5',
     'res://addons/mod_loader/restart_notification.tscn',
   ], {
-    throwOnError: false,
+    all: true,
+    reject: false,
     timeout: 60_000,
   })
-  const output = `${result.stdout}\n${result.stderr}`
+  const output = result.all
   const modErrors = findModErrors(output)
   const collectorReady = output.includes('Collector entered tree. Inside: true')
 
@@ -42,7 +43,7 @@ try {
     console.error(modErrors.join('\n'))
   if (!collectorReady)
     console.error('The YOLO collector did not enter the scene tree; a mod script may have failed to load.')
-  if (result.exitCode !== 0 || modErrors.length > 0 || !collectorReady)
+  if (result.failed || modErrors.length > 0 || !collectorReady)
     failure = `Godot mod check failed with exit code ${result.exitCode ?? 'unknown'}`
   else
     console.log('Godot mod check passed: the YOLO collector entered the scene tree.')

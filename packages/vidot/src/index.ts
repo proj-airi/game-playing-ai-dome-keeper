@@ -1,9 +1,9 @@
+import type { ResultPromise } from 'execa'
 import type { Buffer } from 'node:buffer'
-import type { Result } from 'tinyexec'
 import type { VidotContext } from './setup'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { x } from 'tinyexec'
+import { execa } from 'execa'
 import { inject, test as vitest } from 'vitest'
 import { VidotClient } from './client'
 import { assertAutoloadInjected } from './project'
@@ -13,11 +13,6 @@ const startupTimeoutMs = 30_000
 export { type JsonValue, VidotClient } from './client'
 export { injectAutoload } from './project'
 export * from 'vitest'
-
-interface GodotSession {
-  client: VidotClient
-  close: () => Promise<void>
-}
 
 const configuredTest = vitest.extend('vidotConfig', { scope: 'file' }, (): VidotContext => inject('vidot'))
 
@@ -31,7 +26,7 @@ export const test = configuredTest.extend('vidot', { scope: 'file' }, async ({ v
 
 export const it = test
 
-async function startGodot(godotPath: string, projectPath: string): Promise<GodotSession> {
+async function startGodot(godotPath: string, projectPath: string) {
   projectPath = path.resolve(projectPath)
   if (!existsSync(godotPath))
     throw new Error(`Godot executable does not exist: ${godotPath}`)
@@ -39,21 +34,25 @@ async function startGodot(godotPath: string, projectPath: string): Promise<Godot
   await assertAutoloadInjected(projectPath)
 
   const session = crypto.randomUUID()
-  const result = x(godotPath, [
+  const subprocess = execa(godotPath, [
     '--headless',
     '--path',
     projectPath,
     '--',
     `--vidot-session=${session}`,
-  ], { throwOnError: false })
+  ], {
+    forceKillAfterDelay: 1000,
+    reject: false,
+  })
   let client: VidotClient
   try {
-    const port = await waitForReady(result, session, startupTimeoutMs)
+    const port = await waitForReady(subprocess, session, startupTimeoutMs)
     client = await VidotClient.connect(`ws://127.0.0.1:${port}`, startupTimeoutMs)
     await client.initialize(session)
   }
   catch (error) {
-    await stopProcess(result)
+    subprocess.kill()
+    await subprocess
     throw error
   }
 
@@ -67,23 +66,16 @@ async function startGodot(godotPath: string, projectPath: string): Promise<Godot
 
       closed = true
       client.close()
-      await stopProcess(result)
+      subprocess.kill()
+      await subprocess
     },
   }
 }
 
-async function waitForReady(result: Result, session: string, timeoutMs: number): Promise<number> {
-  const child = result.process
-  if (!child)
-    throw new Error('Godot process is unavailable')
+type GodotProcess = ResultPromise<{ forceKillAfterDelay: number, reject: false }>
 
-  const stdout = child.stdout
-  if (!stdout)
-    throw new Error('Godot stdout is unavailable')
-
-  const childProcess: NonNullable<typeof result.process> = child
-  const stdoutStream: NonNullable<typeof child.stdout> = stdout
-  const stderr = childProcess.stderr
+async function waitForReady(subprocess: GodotProcess, session: string, timeoutMs: number): Promise<number> {
+  const { nodeChildProcess, stderr, stdout } = subprocess
   const prefix = `VIDOT_READY ${session} `
 
   return new Promise((resolve, reject) => {
@@ -119,39 +111,18 @@ async function waitForReady(result: Result, session: string, timeoutMs: number):
     function onStderr(chunk: Buffer) {
       diagnostics = `${diagnostics}${chunk.toString()}`.slice(-8192)
     }
-    function onExit() {
+    function onExit(exitCode: number | null) {
       cleanup()
-      reject(new Error(`Godot exited before ViDot became ready (exit ${result.exitCode ?? 'unknown'})\n${diagnostics.trim()}`))
+      reject(new Error(`Godot exited before ViDot became ready (exit ${exitCode ?? 'unknown'})\n${diagnostics.trim()}`))
     }
     function cleanup() {
       clearTimeout(timeout)
-      stdoutStream.off('data', onStdout)
-      stderr?.off('data', onStderr)
-      childProcess.off('close', onExit)
+      stdout.off('data', onStdout)
+      stderr.off('data', onStderr)
+      nodeChildProcess.off('close', onExit)
     }
-    stdoutStream.on('data', onStdout)
-    stderr?.on('data', onStderr)
-    childProcess.once('close', onExit)
+    stdout.on('data', onStdout)
+    stderr.on('data', onStderr)
+    nodeChildProcess.once('close', onExit)
   })
-}
-
-async function stopProcess(result: Result): Promise<void> {
-  if (result.exitCode !== undefined) {
-    await result
-
-    return
-  }
-
-  result.kill('SIGTERM')
-  if (!await exitsWithin(result, 1000)) {
-    result.kill('SIGKILL')
-    await result
-  }
-}
-
-function exitsWithin(result: Result, timeoutMs: number): Promise<boolean> {
-  return Promise.race([
-    Promise.resolve(result).then(() => true, () => true),
-    new Promise<false>(resolve => setTimeout(() => resolve(false), timeoutMs)),
-  ])
 }

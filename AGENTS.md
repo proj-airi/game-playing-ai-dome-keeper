@@ -16,7 +16,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Bun owns JavaScript and TypeScript dependencies and `bun.lock`; install with Bun and run TypeScript scripts with Bun.
 - uv owns Python dependencies, `uv.lock`, and `.venv`; invoke Python tools through uv or mise tasks, not bare `python`, `pip`, or `yolo`. Do not add a second overlapping Python environment manager.
 - ESLint uses `@antfu/eslint-config` with the flat `eslint.config.mjs`; treat `mise.toml` as mise-owned configuration and format it with `mise fmt`, not ESLint.
-- Use `tinyexec` for TypeScript process execution instead of adding another process wrapper without a confirmed requirement.
+- Use `execa` directly for TypeScript process execution and prefer its built-in output and termination behavior over local process wrappers.
 
 ## Development Conventions
 

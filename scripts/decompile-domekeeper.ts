@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, symlinkSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import { x } from 'tinyexec'
+import { execa } from 'execa'
 
 const env = import.meta.env
 const gameDir = env.DOMEKEEPER_GAME_DIR
@@ -10,6 +10,7 @@ const gdreToolsBin = env.GDRETOOLS_BIN
 const version = env.DOMEKEEPER_VERSION
 const repoRoot = path.resolve(import.meta.dir, '..')
 const outRoot = env.DOMEKEEPER_OUT_ROOT ?? path.join(repoRoot, 'external/domekeeper-decompiled')
+const run = execa({ stdio: 'inherit' })
 
 if (!gameDir) {
   console.error('Missing DOMEKEEPER_GAME_DIR. Provide the game install directory.')
@@ -51,9 +52,7 @@ mkdirSync(outDir, { recursive: true })
 
 console.log('\nRunning GDRETools to recover project...')
 try {
-  await x(gdreToolsBin, ['--headless', `--recover=${pckPath}`, `--output=${outDir}`], {
-    nodeOptions: { stdio: 'inherit' },
-  })
+  await run(gdreToolsBin, ['--headless', `--recover=${pckPath}`, `--output=${outDir}`])
   console.log('GDRETools recovery complete.')
 }
 catch (error) {
@@ -64,9 +63,7 @@ catch (error) {
 
 console.log('\nGenerating TypeScript declarations for the decompiled game...')
 try {
-  await x('bun', ['run', path.join(repoRoot, 'scripts/generate-domekeeper-typings.ts'), outDir], {
-    nodeOptions: { stdio: 'inherit' },
-  })
+  await run('bun', ['run', path.join(repoRoot, 'scripts/generate-domekeeper-typings.ts'), outDir])
 }
 catch (error) {
   console.error('Failed to generate TypeScript declarations.')
@@ -95,7 +92,7 @@ if (existsSync(modsRoot)) {
     }
 
     try {
-      await x('ln', ['-s', modPath, modTarget], { nodeOptions: { stdio: 'inherit' } })
+      symlinkSync(modPath, modTarget, 'junction')
       console.log(`Linked mod source to ${modTarget}`)
     }
     catch (error) {

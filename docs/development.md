@@ -72,7 +72,7 @@ unless explicitly marked as planned, future, or historical.
 
 ## Exec Utilities
 
-- Prefer minimal, actively maintained process-exec libraries when available. For this repo, use `tinyexec` as the lightweight command runner.
+- Use `execa` directly for TypeScript process execution. Prefer its built-in output, error, and termination behavior over local process wrappers.
 
 ## Python Environment
 

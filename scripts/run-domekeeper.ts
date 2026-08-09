@@ -5,8 +5,8 @@ import path from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
+import { execa } from 'execa'
 import { customAlphabet } from 'nanoid'
-import { x } from 'tinyexec'
 
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 6)
 const { values } = parseArgs({
@@ -100,7 +100,7 @@ console.log(`${mode} replay ready: ${replay}`)
 
 async function run(command: string, args: string[], failure: string): Promise<void> {
   try {
-    await x(command, args, { nodeOptions: { stdio: 'inherit' } })
+    await execa(command, args, { stdio: 'inherit' })
   }
   catch (error) {
     console.error(failure)
