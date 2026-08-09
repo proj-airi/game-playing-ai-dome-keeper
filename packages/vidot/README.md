@@ -1,0 +1,31 @@
+# ViDot
+
+ViDot is a Godot integration for Vitest. The repository's
+[`examples/basic-vidot`](../../examples/basic-vidot) project keeps its Godot
+files, Vitest configuration, lifecycle setup, and test together. ViDot
+temporarily injects the compiled Autoload and gives each test file a
+file-scoped `vidot` fixture backed by one headless Godot process.
+
+Run the example through the repository's pinned tools:
+
+```bash
+mise run vidot:test
+```
+
+Configure the editable project once from Vitest `globalSetup`:
+
+```ts
+import { setupViDot } from '@vidot/vitest/setup'
+
+export default setupViDot(projectPath)
+```
+
+Tests use the file-scoped fixture without managing the Godot process:
+
+```ts
+test('completes later', async ({ vidot }) => {
+  const completed = vidot.waitForSignal('/root/Example', 'completed')
+  await vidot.call('/root/Example', 'set_later', [1])
+  await completed
+})
+```

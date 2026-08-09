@@ -10,11 +10,22 @@ unless an explicit project decision says so.
 
 ## Planned Milestones
 
-### Build the First ViDot Godot Test
+### Build the ViDot Core and Example
 
 - Add ViDot to the monorepo as an explicit `@vidot/vitest` integration. Vitest
   owns test collection, scheduling, assertions, and reporting; ViDot owns the
   temporary Autoload, Godot process, and loopback WebSocket bridge.
+- Expose `get`, `set`, `call`, frame-bounded `waitForProperty`, and signal-first
+  `waitForSignal` commands. Keep property checks limited to active waits and do
+  not instrument arbitrary Godot property writes.
+- Add a small editable example Godot project that proves Autoload injection and
+  removal, Godot process creation and destruction, bridge readiness, all five
+  commands, and timeout cleanup without depending on Dome Keeper.
+- Use one Godot process per test file, sequential tests within a file, automatic
+  teardown, and separate processes for cross-file parallelism.
+
+### Build the First Dome Keeper ViDot Fixture
+
 - Prove one DataCollectorAI Move test with one explicitly imported map fixture,
   one Quark Action executed through `TaskExecutor`, signal-first completion
   waiting, and a final assertion that the character is inside the target tile.

@@ -11,6 +11,7 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+**/.godot/
 packages/status-dashboard/dist/
 .venv/
 runs/

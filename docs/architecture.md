@@ -97,16 +97,20 @@ runner. Test and fixture modules execute in Node.js and use `@vidot/vitest` to
 control an editable Godot project through a temporary TypeScript-authored
 Autoload and a loopback WebSocket bridge.
 
-One Vitest test file owns one Godot process. Tests in that file run sequentially
+One file-scoped ViDot fixture owns one Godot process. Tests receive its client
+without manually starting or stopping Godot. Tests in that file run sequentially
 with automatic fixture teardown, while different files may run in parallel in
 separate processes. The Autoload calls ordinary project methods and observes
 signals and state; project code does not depend on ViDot.
 
-DataCollectorAI is the first runtime tested through this boundary. Its
-project-specific fixtures remain with the Mod, and its first end-to-end test
-executes a Move Quark Action through `TaskExecutor` before asserting the
-character's final tile. [`vidot.md`](vidot.md) owns the detailed framework,
-process, protocol, and lifecycle design.
+The `examples/basic-vidot` Godot project first proves the generic bridge,
+process lifecycle, and `get`, `set`, `call`, `waitForProperty`, and
+`waitForSignal` commands.
+DataCollectorAI is the first project-specific runtime tested afterward. Its
+fixtures remain with the Mod, and its first end-to-end test executes a Move
+Quark Action through `TaskExecutor` before asserting the character's final tile.
+[`vidot.md`](vidot.md) owns the detailed integration, process, protocol, and
+lifecycle design.
 
 ## Evidence for Target Design
 

@@ -6,7 +6,7 @@ lockfile = true
 
 [tools]
 bun = "1.3.14"
-node = "24.18.0" # TODO: use bun instead, dashboard depends on node
+node = "24.18.0"                # TODO: use bun instead, dashboard depends on node
 python = "3.12.13"
 "aqua:astral-sh/uv" = "0.11.32"
 
@@ -42,7 +42,11 @@ run = "bun run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
-depends = ["godot:check", "lint", "typecheck"]
+depends = ["godot:check", "lint", "typecheck", "vidot:test"]
+
+[tasks."vidot:test"]
+description = "Build ViDot and run the basic example integration test"
+run = "bun run --cwd packages/vidot build && bun run --cwd packages/vidot test"
 
 [tasks.decompile]
 description = "Decompile Dome Keeper and link repository mods"

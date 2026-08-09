@@ -22,14 +22,18 @@ This page collects external resources useful for understanding and maintaining t
 ## Godot Testing and Automation
 
 - [Vitest](https://vitest.dev/) — The test runner that owns ViDot's collection, filtering, watch mode, scheduling, assertions, and reporting.
-- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The extensible per-test context that informs `@vidot/vitest` without requiring global APIs.
+- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The file-scoped fixture API that lets `@vidot/vitest` own one Godot process per test file without exposing lifecycle hooks to tests.
 - [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI or configuration file.
+- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session lifecycle used to inject and remove ViDot without racing parallel test workers.
 - [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by ViDot.
 - [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request, response, error, and notification model used as the basis for ViDot's small JSON-RPC-like WebSocket protocol.
 - [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility used to load ViDot's temporary bridge runtime before project scenes.
 - [Godot 4.3: WebSocketPeer](https://docs.godotengine.org/en/4.3/classes/class_websocketpeer.html) — The WebSocket peer API used by the ViDot Autoload, including its required polling model.
 - [Godot 4.3: TCPServer](https://docs.godotengine.org/en/4.3/classes/class_tcpserver.html) — The loopback server accepted by `WebSocketPeer` for ViDot's single-client bridge.
+- [Godot source: `TCPServer::listen`](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/core/io/tcp_server.cpp#L530-L586) — The upstream implementation supporting port `0` for an OS-selected ephemeral ViDot port.
+- [Godot 4.3: Object](https://docs.godotengine.org/en/4.3/classes/class_object.html) — The dynamic property, method, and signal APIs behind ViDot's `get`, `set`, `call`, and `waitForSignal` commands; Godot exposes property-list changes but no universal property-value change signal.
+- [Godot 4.3: GDScript VM member storage](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/modules/gdscript/gdscript_vm.cpp#L678-L681) — The upstream implementation showing direct script-member storage, which rules out a complete property-change observer implemented only around `Object.set` and motivates bounded observation of active `waitForProperty` requests.
 
 ## Mod Development and Godot 4.3
 

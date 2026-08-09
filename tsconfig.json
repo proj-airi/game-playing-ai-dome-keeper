@@ -16,6 +16,7 @@
     "packages/**/*.ts"
   ],
   "exclude": [
+    "packages/vidot",
     "packages/status-dashboard"
   ]
 }
