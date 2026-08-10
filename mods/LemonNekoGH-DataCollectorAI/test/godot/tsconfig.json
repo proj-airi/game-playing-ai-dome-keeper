@@ -7,8 +7,8 @@
     "skipLibCheck": true
   },
   "include": [
-    "../../node_modules/typescript-to-gdscript/typings",
-    "src/**/*.ts",
-    "src/_typings/**/*.d.ts"
+    "../../../../node_modules/typescript-to-gdscript/typings",
+    "*.ts",
+    "_typings/**/*.d.ts"
   ]
 }

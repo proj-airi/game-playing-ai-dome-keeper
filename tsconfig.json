@@ -13,9 +13,12 @@
   "include": [
     "scripts/**/*.ts",
     "apps/**/*.ts",
-    "packages/**/*.ts"
+    "packages/**/*.ts",
+    "examples/**/*.ts",
+    "mods/*/test/**/*.ts"
   ],
   "exclude": [
+    "mods/*/test/godot/**/*.ts",
     "packages/vidot",
     "packages/status-dashboard"
   ]

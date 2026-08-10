@@ -1,5 +1,9 @@
 # Rule Teacher Controller
 
+This document describes the retained legacy controller. The owning
+`LemonNekoGH-YoloDataCollector` Mod is currently disabled and these behaviors
+are not active repository workflows.
+
 This document owns the supported gameplay scope and task policy of the current
 in-process rule teacher. Read it before changing navigation, interaction,
 resource handling, upgrades, defense, recovery, checkpointing, or observation.

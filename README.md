@@ -7,9 +7,9 @@
 > This project is part of Project AIRI. We aim to build a LLM‑driven digital companion that can play games and interact with the world.
 > Learn more at [Project AIRI](https://github.com/moeru-ai/airi) and the [AIRI live demo](https://airi.moeru.ai).
 
-AI plays the game **Dome Keeper** with CV & LLM combined. The current capture
-and detection pipeline is powered by YOLO, while the replacement AI mod is
-authored in TypeScript and converted to GDScript for Godot.
+AI plays the game **Dome Keeper** with CV & LLM combined. The active replacement
+AI mod is authored in TypeScript and converted to GDScript for Godot. The legacy
+YOLO collector and rule-teacher source is retained but temporarily disabled.
 
 ## Models
 
@@ -22,7 +22,7 @@ authored in TypeScript and converted to GDScript for Godot.
 Install [mise](https://mise.jdx.dev/installing-mise.html) before setting up the
 repository.
 
-### 1. Mod + Data Collection
+### 1. Mod Development
 
 1. Clone, install the pinned tools, and install locked dependencies.
 
@@ -62,14 +62,10 @@ Then run:
 mise run decompile
 ```
 
-The new `DataCollectorAI` mod will replace the old `YoloDataCollector` mod. Its
-TypeScript source is under `mods/LemonNekoGH-DataCollectorAI/src/`; build the
-workspace before opening or checking Godot so `tstogd` generates the runtime
-GDScript under that mod's `scripts/` directory:
-
-```bash
-bun run build
-```
+The decompile workflow links only `DataCollectorAI`; the old
+`YoloDataCollector` remains disabled. DataCollectorAI's TypeScript source is
+under `mods/LemonNekoGH-DataCollectorAI/src/`. The decompile, Godot open, and
+Godot check tasks build its generated GDScript before loading the Mod.
 
 See its [README](mods/LemonNekoGH-DataCollectorAI/README.md) for the planner,
 task, and `Quark Action` structure.
@@ -80,28 +76,11 @@ task, and `Quark Action` structure.
 mise run godot:open
 ```
 
-4. Collect a dataset session.
+The legacy pause-menu collection and replay workflows are unavailable while the
+old Mod is disabled. Use `mise run domekeeper:vidot:test` for the active
+DataCollectorAI gameplay proof.
 
-- In the pause menu, click **YOLO Collect** to start/stop.
-- Each session is stored under `user://yolo_data/session_<timestamp>/`.
-- Outputs include `images/`, `labels/`, and `data.yaml`.
-- Frames are letterboxed to `640×640` with gray padding.
-- Accepted captures are split into `train/val/test` every 60 images, cycling `4/1/1`.
-
-### 2. Run a Replay
-
-The repository replay entry point is `mise run godot:run`. It builds the Bun
-workspace first, then runs the fixed-frame recorder. The default is a windowed
-replay; use `--headless` for JSONL-only validation or `--movie` for video output.
-
-```bash
-mise run godot:run -- --headless --fps 10
-```
-
-Replay sessions are written under `recordings/`. Checkpoint and seed options
-are documented in [`docs/development.md`](docs/development.md).
-
-### 3. Train a Baseline (Ultralytics)
+### 2. Train a Baseline (Ultralytics)
 
 We use the Ultralytics CLI (`yolo`) for training and export.
 

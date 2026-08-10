@@ -57,6 +57,8 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: InputMap](https://docs.godotengine.org/en/4.3/classes/class_inputmap.html) — The action-mapping API used to honor the game's configured controls instead of hard-coded physical keys.
 - [Godot 4.3: JSON](https://docs.godotengine.org/en/4.3/classes/class_json.html) — The serialization API used for complete observer snapshots in replay recordings.
 - [Godot 4.3: MovieWriter](https://docs.godotengine.org/en/4.3/classes/class_moviewriter.html) — The video-writer API underlying fixed-frame-rate replay capture.
+- [Godot 4.3: PackedScene](https://docs.godotengine.org/en/4.3/classes/class_packedscene.html) — The target engine's serialized scene resource used for the repository-owned Move test scene and map.
+- [Godot 4.3: TileMap](https://docs.godotengine.org/en/4.3/classes/class_tilemap.html) — The target engine's multi-layer tile API underlying Dome Keeper 5.0.5.19's `MapData` methods; the newer replacement API is outside this pinned game boundary.
 - [Godot 4.3: `Node.get_meta`](https://docs.godotengine.org/en/4.3/classes/class_node.html#class-node-method-get-meta) — The metadata API used to read controlled runtime information attached to game nodes.
 - [Godot 4.3: `OS.get_environment`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-environment) — The environment API used to resolve the same temporary-directory variables recognized by Node.js.
 - [Godot 4.3: RayCast2D](https://docs.godotengine.org/en/4.3/classes/class_raycast2d.html) — The ray-collision API used to confirm that the selected monster is the Laser's first acquired collider.
@@ -73,7 +75,8 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `CanvasItem.is_visible_in_tree`](https://docs.godotengine.org/en/4.3/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree) — The visibility API used to suspend capture while pause or TechTree overlays are visible.
 - [Godot 4.3: `Node.add_to_group`](https://docs.godotengine.org/en/4.3/classes/class_node.html#class-node-method-add-to-group) — The grouping API used to mark dynamically discovered interfaces that should suspend capture.
 - [Godot 4.3: `OS.shell_open`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-shell-open) — The system-opening API used to reveal the current dataset directory after capture stops.
-- [Godot 4.3: ProjectSettings](https://docs.godotengine.org/en/4.3/classes/class_projectsettings.html) — The project-settings reference used when configuring `forward_plus` for the target project on macOS.
+- [Godot 4.3: ProjectSettings](https://docs.godotengine.org/en/4.3/classes/class_projectsettings.html) — The project-settings reference used for target rendering configuration and per-process custom `user://` isolation.
+- [Godot 4.3: `OS.get_user_data_dir`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-user-data-dir) — The runtime path query used to fail closed unless a ViDot process received its expected isolated user-data directory.
 
 ## Vision, Datasets, and Experiments
 

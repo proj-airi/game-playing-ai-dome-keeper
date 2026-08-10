@@ -1,7 +1,7 @@
 import antfu from '@antfu/eslint-config'
 
 export default antfu({
-  ignores: ['mise.toml', '**/.vidot-session.json', 'mods/*/src/_typings/**', 'packages/vidot/runtime/src/_typings/**'],
+  ignores: ['mise.toml', '**/.vidot-session.json', 'mods/*/src/_typings/**', 'mods/*/test/godot/_typings/**', 'packages/vidot/runtime/src/_typings/**'],
 }, {
   files: ['packages/vidot/**/*.ts', 'examples/basic-vidot/**/*.ts'],
   rules: {

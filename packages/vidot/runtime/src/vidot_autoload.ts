@@ -59,7 +59,7 @@ export class _VidotAutoload extends Node {
       return
     }
 
-    print(`VIDOT_READY ${this.session} ${this.server.get_local_port()}`)
+    print(`VIDOT_READY ${this.session} ${this.server.get_local_port()} ${JSON.stringify(OS.get_user_data_dir())}`)
   }
 
   _process(_delta: float) {

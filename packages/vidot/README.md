@@ -20,6 +20,15 @@ import { setupViDot } from '@vidot/vitest/setup'
 export default setupViDot(projectPath)
 ```
 
+Pass `scene` when a project test owns a dedicated main scene instead of the
+project's ordinary entry point:
+
+```ts
+export default setupViDot(projectPath, {
+  scene: 'res://tests/integration_fixture.tscn',
+})
+```
+
 Tests use the file-scoped fixture without managing the Godot process:
 
 ```ts

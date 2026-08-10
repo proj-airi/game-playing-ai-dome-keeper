@@ -84,9 +84,11 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 ## Current Priority
 
-- Prove and clean up the supported manually started, single-player Engineer and Laser rule-teacher loop before designing detailed Lower-Agent contracts or selecting its implementation.
+- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled while proving the replacement DataCollectorAI runtime through ViDot. Retain the legacy source as reference, but do not load its collector or rule teacher in repository workflows.
 
 ## Unattended Long-Run Optimization
+
+This section applies only when the legacy rule teacher is explicitly re-enabled; it is not an active workflow while that Mod is disabled.
 
 - Review both the result and the route taken. Completing a run does not by itself show that the process or a strategy change was good.
 - Pay particular attention to prolonged lack of movement or task progress, repeated under-filled resource returns, unusually deep or repetitive task stacks, losses at high waves, and repair spending that substantially outpaces health or attack growth.

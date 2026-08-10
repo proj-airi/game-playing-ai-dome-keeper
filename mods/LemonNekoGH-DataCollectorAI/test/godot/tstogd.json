@@ -1,0 +1,5 @@
+{
+  "tsDir": ".",
+  "gdDir": "../../scripts/__test__",
+  "typingsDir": "_typings"
+}

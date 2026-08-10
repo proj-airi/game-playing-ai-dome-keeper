@@ -21,6 +21,13 @@ planner or a formally compliant HTN implementation:
 Each executor owns its current method and method step. Only the active
 primitive-task executor owns gameplay input.
 
+The first vertical slice exposes `/root/DataCollectorAI` as an ordinary Godot
+runtime node. It supports one adjacent-tile `start_move(x, y)` task, reports the
+current tile through `current_tile()`, and releases active input through
+`reset()`. Tests subscribe to `task_completed` or `task_failed` before starting
+the task. The initial `TaskExecutor` deliberately does not provide pathfinding,
+pickup, interaction, or compound-task behavior.
+
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
 planner completeness, search semantics, partial ordering, or method-effect
 semantics. The exact source-file layout and the TypeScript data types are not
@@ -30,7 +37,15 @@ ViDot will test this Mod through ordinary Godot methods and signals exposed by
 its runtime. DataCollectorAI does not depend on or register APIs with ViDot.
 DataCollectorAI-specific Vitest files and their explicitly imported Node.js
 fixtures remain with this Mod; the fixtures use ViDot's temporary Autoload and
-loopback WebSocket bridge to prepare and inspect the game.
+loopback WebSocket bridge to prepare and inspect the game. Godot-only fixture
+source lives under `test/godot/` and is compiled into a temporary ignored Mod
+directory only while the integration test runs.
+
+Run `mise run domekeeper:vidot:test` to start the dedicated Move test map and
+verify one real adjacent-tile Move through the runtime facade. The map contains
+one Engineer entry and a bounded open corridor. The test constructs it through
+Dome Keeper's `MapData` methods instead of committing serialized TileMap data,
+and it does not run procedural generation. The legacy YOLO Mod remains disabled.
 
 Build the generated runtime files with:
 

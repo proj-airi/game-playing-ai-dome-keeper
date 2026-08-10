@@ -44,12 +44,22 @@ file. A project imports `setupViDot` from the side-effect-free
 injects the Autoload for the test session and lazily owns one Godot process for
 each test file that uses the fixture.
 
+`setupViDot` may receive a fixed main scene owned by that test project. ViDot
+runs it headlessly while continuing to own the project path, argument boundary,
+and session. The Dome Keeper proof uses this option to select its
+repository-owned Move test.
+
 Vitest's file isolation is also ViDot's process isolation:
 
 - one file-scoped `vidot` fixture owns one Godot process;
+- each process owns an isolated temporary `user://` directory that teardown
+  removes;
 - tests inside that file run sequentially and share the process;
-- fixture teardown is automatic between tests;
-- different files may run in parallel in separate Godot processes;
+- project fixtures release their own state in per-test `finally` cleanup;
+- ViDot automatically stops the file-scoped process after the file;
+- files targeting different project directories may run in parallel, but files
+  targeting the same directory must be serialized because the lightweight
+  project mirror shares Godot's `.godot` import cache;
 - same-file concurrent tests are unsupported because they would compete for one
   game state and input owner.
 
@@ -156,6 +166,7 @@ proves:
 
 - Autoload injection before launch and removal after shutdown;
 - automatic file-scoped Godot startup, bridge readiness, and process cleanup;
+- isolated temporary `user://` selection and cleanup;
 - `get`, `set`, and `call` round trips;
 - one frame-bounded `waitForProperty` completion;
 - one signal-first `waitForSignal` completion.
@@ -175,24 +186,45 @@ fixtures live with the project or Mod being tested; DataCollectorAI's fixtures
 therefore remain with DataCollectorAI rather than in a generic ViDot package or
 a separate `data-collector-ai-tests` package.
 
-The exact fixture function signatures and map-loading hooks are intentionally
-deferred. Automatic teardown is not deferred: a fixture must release its state
-after each test, whether the test passes or fails.
+DataCollectorAI's tests own a small Godot Move fixture under `test/godot/`.
+Test setup compiles and installs it into an ignored test-only Mod directory for
+the process lifetime; the production Mod build does not compile it. The fixture
+constructs a minimal map through Dome Keeper's `MapData` methods before the
+landing stage can start procedural generation, then lets the ordinary Level
+stage create the Engineer, input processor, map collision, and configured input
+actions. A shared readable map-definition DSL remains the intended owner of test
+maps; this first map uses the same official `MapData` operations directly until
+that DSL is added.
+Serialized TileMap cell arrays are not test definitions. A fixture must release
+its state after each test, whether the test passes or fails.
 
-## Later Dome Keeper Proof
+## Initial Dome Keeper Proof
 
-The smallest end-to-end proof contains:
+The first end-to-end proof lives with DataCollectorAI under `test/` and contains:
 
-- one explicitly imported fixture with one map definition;
+- one explicitly imported fixture and one controlled Move test map;
 - one Move Quark Action executed through DataCollectorAI's `TaskExecutor`;
 - one completion signal subscribed before execution;
-- one final assertion that the character coordinate is inside the target tile;
-- automatic fixture teardown while retaining the same Godot process for the
-  next test in the file.
+- one final assertion that the character reaches and remains inside the target
+  tile after input release;
+- automatic action reset and file-scoped process teardown.
+
+The test map contains one Engineer entry, a bounded open corridor, and no
+generated resources or landmarks. The bootstrap selects the editor's
+ordinary single-player Engineer and Laser configuration in memory, installs
+that map before landing can generate another one, and instantiates the normal
+game scene. The legacy YOLO Mod remains disabled.
 
 A Quark Action remains a pure function that returns an expected control state.
 It has no lifecycle. `TaskExecutor` applies the control state and owns action
 completion or failure.
+
+The initial DataCollectorAI runtime facade is the ordinary project node
+`/root/DataCollectorAI`. Its first slice exposes `move_ready`,
+`start_move(target_x, target_y)`, `current_tile()`, `get_last_error()`, and
+`reset()`, plus signal-first `task_completed` and `task_failed` lifecycle
+signals. `Move` accepts one adjacent target tile only; pathfinding and compound
+tasks remain outside this proof.
 
 Later action tests should continue to assert player-visible outcomes:
 
@@ -240,5 +272,3 @@ be decided and verified independently.
 ## Open Implementation Decisions
 
 - the serialized Godot value subset beyond JSON-compatible values;
-- the fixture function signature and first DataCollectorAI map-loading hook;
-- the DataCollectorAI methods and lifecycle signals needed by the Move proof.

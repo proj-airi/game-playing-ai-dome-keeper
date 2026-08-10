@@ -8,9 +8,9 @@ Roadmap entries commit only to their stated outcomes. They do not select an
 implementation, interface, dataset schema, model, dependency, or training method
 unless an explicit project decision says so.
 
-## Planned Milestones
+## Capability Milestones
 
-### Build the ViDot Core and Example
+### Build the ViDot Core and Example — Complete
 
 - Add ViDot to the monorepo as an explicit `@vidot/vitest` integration. Vitest
   owns test collection, scheduling, assertions, and reporting; ViDot owns the
@@ -22,15 +22,17 @@ unless an explicit project decision says so.
   removal, Godot process creation and destruction, bridge readiness, all five
   commands, and timeout cleanup without depending on Dome Keeper.
 - Use one Godot process per test file, sequential tests within a file, automatic
-  teardown, and separate processes for cross-file parallelism.
+  process teardown, and separate processes for cross-project parallelism.
 
-### Build the First Dome Keeper ViDot Fixture
+### Build the First Dome Keeper ViDot Fixture — Complete
 
-- Prove one DataCollectorAI Move test with one explicitly imported map fixture,
-  one Quark Action executed through `TaskExecutor`, signal-first completion
-  waiting, and a final assertion that the character is inside the target tile.
-- Use one Godot process per test file, sequential tests within a file, automatic
-  fixture teardown, and separate processes for cross-file parallelism.
+- Prove one DataCollectorAI Move test with one explicitly imported controlled
+  test map, one Quark Action executed through `TaskExecutor`, signal-first
+  completion waiting, and a final assertion that the character is inside the
+  target tile.
+- Use one Godot process per test file, sequential tests within a file, explicit
+  per-test fixture cleanup, and separate processes for cross-project
+  parallelism.
 - Treat this proof as a prerequisite for expanding the recursive `TaskExecutor`
   implementation to more actions and compound-task behavior.
 
@@ -39,6 +41,8 @@ unless an explicit project decision says so.
 - Develop `LemonNekoGH-DataCollectorAI` as the TypeScript-authored Godot
   replacement for `LemonNekoGH-YoloDataCollector`, using the planner, task, and
   `Quark Action` executor structure described in its README.
+- Keep the legacy collector disabled in active repository workflows while its
+  source remains available for migration evidence.
 - Keep the TypeScript-to-GDScript build boundary and generated runtime files
   explicit while the new AI takes over the existing gameplay and data-collection
   responsibilities.
