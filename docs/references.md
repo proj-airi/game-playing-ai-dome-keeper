@@ -120,6 +120,8 @@ This page collects external resources useful for understanding and maintaining t
 - [uv Python Download Settings](https://docs.astral.sh/uv/reference/settings/#python-downloads) — Documentation for disabling uv-managed Python downloads so mise remains the sole interpreter owner.
 - [Antfu ESLint Config](https://github.com/antfu/eslint-config) — The shared ESLint configuration used as the project's baseline ruleset for TypeScript and frontend code.
 - [ESLint Flat Configuration Files](https://eslint.org/docs/latest/use/configure/configuration-files) — The official flat-config reference followed by the project's `eslint.config.mjs`.
+- [alint 0.4.0](https://github.com/moeru-ai/alint/tree/v0.4.0) — The model-backed code-analysis tool used alongside ESLint for optional JavaScript and TypeScript design review; the version is pinned because the upstream API remains early.
+- [alint JavaScript Plugin 0.4.0](https://github.com/moeru-ai/alint/tree/v0.4.0/packages/plugin-js) — The official JavaScript and TypeScript plugin whose `js/recommended` preset defines the repository's model-assisted ruleset.
 - [Execa](https://github.com/sindresorhus/execa) — The process execution library used by the project's TypeScript automation and ViDot process lifecycle.
 - [Execa Termination](https://github.com/sindresorhus/execa/blob/v10.0.1/docs/termination.md) — The graceful and forceful termination behavior used to bound ViDot process cleanup.
 

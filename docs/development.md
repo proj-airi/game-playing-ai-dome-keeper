@@ -74,6 +74,8 @@ development workflows while the YOLO Mod is disabled.
 ## Linting
 
 - Use ESLint with `@antfu/eslint-config` and the flat config (`eslint.config.mjs`).
+- Use alint with the official `@alint-js/plugin-js` `js/recommended` preset in `alint.config.ts` for model-assisted JavaScript and TypeScript design review. Configure a model provider with `bunx alint setup`, then run the review through `mise run alint`.
+- Keep alint separate from the aggregate `mise run check`: it supplements deterministic ESLint rather than replacing it, requires machine-local model configuration, and may consume paid model tokens. Its `.alintcache` output is local-only.
 - Treat `mise.toml` as mise-owned configuration: format and validate it with `mise fmt`, and exclude it from ESLint's conflicting TOML formatting rules.
 
 ## Exec Utilities

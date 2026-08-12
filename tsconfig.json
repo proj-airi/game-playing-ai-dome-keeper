@@ -11,6 +11,7 @@
     "noEmit": true
   },
   "include": [
+    "alint.config.ts",
     "scripts/**/*.ts",
     "apps/**/*.ts",
     "packages/**/*.ts",

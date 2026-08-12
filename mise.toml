@@ -36,6 +36,10 @@ run = ["bun install --frozen-lockfile", "uv sync --locked"]
 description = "Lint the repository"
 run = "bun run lint"
 
+[tasks.alint]
+description = "Run model-assisted JavaScript and TypeScript review"
+run = "bun run alint"
+
 [tasks.typecheck]
 description = "Type-check the repository"
 run = "bun run typecheck"
