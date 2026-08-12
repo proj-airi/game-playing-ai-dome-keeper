@@ -21,16 +21,34 @@ planner or a formally compliant HTN implementation:
 Each executor owns its current method and method step. Only the active
 primitive-task executor owns gameplay input.
 
+The first vertical slice exposes `/root/DataCollectorAI` as an ordinary Godot
+runtime node. It supports one adjacent-tile `start_move(x, y)` task, reports the
+current tile through `current_tile()`, and releases active input through
+`reset()`. Tests subscribe to `task_completed` or `task_failed` before starting
+the task. The initial `TaskExecutor` deliberately does not provide pathfinding,
+pickup, interaction, or compound-task behavior.
+
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
 planner completeness, search semantics, partial ordering, or method-effect
 semantics. The exact source-file layout and the TypeScript data types are not
 frozen yet.
 
-ViDot will test this Mod through ordinary Godot methods and signals exposed by
+ViDot tests this Mod through ordinary Godot methods and signals exposed by
 its runtime. DataCollectorAI does not depend on or register APIs with ViDot.
-DataCollectorAI-specific Vitest files and their explicitly imported Node.js
-fixtures remain with this Mod; the fixtures use ViDot's temporary Autoload and
-loopback WebSocket bridge to prepare and inspect the game.
+DataCollectorAI-specific Vitest assertions remain with this Mod. The separate
+ViKeeper package composes ViDot's temporary Autoload and loopback WebSocket
+bridge with the Dome Keeper-only test scene. No test scene is compiled or
+installed beneath this production Mod.
+
+Run `mise run domekeeper:vidot:test` to have ViKeeper start the dedicated Move
+test map and verify one real adjacent-tile Move through the runtime facade. The
+map contains one Engineer entry and a bounded open area. ViKeeper constructs
+it through Dome Keeper's `MapData` methods instead of committing serialized
+TileMap data, and it does not run procedural generation. The legacy YOLO Mod
+remains disabled.
+
+Run `mise run domekeeper:vidot:record` to execute the same test in Godot Movie
+Maker's decorated `960x540` window and write `recordings/move.avi`.
 
 Build the generated runtime files with:
 

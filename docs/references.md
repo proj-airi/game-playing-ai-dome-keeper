@@ -24,7 +24,7 @@ This page collects external resources useful for understanding and maintaining t
 - [Vitest](https://vitest.dev/) — The test runner that owns ViDot's collection, filtering, watch mode, scheduling, assertions, and reporting.
 - [Vitest: Test Context](https://vitest.dev/guide/test-context) — The file-scoped fixture API that lets `@vidot/vitest` own one Godot process per test file without exposing lifecycle hooks to tests.
 - [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI or configuration file.
-- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session lifecycle used to inject and remove ViDot without racing parallel test workers.
+- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session boundary used to provide ViDot's validated launch configuration before test workers start.
 - [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by ViDot.
 - [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request, response, error, and notification model used as the basis for ViDot's small JSON-RPC-like WebSocket protocol.
@@ -42,6 +42,7 @@ This page collects external resources useful for understanding and maintaining t
 - [Dome Keeper Mods: Game Investigation](https://github.com/DomeKeeperMods/Docs/wiki/Game-Investigation) — The official guide used when inspecting scenes, nodes, and version-specific game APIs.
 - [Dome Keeper Mods Editor 5.1](https://github.com/DomeKeeperMods/Docs/releases/tag/5.1) — The pinned custom Godot editor release required to work with the target Dome Keeper version.
 - [Godot Mod Loader: Mod Structure](https://wiki.godotmodding.com/guides/modding/mod_structure/) — The directory-layout guide behind this repository's author-and-mod-name folder convention.
+- [Godot Mod Loader: Mod Files](https://wiki.godotmodding.com/guides/modding/mod_files/) — The manifest contract used by ViKeeper to identify the tested Mod while leaving game-version compatibility to Mod Loader.
 - [Godot Mod Loader: Script Extensions](https://wiki.godotmodding.com/guides/modding/script_extensions/) — The extension guide used to evaluate when game behavior should be extended through the mod loader.
 - [Godot Mod Loader: `extend_scene`](https://wiki.godotmodding.com/api/mod_loader_mod/#void-extend_scene-scene_vanilla_path-string-edit_callable-callable-static) — The scene-extension API used to distinguish static scene extensions from runtime node integration.
 - [GDRETools](https://github.com/GDRETools/gdsdecomp) — The upstream recovery toolkit used by the repository's local decompilation workflow.
@@ -57,13 +58,15 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: InputMap](https://docs.godotengine.org/en/4.3/classes/class_inputmap.html) — The action-mapping API used to honor the game's configured controls instead of hard-coded physical keys.
 - [Godot 4.3: JSON](https://docs.godotengine.org/en/4.3/classes/class_json.html) — The serialization API used for complete observer snapshots in replay recordings.
 - [Godot 4.3: MovieWriter](https://docs.godotengine.org/en/4.3/classes/class_moviewriter.html) — The video-writer API underlying fixed-frame-rate replay capture.
+- [Godot 4.3: PackedScene](https://docs.godotengine.org/en/4.3/classes/class_packedscene.html) — The target engine's serialized scene resource used for the repository-owned Move test scene and map.
+- [Godot 4.3: TileMap](https://docs.godotengine.org/en/4.3/classes/class_tilemap.html) — The target engine's multi-layer tile API underlying Dome Keeper 5.0.5.19's `MapData` methods; the newer replacement API is outside this pinned game boundary.
 - [Godot 4.3: `Node.get_meta`](https://docs.godotengine.org/en/4.3/classes/class_node.html#class-node-method-get-meta) — The metadata API used to read controlled runtime information attached to game nodes.
 - [Godot 4.3: `OS.get_environment`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-environment) — The environment API used to resolve the same temporary-directory variables recognized by Node.js.
 - [Godot 4.3: RayCast2D](https://docs.godotengine.org/en/4.3/classes/class_raycast2d.html) — The ray-collision API used to confirm that the selected monster is the Laser's first acquired collider.
 - [Godot 4.3: `SceneTree.node_added`](https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#signal-scenetree-node-added) — The scene-tree signal used to discover dynamically created pause and upgrade interfaces.
 - [Godot 4.3: `SceneTree.quit`](https://docs.godotengine.org/en/4.3/classes/class_scenetree.html#class-scenetree-method-quit) — The normal process-exit API used after the final replay event is flushed so Movie Maker can finalize its output.
 - [Godot 4.3: `TileMap.local_to_map`](https://docs.godotengine.org/en/4.3/classes/class_tilemap.html#class-tilemap-method-local-to-map) — The coordinate-conversion API used by mining, navigation, and recovery logic.
-- [Godot 4.3: `Window.size`](https://docs.godotengine.org/en/4.3/classes/class_window.html#class-window-property-size) — The actual recording-window dimensions validated against the requested Movie Maker output resolution, independently of the project's scaled logical viewport.
+- [Godot 4.3: `Window.Mode`](https://docs.godotengine.org/en/4.3/classes/class_window.html#enum-window-mode) — The runtime window-mode contract used to require a decorated Movie Maker window after Dome Keeper loads its options.
 - [Godot 4.3: Creating Movies](https://docs.godotengine.org/en/4.3/tutorials/animation/creating_movies.html) — The Movie Maker guide used for deterministic fixed-frame-rate replay recording.
 - [Godot 4.3: Project Organization](https://docs.godotengine.org/en/4.3/tutorials/best_practices/project_organization.html) — The organization guidance consulted when defining responsibility boundaries during teacher cleanup.
 - [Godot 4.3: Command-Line Tutorial](https://docs.godotengine.org/en/4.3/tutorials/editor/command_line_tutorial.html) — The command-line reference used for headless validation and Movie Maker launches.
@@ -73,7 +76,8 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `CanvasItem.is_visible_in_tree`](https://docs.godotengine.org/en/4.3/classes/class_canvasitem.html#class-canvasitem-method-is-visible-in-tree) — The visibility API used to suspend capture while pause or TechTree overlays are visible.
 - [Godot 4.3: `Node.add_to_group`](https://docs.godotengine.org/en/4.3/classes/class_node.html#class-node-method-add-to-group) — The grouping API used to mark dynamically discovered interfaces that should suspend capture.
 - [Godot 4.3: `OS.shell_open`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-shell-open) — The system-opening API used to reveal the current dataset directory after capture stops.
-- [Godot 4.3: ProjectSettings](https://docs.godotengine.org/en/4.3/classes/class_projectsettings.html) — The project-settings reference used when configuring `forward_plus` for the target project on macOS.
+- [Godot 4.3: ProjectSettings](https://docs.godotengine.org/en/4.3/classes/class_projectsettings.html) — The project-settings reference used for target rendering configuration and per-process custom `user://` isolation.
+- [Godot 4.3: `OS.get_user_data_dir`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-user-data-dir) — The runtime path query used to fail closed unless a ViDot process received its expected isolated user-data directory.
 
 ## Vision, Datasets, and Experiments
 

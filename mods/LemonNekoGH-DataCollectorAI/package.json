@@ -4,7 +4,8 @@
   "private": true,
   "module": "index.ts",
   "scripts": {
-    "build": "bunx tstogd convert"
+    "build": "bunx tstogd convert",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

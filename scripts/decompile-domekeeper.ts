@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readdirSync, statSync, symlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, statSync, symlinkSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execa } from 'execa'
@@ -11,6 +11,8 @@ const version = env.DOMEKEEPER_VERSION
 const repoRoot = path.resolve(import.meta.dir, '..')
 const outRoot = env.DOMEKEEPER_OUT_ROOT ?? path.join(repoRoot, 'external/domekeeper-decompiled')
 const run = execa({ stdio: 'inherit' })
+const activeModName = 'LemonNekoGH-DataCollectorAI'
+const disabledModName = 'LemonNekoGH-YoloDataCollector'
 
 if (!gameDir) {
   console.error('Missing DOMEKEEPER_GAME_DIR. Provide the game install directory.')
@@ -72,35 +74,63 @@ catch (error) {
 }
 
 const modsRoot = path.join(repoRoot, 'mods')
-if (existsSync(modsRoot)) {
-  const modsUnpackedDir = path.join(outDir, 'mods-unpacked')
-  mkdirSync(modsUnpackedDir, { recursive: true })
+if (!existsSync(modsRoot)) {
+  console.error(`Mods directory not found: ${modsRoot}`)
+  process.exit(1)
+}
 
-  const modEntries = readdirSync(modsRoot)
-    .map(entry => path.join(modsRoot, entry))
-    .filter(entryPath => statSync(entryPath).isDirectory())
+const modsUnpackedDir = path.join(outDir, 'mods-unpacked')
+mkdirSync(modsUnpackedDir, { recursive: true })
 
-  modEntries.push(path.join(repoRoot, 'mods-unpacked', 'LemonNekoGH-AI', 'scripts'))
+const disabledModTarget = path.join(modsUnpackedDir, disabledModName)
+const disabledModTargetStat = lstatSync(disabledModTarget, { throwIfNoEntry: false })
+if (disabledModTargetStat !== undefined) {
+  if (!disabledModTargetStat.isSymbolicLink()) {
+    console.error(`Disabled Mod target is not a repository-owned symbolic link: ${disabledModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
+    process.exit(1)
+  }
 
-  for (const modPath of modEntries) {
-    const modName = path.basename(modPath)
-    const modTarget = path.join(modsUnpackedDir, modName)
+  const disabledModSource = path.join(modsRoot, disabledModName)
+  const targetMatches = path.resolve(path.dirname(disabledModTarget), readlinkSync(disabledModTarget)) === disabledModSource
+  if (!targetMatches) {
+    console.error(`Disabled Mod target has an unexpected source: ${disabledModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
+    process.exit(1)
+  }
+  unlinkSync(disabledModTarget)
+  console.log(`Disabled legacy Mod by removing its repository link: ${disabledModTarget}`)
+}
 
-    if (existsSync(modTarget)) {
-      console.warn(`Mod target already exists: ${modTarget}. Skipping link step.`)
-      continue
-    }
+const activeModSource = path.join(modsRoot, activeModName, 'scripts')
+const activeModSourceStat = lstatSync(activeModSource, { throwIfNoEntry: false })
+if (activeModSourceStat === undefined || !activeModSourceStat.isDirectory()) {
+  console.error(`Active Mod source is not a directory: ${activeModSource}`)
+  process.exit(1)
+}
 
-    try {
-      symlinkSync(modPath, modTarget, 'junction')
-      console.log(`Linked mod source to ${modTarget}`)
-    }
-    catch (error) {
-      console.error(`Failed to link mod source for ${modName}. You may need to link manually.`)
-      console.error(error)
-    }
+const activeModTarget = path.join(modsUnpackedDir, activeModName)
+const activeModTargetStat = lstatSync(activeModTarget, { throwIfNoEntry: false })
+if (activeModTargetStat !== undefined) {
+  const targetMatches = activeModTargetStat.isSymbolicLink()
+    && path.resolve(path.dirname(activeModTarget), readlinkSync(activeModTarget)) === activeModSource
+  if (targetMatches) {
+    console.log(`Mod source is already linked to ${activeModTarget}`)
+  }
+  else {
+    console.error(`Mod target already exists with an unexpected source: ${activeModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
+    process.exit(1)
   }
 }
 else {
-  console.warn(`Mods directory not found at ${modsRoot}. Skipping link step.`)
+  try {
+    symlinkSync(activeModSource, activeModTarget, 'junction')
+    console.log(`Linked mod source to ${activeModTarget}`)
+  }
+  catch (error) {
+    console.error(`Failed to link mod source for ${activeModName}.`)
+    console.error(error)
+    process.exit(1)
+  }
 }

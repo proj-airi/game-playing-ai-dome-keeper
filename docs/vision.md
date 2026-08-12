@@ -19,7 +19,9 @@ an MVP plan, a published artifact, a future target, or historical context.
 - The existing frame and YOLO-label capture path is owned by
   `LemonNekoGH-YoloDataCollector`; the replacement `LemonNekoGH-DataCollectorAI`
   mod is authored in TypeScript and converted to GDScript as part of its build.
-  The new AI mod will take over this gameplay and data-collection role.
+  The legacy capture Mod is currently disabled, so repository workflows do not
+  collect new YOLO frames until that responsibility moves or is re-enabled by a
+  separate decision.
 - Keep TechTree frames excluded from the ore/enemy YOLO dataset even while the
   teacher operates the upgrade popup.
 

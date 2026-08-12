@@ -42,27 +42,50 @@ run = "bun run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
-depends = ["godot:check", "lint", "typecheck", "vidot:test"]
+depends = ["domekeeper:vidot:test", "lint", "typecheck", "vidot:test"]
+
+[tasks."vidot:build"]
+description = "Build the TypeScript-authored ViDot runtime"
+run = "bun run --cwd packages/vidot build"
 
 [tasks."vidot:test"]
 description = "Build ViDot and run the basic example integration test"
-run = "bun run --cwd packages/vidot build && bun run --cwd packages/vidot test"
+depends = ["vidot:build"]
+run = "bun run --cwd packages/vidot test"
+
+[tasks."vikeeper:build"]
+description = "Build the TypeScript-authored Dome Keeper test fixture"
+run = "bun run --cwd packages/vikeeper build"
+
+[tasks."data-collector-ai:build"]
+description = "Build the TypeScript-authored DataCollectorAI Mod"
+run = "bun run --cwd mods/LemonNekoGH-DataCollectorAI build"
+
+[tasks."domekeeper:vidot:test"]
+description = "Run the Dome Keeper Move test map"
+depends = ["godot:check", "vidot:build", "vikeeper:build"]
+run = "bunx vitest run --config mods/LemonNekoGH-DataCollectorAI/test/vitest.config.ts"
+
+[tasks."domekeeper:vidot:record"]
+description = "Record the Dome Keeper Move test with Godot Movie Maker"
+depends = ["godot:check", "vidot:build", "vikeeper:build"]
+env = { VIDOT_MOVIE = "{{ config_root }}/recordings/move.avi" }
+run = "bunx vitest run --config mods/LemonNekoGH-DataCollectorAI/test/vitest.config.ts"
 
 [tasks.decompile]
 description = "Decompile Dome Keeper and link repository mods"
+depends = ["data-collector-ai:build"]
 run = "bun scripts/decompile-domekeeper.ts"
 
 [tasks."godot:open"]
 description = "Open the decompiled project in Godot"
+depends = ["godot:check"]
 run = "\"{{ env.GODOT_BIN }}\" ./external/domekeeper-decompiled/$DOMEKEEPER_VERSION/project.godot"
 
 [tasks."godot:check"]
 description = "Check that repository mods load in an isolated headless game"
+depends = ["data-collector-ai:build"]
 run = "bun scripts/check-domekeeper-mod.ts"
-
-[tasks."godot:run"]
-description = "Record a frame-synchronized Dome Keeper replay"
-run = "bun run build && bun scripts/run-domekeeper.ts"
 
 [tasks.train]
 description = "Train an Ultralytics detection model"

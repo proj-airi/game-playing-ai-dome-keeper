@@ -2,8 +2,8 @@
 
 This document owns the confirmed design for ViDot, a Godot integration for
 Vitest. ViDot works with editable Godot projects; an example Godot project
-proves the integration before DataCollectorAI and Dome Keeper provide its first
-project-specific use case.
+proves the integration before ViKeeper composes it for the first Dome
+Keeper-specific use case.
 
 ## Problem and Outcome
 
@@ -14,9 +14,10 @@ state, and report through the existing Vitest workflow.
 
 ViDot supplies only the missing Godot boundary. Vitest continues to own test
 collection, filtering, watch mode, scheduling, assertions, and reporting. The
-initial outcome is a small example project that proves Autoload injection and
-removal, Godot process creation and destruction, the loopback WebSocket bridge,
-and the `get`, `set`, `call`, `waitForProperty`, and `waitForSignal` commands.
+initial outcome is a small example project that proves mirror-only Autoload
+installation, project isolation, Godot process creation and destruction, the loopback
+WebSocket bridge, and the `get`, `set`, `call`, `waitForProperty`, and
+`waitForSignal` commands.
 
 ## Runtime Topology
 
@@ -24,12 +25,14 @@ Test and fixture modules execute in Node.js. They are not compiled into the game
 and do not form a test Mod.
 
 ```text
-Vitest worker                       editable Godot process
+Vitest worker                       isolated Godot process
 (one test file)                     (one process for that file)
 
-test + explicitly imported fixture
+test
         │
-        └── @vidot/vitest ── WebSocket ── ViDot Autoload
+        ├── generic project: @vidot/vitest
+        │
+        └── Dome Keeper: @vikeeper/vitest ── @vidot/vitest ── WebSocket ── ViDot Autoload
                                                    │
                                                    ├── project nodes and methods
                                                    └── DataCollectorAI methods
@@ -40,24 +43,42 @@ fixture. Tests import it directly and receive a ready client without starting or
 stopping Godot themselves. ViDot begins as an unpublished monorepo package. It
 does not provide global test APIs, a standalone CLI, or a separate configuration
 file. A project imports `setupViDot` from the side-effect-free
-`@vidot/vitest/setup` entry point once through Vitest `globalSetup`; ViDot then
-injects the Autoload for the test session and lazily owns one Godot process for
-each test file that uses the fixture.
+`@vidot/vitest/setup` entry point once through Vitest `globalSetup`; setup only
+provides validated launch configuration. The file-scoped fixture lazily creates
+an isolated project mirror, installs the Autoload there, and owns one Godot
+process for each test file that uses the fixture.
+
+`setupViDot` may receive a fixed main scene owned by its caller. ViDot runs it
+headlessly while continuing to own the project path, argument boundary, and
+session. A caller may also provide project files mapped to `res://` targets;
+ViDot validates those targets and copies the files only into the mirror.
+ViKeeper uses these options for its Dome Keeper Move scene.
 
 Vitest's file isolation is also ViDot's process isolation:
 
 - one file-scoped `vidot` fixture owns one Godot process;
+- each process owns an isolated temporary `user://` directory that teardown
+  removes;
 - tests inside that file run sequentially and share the process;
-- fixture teardown is automatic between tests;
-- different files may run in parallel in separate Godot processes;
+- project fixtures release their own state in per-test `finally` cleanup;
+- ViDot automatically stops the file-scoped process after the file;
+- files targeting different project directories may run in parallel, but files
+  targeting the same directory must be serialized because the lightweight
+  project mirror shares Godot's `.godot` import cache; ViKeeper enforces this
+  for its single Dome Keeper project;
 - same-file concurrent tests are unsupported because they would compete for one
   game state and input owner.
 
 An ordinary assertion failure does not automatically invalidate the process. If
-fixture cleanup succeeds and the bridge remains healthy, Vitest may run the next
+test cleanup succeeds and the bridge remains healthy, Vitest may run the next
 test in the file. A Godot crash, bridge disconnect, or teardown failure
 invalidates the environment and aborts the remaining tests in that file. Other
 test files remain independent.
+
+At file teardown, ViDot closes its WebSocket client. The initialized Autoload
+then exits through `SceneTree.quit()` so Godot and Movie Maker can finish their
+normal shutdown work. ViDot force-terminates the process only if that exit does
+not complete within the bounded teardown wait.
 
 ## Temporary Autoload
 
@@ -66,18 +87,14 @@ with `typescript-to-gdscript`. The generated `.gd` file is ignored in the source
 repository and included in the built package through `package.files`; test
 projects do not need tstogd.
 
-At the start of a Vitest session, ViDot places the runtime file in the editable
-Godot project and adds its Autoload entry to `project.godot`. At session end it
-removes its exact Autoload entry from the current project file before removing
-the runtime file. It does not restore a whole-file snapshot, so unrelated
-project-setting edits made during a watch session are preserved. ViDot is not a
-Dome Keeper Mod and is not permanently installed in the project.
+When a file first uses the fixture, ViDot creates its isolated project mirror,
+places the runtime file there, and adds the Autoload entry to the mirrored
+`project.godot`. The editable source project is never modified. Process teardown
+deletes the entire mirror and its isolated `user://` directory. ViDot is not a
+Dome Keeper Mod and is never installed in the tested project.
 
-A hard kill cannot run process cleanup. The injected runtime must therefore be
-inert when ViDot's launch arguments and session are absent, and the next ViDot
-session must reconcile a previous interrupted injection before starting. This
-makes an interrupted test run recoverable without making residual injection a
-normal installation mechanism.
+A hard kill cannot run process cleanup. The deterministic mirror and `user://`
+paths let the next ViDot run remove the interrupted session before starting.
 
 This design supports editable Godot projects only. Exported or released games
 are outside the initial scope.
@@ -154,8 +171,10 @@ project with one small node exposing a property, a synchronous method, and a
 method that completes later and emits a signal. Its colocated Vitest coverage
 proves:
 
-- Autoload injection before launch and removal after shutdown;
+- sandbox-only Autoload installation before launch and mirror removal after
+  shutdown;
 - automatic file-scoped Godot startup, bridge readiness, and process cleanup;
+- isolated temporary `user://` selection and cleanup;
 - `get`, `set`, and `call` round trips;
 - one frame-bounded `waitForProperty` completion;
 - one signal-first `waitForSignal` completion.
@@ -163,36 +182,60 @@ proves:
 The example proves the generic bridge without requiring a Dome Keeper install,
 decompiled project, Mod, map fixture, or gameplay API.
 
-## Fixtures and Project Tests
+## Project Tests
 
-A fixture is Node.js code that uses the bridge to prepare and later unload a
-known game state. A Dome Keeper fixture can, for example, ask existing project
-methods to load one map definition and expose the target needed by a test.
+ViDot does not glob a fixture registry, compile project tests into Godot, or
+know which game is running.
 
-Fixture modules are explicitly imported by their tests. ViDot does not glob a
-fixture registry or compile fixtures into Godot. Project-specific tests and
-fixtures live with the project or Mod being tested; DataCollectorAI's fixtures
-therefore remain with DataCollectorAI rather than in a generic ViDot package or
-a separate `data-collector-ai-tests` package.
+ViKeeper owns the Dome Keeper-only half of this boundary: its Godot Move scene,
+mirror-only placement under `res://__vikeeper/`, and later the shared readable
+map-definition DSL. The current scene constructs a minimal map through Dome
+Keeper's `MapData` methods before the landing stage can start procedural
+generation. Once the landing stage reports that the map is ready, the scene
+sends one ordinary Enter key event through the game's native skip path, then
+lets the ordinary Level stage create the Engineer, input processor, map
+collision, and configured input actions. Serialized TileMap cell arrays are not
+test definitions.
 
-The exact fixture function signatures and map-loading hooks are intentionally
-deferred. Automatic teardown is not deferred: a fixture must release its state
-after each test, whether the test passes or fails.
+The Vitest configuration provides ViKeeper with the Mod source and the root of
+the local decompiled projects. ViKeeper derives the Mod ID from its manifest and
+selects the unique project linking that exact source. The game's Mod Loader owns
+manifest compatibility validation; test configuration does not repeat the
+repository's game-version environment value or version rules.
 
-## Later Dome Keeper Proof
+DataCollectorAI keeps its Vitest assertions with the Mod. The test knows the
+controller API but does not own the game scene. ViKeeper does not know
+DataCollectorAI methods, and neither test layer is compiled into the production
+Mod. The test releases an active action whether it passes or fails.
 
-The smallest end-to-end proof contains:
+## Initial Dome Keeper Proof
 
-- one explicitly imported fixture with one map definition;
+The first end-to-end assertion lives with DataCollectorAI under `test/`, while
+ViKeeper supplies its controlled game scene. Together they contain:
+
+- one controlled Move test map;
 - one Move Quark Action executed through DataCollectorAI's `TaskExecutor`;
 - one completion signal subscribed before execution;
-- one final assertion that the character coordinate is inside the target tile;
-- automatic fixture teardown while retaining the same Godot process for the
-  next test in the file.
+- one final assertion that the character reaches and remains inside the target
+  tile after input release;
+- automatic action reset and file-scoped process teardown.
+
+The test map contains one Engineer entry, a bounded open corridor, and no
+generated resources or landmarks. The bootstrap selects the editor's
+ordinary single-player Engineer and Laser configuration in memory, installs
+that map before landing can generate another one, and instantiates the normal
+game scene. The legacy YOLO Mod remains disabled.
 
 A Quark Action remains a pure function that returns an expected control state.
 It has no lifecycle. `TaskExecutor` applies the control state and owns action
 completion or failure.
+
+The initial DataCollectorAI runtime facade is the ordinary project node
+`/root/DataCollectorAI`. Its first slice exposes `move_ready`,
+`start_move(target_x, target_y)`, `current_tile()`, `get_last_error()`, and
+`reset()`, plus signal-first `task_completed` and `task_failed` lifecycle
+signals. `Move` accepts one adjacent target tile only; pathfinding and compound
+tasks remain outside this proof.
 
 Later action tests should continue to assert player-visible outcomes:
 
@@ -240,5 +283,3 @@ be decided and verified independently.
 ## Open Implementation Decisions
 
 - the serialized Godot value subset beyond JSON-compatible values;
-- the fixture function signature and first DataCollectorAI map-loading hook;
-- the DataCollectorAI methods and lifecycle signals needed by the Move proof.

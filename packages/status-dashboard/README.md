@@ -2,6 +2,9 @@
 
 A small Vue 3, TypeScript, and Vite dashboard using `@proj-airi/ui` and UnoCSS.
 
+The dashboard can still inspect existing artifacts, but its legacy live and
+replay producer is inactive while `LemonNekoGH-YoloDataCollector` is disabled.
+
 ```sh
 bun run --cwd packages/status-dashboard dev
 ```
@@ -14,9 +17,10 @@ An unavailable producer snapshot is `{ "available": false, "run_time_seconds": 0
 
 ## Replay
 
-Start a fixed-FPS replay run with `mise run godot:record`; pass `-- --fps 60` to override the default 10 FPS. The default run renders windowed at `1280x720` with VSync disabled and writes no movie; pass `-- --headless` to skip rendering for faster JSONL-only validation, or `-- --movie` when the dashboard also needs an MP4. Each mode writes its session under `recordings/session_<UTC YYMMDD_HHMMSS>_<6-character Nano ID>/` in the repository root, starts the teacher after Keeper input becomes active, and closes Godot after the authoritative win or loss. A teacher failure keeps the incomplete artifacts and fails the command; Movie Maker sessions transcode only after a complete terminal replay.
-
-Replay mode consumes full-snapshot events and synchronizes them to the manually selected MP4 with `movie_frame / fixed_fps`. It supports play/pause, previous and next event, movie scrubbing, playback speed, and event reasons.
+The repository currently exposes no replay-producing task. Replay mode consumes
+existing full-snapshot events and synchronizes them to the manually selected MP4
+with `movie_frame / fixed_fps`. It supports play/pause, previous and next event,
+movie scrubbing, playback speed, and event reasons.
 
 Replay is manual-only: select a replay JSONL, then its MP4. The Vite bridge serves only the Live status file and never discovers or serves recorded sessions.
 

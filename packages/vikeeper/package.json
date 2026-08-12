@@ -1,0 +1,26 @@
+{
+  "name": "@vikeeper/vitest",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "runtime/move_test.tscn",
+    "runtime/scripts",
+    "src"
+  ],
+  "scripts": {
+    "build": "cd runtime && bunx tstogd convert",
+    "typecheck": "tsc -p tsconfig.json && tsc -p runtime/tsconfig.json"
+  },
+  "dependencies": {
+    "@vidot/vitest": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "typescript-to-gdscript": "^0.1.3",
+    "vitest": "^4.1.10"
+  }
+}

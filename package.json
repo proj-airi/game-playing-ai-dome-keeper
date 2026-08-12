@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.json && bun run --cwd packages/vidot typecheck && bun run --cwd packages/status-dashboard typecheck",
+    "typecheck": "tsc -p tsconfig.json && bun run --cwd mods/LemonNekoGH-DataCollectorAI typecheck && bun run --cwd packages/vidot typecheck && bun run --cwd packages/vikeeper typecheck && bun run --cwd packages/status-dashboard typecheck",
     "build": "bun run --parallel --filter '*' build"
   },
   "devDependencies": {
