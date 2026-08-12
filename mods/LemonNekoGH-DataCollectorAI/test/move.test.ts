@@ -1,8 +1,10 @@
 import { expect, test } from '@vidot/vitest'
-import { withDataCollectorAI } from './fixture'
+
+const controller = '/root/DataCollectorAI'
 
 test('moves the Engineer into one adjacent tile', async ({ vidot }) => {
-  await withDataCollectorAI(vidot, async (controller) => {
+  await vidot.waitForProperty(controller, 'move_ready', true, 60_000)
+  try {
     expect(await vidot.get('/root/MoveTest', 'test_map_selected')).toBe(true)
     const current = await vidot.call(controller, 'current_tile') as number[]
     expect(current).toHaveLength(2)
@@ -22,5 +24,8 @@ test('moves the Engineer into one adjacent tile', async ({ vidot }) => {
     expect(await vidot.call(controller, 'get_last_error')).toBe('')
     await new Promise(resolve => setTimeout(resolve, 1_000))
     expect(await vidot.call(controller, 'current_tile')).toEqual(target)
-  })
+  }
+  finally {
+    await vidot.call(controller, 'reset')
+  }
 })

@@ -13,7 +13,6 @@ external/domekeeper-decompiled/
 node_modules/
 **/.godot/
 packages/status-dashboard/dist/
-mods/LemonNekoGH-DataCollectorAI/scripts/**/*.gd
 .venv/
 runs/
 

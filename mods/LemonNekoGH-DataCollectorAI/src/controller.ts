@@ -2,7 +2,7 @@ interface TaskExecutorContract extends RefCounted {
   cancel: () => void
   is_complete: (currentX: int, currentY: int) => boolean
   start: (currentX: int, currentY: int, targetX: int, targetY: int) => string
-  step: (currentX: int, currentY: int) => string
+  step: (delta: float) => string
 }
 
 export class _DataCollectorAI extends Node {
@@ -17,7 +17,7 @@ export class _DataCollectorAI extends Node {
   _ready(): void {
     this.process_mode = Node.PROCESS_MODE_ALWAYS
     this.set_physics_process(false)
-    print(`DATA_COLLECTOR_AI_READY ${JSON.stringify(OS.get_user_data_dir())}`)
+    print('DATA_COLLECTOR_AI_READY')
   }
 
   _process(_delta: float): void {
@@ -25,7 +25,7 @@ export class _DataCollectorAI extends Node {
       this.move_ready = this._level_ready()
   }
 
-  _physics_process(_delta: float): void {
+  _physics_process(delta: float): void {
     if (this.executor === null)
       return
     const keeper = this.keeper
@@ -36,14 +36,17 @@ export class _DataCollectorAI extends Node {
     }
 
     const tile = this._tile(keeper)
-    const error = this.executor.step(tile.x, tile.y)
-    if (error !== '') {
-      this._finish_failed(error)
-    }
-    else if (this.executor.is_complete(tile.x, tile.y)) {
+    if (this.executor.is_complete(tile.x, tile.y)) {
+      this.executor.cancel()
       this._clear_task()
       this.task_completed.emit()
+
+      return
     }
+
+    const error = this.executor.step(delta)
+    if (error !== '')
+      this._finish_failed(error)
   }
 
   start_move(targetX: int, targetY: int): boolean {
@@ -120,7 +123,6 @@ export class _DataCollectorAI extends Node {
 
   private _reject(reason: string): boolean {
     this.lastError = reason
-    this.task_failed.emit(reason)
 
     return false
   }

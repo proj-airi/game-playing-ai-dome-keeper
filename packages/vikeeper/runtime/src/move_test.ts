@@ -1,5 +1,6 @@
 export class _MoveTest extends Node {
   test_map_selected = false
+  private landingSkipped = false
 
   _ready(): void {
     if (!OS.has_feature('editor')) {
@@ -26,9 +27,57 @@ export class _MoveTest extends Node {
     editorConfig.set('multiplayer_mode', 0)
     gd.eval('StageManager.stage_started.connect(self._load_test_map)')
 
+    if (OS.has_feature('movie') && !this._write_movie_options())
+      return
+
     const game = gameScene.instantiate()
     game.set('devMode', false)
     this.add_child(game)
+
+    if (OS.has_feature('movie')) {
+      const window = this.get_window()
+      if (window.mode !== Window.MODE_WINDOWED || window.borderless)
+        this._fail('Movie mode requires a decorated window')
+    }
+  }
+
+  _process(_delta: float): void {
+    if (this.landingSkipped)
+      return
+
+    const landingReady = gd.eval<boolean>('StageManager.currentStage is LandingStage and StageManager.currentStage.allClientsReady()')
+    if (!landingReady)
+      return
+
+    this.landingSkipped = true
+    const event = new InputEventKey()
+    const keycode = gd.eval<int>('KEY_ENTER')
+    event.keycode = keycode
+    event.pressed = true
+    Input.parse_input_event(event)
+    const release = gd.as(event.duplicate(), InputEventKey)
+    release.pressed = false
+    Input.parse_input_event(release)
+    this.set_process(false)
+  }
+
+  private _write_movie_options(): boolean {
+    const options = FileAccess.open('user://options.txt', FileAccess.WRITE)
+    if (options === null) {
+      this._fail('The Move test could not configure its isolated movie window')
+
+      return false
+    }
+
+    options.store_string(JSON.stringify({
+      borderless: false,
+      fullscreen: false,
+      pauseWhenOutOfFocus: false,
+      vsync: false,
+    }))
+    options.close()
+
+    return true
   }
 
   private _load_test_map(): void {

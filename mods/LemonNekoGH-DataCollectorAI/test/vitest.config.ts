@@ -1,11 +1,13 @@
+import path from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
+import { setupViKeeper } from '@vikeeper/vitest'
 
-export default defineConfig({
+const repoRoot = fileURLToPath(new URL('../../..', import.meta.url))
+
+export default setupViKeeper({
+  modPath: fileURLToPath(new URL('../scripts', import.meta.url)),
+  movie: process.env.VIDOT_MOVIE,
+  projectsPath: path.join(repoRoot, 'external', 'domekeeper-decompiled'),
   root: fileURLToPath(new URL('.', import.meta.url)),
-  test: {
-    globalSetup: './global-setup.ts',
-    hookTimeout: 90_000,
-    testTimeout: 90_000,
-  },
 })

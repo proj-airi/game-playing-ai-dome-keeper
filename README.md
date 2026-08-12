@@ -78,7 +78,9 @@ mise run godot:open
 
 The legacy pause-menu collection and replay workflows are unavailable while the
 old Mod is disabled. Use `mise run domekeeper:vidot:test` for the active
-DataCollectorAI gameplay proof.
+DataCollectorAI gameplay proof. Use `mise run domekeeper:vidot:record` for the
+same proof in a real window through Godot Movie Maker; it writes
+`recordings/move.avi`.
 
 ### 2. Train a Baseline (Ultralytics)
 
@@ -90,10 +92,12 @@ mise run train data=/path/to/session/data.yaml model=yolo26n imgsz=640
 
 ## Technical Reports
 
-### Data Collection
+### Legacy Data Collection
 
-- In‑game Godot mod adds a pause‑menu toggle and auto‑labels frames.
-- Label transform handles view‑to‑texture scale mismatch and letterbox padding.
+- The retained YOLO Mod adds a pause-menu toggle and auto-labels frames when it
+  is explicitly re-enabled.
+- Its label transform handles view-to-texture scale mismatch and letterbox
+  padding. This workflow is currently inactive.
 
 ## Development
 

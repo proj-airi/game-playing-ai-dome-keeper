@@ -88,22 +88,27 @@ runner. Test and fixture modules execute in Node.js and use `@vidot/vitest` to
 control an editable Godot project through a temporary TypeScript-authored
 Autoload and a loopback WebSocket bridge.
 
+ViKeeper is the thin Dome Keeper-specific layer above that generic boundary. It
+owns game test scenes, their mirror-only placement, and the planned
+map-definition DSL. It composes ViDot rather than adding another transport or
+test runner. DataCollectorAI keeps only its assertions; its production Mod does
+not contain the test scene.
+
 One file-scoped ViDot fixture owns one Godot process. Tests receive its client
 without manually starting or stopping Godot. Tests in that file run
 sequentially; project fixtures release their own state after each test, and
 ViDot stops the process after the file. Files for different project directories
 may run in parallel, while files sharing one directory must be serialized
-because the lightweight project mirror shares its `.godot` import cache. The
-Autoload calls ordinary project methods and observes signals and state; project
-code does not depend on ViDot.
+because the lightweight project mirror shares its `.godot` import cache;
+ViKeeper configures Vitest accordingly. The Autoload calls ordinary project
+methods and observes signals and state; project code does not depend on ViDot.
 
 The `examples/basic-vidot` Godot project first proves the generic bridge,
 process lifecycle, and `get`, `set`, `call`, `waitForProperty`, and
-`waitForSignal` commands.
-DataCollectorAI is the first project-specific runtime tested afterward. Its
-fixture remains with the Mod, and its first end-to-end test executes a Move
-Quark Action through `TaskExecutor` on a controlled test map before asserting
-the character's final tile.
+`waitForSignal` commands. ViKeeper then supplies the controlled Dome Keeper
+scene used to test DataCollectorAI as the first project-specific runtime. The
+Mod's first end-to-end test executes a Move Quark Action through `TaskExecutor`
+before asserting the character's final tile.
 [`vidot.md`](vidot.md) owns the detailed integration, process, protocol, and
 lifecycle design.
 
@@ -115,6 +120,7 @@ recordings and telemetry support evaluation and contract design. Any later use
 for training, imitation learning, or controller optimization requires a
 separate explicit project decision and is not implied by this architecture.
 
-Prioritize reliable mining, cache collection, return, upgrade, and defense in
-the current teacher loop before designing detailed Lower-Agent contracts. Do not
-constrain teacher improvements around an unconfirmed Lower-Agent schema.
+If the legacy teacher is re-enabled, prioritize reliable mining, cache
+collection, return, upgrade, and defense before designing detailed Lower-Agent
+contracts. Do not constrain teacher improvements around an unconfirmed
+Lower-Agent schema.

@@ -18,21 +18,23 @@ unless an explicit project decision says so.
 - Expose `get`, `set`, `call`, frame-bounded `waitForProperty`, and signal-first
   `waitForSignal` commands. Keep property checks limited to active waits and do
   not instrument arbitrary Godot property writes.
-- Add a small editable example Godot project that proves Autoload injection and
-  removal, Godot process creation and destruction, bridge readiness, all five
-  commands, and timeout cleanup without depending on Dome Keeper.
+- Add a small editable example Godot project that proves mirror-only Autoload
+  installation and removal, Godot process creation and destruction, bridge
+  readiness, all five commands, and timeout cleanup without depending on Dome
+  Keeper.
 - Use one Godot process per test file, sequential tests within a file, automatic
   process teardown, and separate processes for cross-project parallelism.
 
-### Build the First Dome Keeper ViDot Fixture — Complete
+### Build the First Dome Keeper ViKeeper Fixture — Complete
 
+- Keep the controlled game scene in the Dome Keeper-specific ViKeeper package,
+  above the generic ViDot boundary and outside the production Mod.
 - Prove one DataCollectorAI Move test with one explicitly imported controlled
   test map, one Quark Action executed through `TaskExecutor`, signal-first
   completion waiting, and a final assertion that the character is inside the
   target tile.
 - Use one Godot process per test file, sequential tests within a file, explicit
-  per-test fixture cleanup, and separate processes for cross-project
-  parallelism.
+  action cleanup, and separate processes for cross-project parallelism.
 - Treat this proof as a prerequisite for expanding the recursive `TaskExecutor`
   implementation to more actions and compound-task behavior.
 

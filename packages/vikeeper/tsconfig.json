@@ -11,15 +11,6 @@
     "noEmit": true
   },
   "include": [
-    "scripts/**/*.ts",
-    "apps/**/*.ts",
-    "packages/**/*.ts",
-    "examples/**/*.ts",
-    "mods/*/test/**/*.ts"
-  ],
-  "exclude": [
-    "packages/vidot",
-    "packages/vikeeper",
-    "packages/status-dashboard"
+    "src/**/*.ts"
   ]
 }

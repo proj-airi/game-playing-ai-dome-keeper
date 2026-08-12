@@ -3,17 +3,18 @@ import type { Buffer } from 'node:buffer'
 import type { GodotProjectSandbox } from './sandbox'
 import type { VidotContext } from './setup'
 import { existsSync } from 'node:fs'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { execa } from 'execa'
 import { inject, test as vitest } from 'vitest'
 import { VidotClient } from './client'
-import { assertAutoloadInjected } from './project'
+import { installAutoload } from './project'
 import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from './sandbox'
 
 const startupTimeoutMs = 30_000
+const shutdownTimeoutMs = 5_000
 
 export { type JsonValue, VidotClient } from './client'
-export { injectAutoload } from './project'
 export * from 'vitest'
 
 interface GodotSession {
@@ -24,8 +25,7 @@ interface GodotSession {
 const configuredTest = vitest.extend('vidotConfig', { scope: 'file' }, (): VidotContext => inject('vidot'))
 
 export const test = configuredTest.extend('vidot', { scope: 'file' }, async ({ vidotConfig }, { onCleanup }) => {
-  const { godotPath, projectPath, scene } = vidotConfig
-  const godot = await startGodot(godotPath, projectPath, scene)
+  const godot = await startGodot(vidotConfig)
   onCleanup(godot.close)
 
   return godot.client
@@ -33,25 +33,40 @@ export const test = configuredTest.extend('vidot', { scope: 'file' }, async ({ v
 
 export const it = test
 
-async function startGodot(
-  godotPath: string,
-  projectPath: string,
-  scene: string | null,
-): Promise<GodotSession> {
-  projectPath = path.resolve(projectPath)
+async function startGodot(context: VidotContext): Promise<GodotSession> {
+  const { godotPath, movie, sandboxFiles, scene } = context
+  const projectPath = path.resolve(context.projectPath)
   if (!existsSync(godotPath))
     throw new Error(`Godot executable does not exist: ${godotPath}`)
 
-  await assertAutoloadInjected(projectPath)
-
   const session = crypto.randomUUID()
-  const sandbox = await createGodotProjectSandbox(projectPath, 'vidot', session)
+  const sandbox = await createGodotProjectSandbox(projectPath, 'vidot', sandboxFiles)
+
   let subprocess: GodotProcess
   try {
+    await installAutoload(sandbox.path)
+    if (movie !== null) {
+      await mkdir(path.dirname(movie), { recursive: true })
+      await rm(movie, { force: true })
+    }
+
     subprocess = execa(godotPath, [
-      '--headless',
       '--path',
       sandbox.path,
+      ...(movie === null
+        ? ['--headless']
+        : [
+            '--render-thread',
+            'safe',
+            '--disable-vsync',
+            '--windowed',
+            '--resolution',
+            '960x540',
+            '--write-movie',
+            movie,
+            '--fixed-fps',
+            '30',
+          ]),
       ...(scene === null ? [] : [scene]),
       '--',
       `--vidot-session=${session}`,
@@ -86,8 +101,10 @@ async function startGodot(
         client.close()
       }
       finally {
-        await stopGodot(subprocess, sandbox)
+        await stopGodot(subprocess, sandbox, true)
       }
+      if (movie !== null && (await stat(movie)).size === 0)
+        throw new Error(`Godot wrote an empty movie: ${movie}`)
     },
   }
 }
@@ -103,30 +120,6 @@ async function rethrowAfterCleanup(error: unknown, cleanup: () => Promise<void>)
   }
 
   throw error
-}
-
-async function stopGodot(
-  subprocess: GodotProcess,
-  sandbox: GodotProjectSandbox,
-): Promise<void> {
-  const errors: unknown[] = []
-  try {
-    subprocess.kill()
-    await subprocess
-  }
-  catch (error) {
-    errors.push(error)
-  }
-
-  try {
-    await cleanupGodotProjectSandbox(sandbox)
-  }
-  catch (error) {
-    errors.push(error)
-  }
-
-  if (errors.length > 0)
-    throw new AggregateError(errors, 'ViDot could not stop Godot or remove its sandbox')
 }
 
 async function waitForReady(
@@ -149,7 +142,9 @@ async function waitForReady(
       const text = chunk.toString()
       buffer += text
       diagnostics = `${diagnostics}${text}`.slice(-8192)
-      for (const line of buffer.split(/\r?\n/)) {
+      const lines = buffer.split(/\r?\n/)
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
         const marker = line.indexOf(prefix)
         if (marker < 0)
           continue
@@ -157,7 +152,7 @@ async function waitForReady(
         const ready = line.slice(marker + prefix.length).match(/^(\d+) (".*")$/)
         cleanup()
         if (!ready) {
-          reject(new Error(`ViDot reported an invalid port: ${line}`))
+          reject(new Error(`ViDot reported an invalid sandbox: ${line}`))
 
           return
         }
@@ -168,11 +163,13 @@ async function waitForReady(
           userDataDir = JSON.parse(ready[2])
         }
         catch {
-          reject(new Error(`ViDot reported an invalid user-data directory: ${line}`))
+          reject(new Error(`ViDot reported an invalid sandbox: ${line}`))
 
           return
         }
-        if (!Number.isInteger(port) || port <= 0 || userDataDir !== expectedUserDataDir) {
+        const usesExpectedUserData = typeof userDataDir === 'string'
+          && path.resolve(userDataDir) === path.resolve(expectedUserDataDir)
+        if (!Number.isInteger(port) || port <= 0 || !usesExpectedUserData) {
           reject(new Error(`ViDot reported an unexpected sandbox: ${line}`))
 
           return
@@ -200,5 +197,53 @@ async function waitForReady(
     stdout.on('data', onStdout)
     stderr.on('data', onStderr)
     nodeChildProcess.once('close', onExit)
+  })
+}
+
+async function stopGodot(
+  subprocess: GodotProcess,
+  sandbox: GodotProjectSandbox,
+  waitForGracefulExit = false,
+): Promise<void> {
+  const errors: unknown[] = []
+  try {
+    const exited = waitForGracefulExit && await exitsWithin(subprocess, shutdownTimeoutMs)
+    if (exited) {
+      const result = await subprocess
+      if (result.failed) {
+        const diagnostics = `${result.stdout}\n${result.stderr}`.trim().slice(-8192)
+        errors.push(new Error(`Godot exited abnormally with exit code ${result.exitCode ?? 'unknown'}${diagnostics === '' ? '' : `\n${diagnostics}`}`))
+      }
+    }
+    else {
+      subprocess.kill()
+      await subprocess
+      if (waitForGracefulExit)
+        errors.push(new Error(`Godot did not exit normally within ${shutdownTimeoutMs}ms`))
+    }
+  }
+  catch (error) {
+    errors.push(error)
+  }
+
+  try {
+    await cleanupGodotProjectSandbox(sandbox)
+  }
+  catch (error) {
+    errors.push(error)
+  }
+
+  if (errors.length > 0)
+    throw new AggregateError(errors, 'ViDot could not stop Godot or remove its sandbox')
+}
+
+function exitsWithin(subprocess: GodotProcess, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), timeoutMs)
+    const exited = () => {
+      clearTimeout(timeout)
+      resolve(true)
+    }
+    subprocess.then(exited, exited)
   })
 }

@@ -74,62 +74,63 @@ catch (error) {
 }
 
 const modsRoot = path.join(repoRoot, 'mods')
-if (existsSync(modsRoot)) {
-  const modsUnpackedDir = path.join(outDir, 'mods-unpacked')
-  mkdirSync(modsUnpackedDir, { recursive: true })
+if (!existsSync(modsRoot)) {
+  console.error(`Mods directory not found: ${modsRoot}`)
+  process.exit(1)
+}
 
-  const disabledModTarget = path.join(modsUnpackedDir, disabledModName)
-  const disabledModTargetStat = lstatSync(disabledModTarget, { throwIfNoEntry: false })
-  if (disabledModTargetStat !== undefined) {
-    if (!disabledModTargetStat.isSymbolicLink()) {
-      console.error(`Disabled Mod target is not a repository-owned symbolic link: ${disabledModTarget}`)
-      console.error('Remove or relocate that exact target before running decompile again.')
-      process.exit(1)
-    }
+const modsUnpackedDir = path.join(outDir, 'mods-unpacked')
+mkdirSync(modsUnpackedDir, { recursive: true })
 
-    const disabledModSource = path.join(modsRoot, disabledModName)
-    const targetMatches = path.resolve(path.dirname(disabledModTarget), readlinkSync(disabledModTarget)) === disabledModSource
-    if (!targetMatches) {
-      console.error(`Disabled Mod target has an unexpected source: ${disabledModTarget}`)
-      console.error('Remove or relocate that exact target before running decompile again.')
-      process.exit(1)
-    }
-    unlinkSync(disabledModTarget)
-    console.log(`Disabled legacy Mod by removing its repository link: ${disabledModTarget}`)
-  }
-
-  const activeModSource = path.join(modsRoot, activeModName, 'scripts')
-  if (!statSync(activeModSource).isDirectory()) {
-    console.error(`Active Mod source is not a directory: ${activeModSource}`)
+const disabledModTarget = path.join(modsUnpackedDir, disabledModName)
+const disabledModTargetStat = lstatSync(disabledModTarget, { throwIfNoEntry: false })
+if (disabledModTargetStat !== undefined) {
+  if (!disabledModTargetStat.isSymbolicLink()) {
+    console.error(`Disabled Mod target is not a repository-owned symbolic link: ${disabledModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
     process.exit(1)
   }
 
-  const activeModTarget = path.join(modsUnpackedDir, activeModName)
-  const activeModTargetStat = lstatSync(activeModTarget, { throwIfNoEntry: false })
-  if (activeModTargetStat !== undefined) {
-    const targetMatches = activeModTargetStat.isSymbolicLink()
-      && path.resolve(path.dirname(activeModTarget), readlinkSync(activeModTarget)) === activeModSource
-    if (targetMatches) {
-      console.log(`Mod source is already linked to ${activeModTarget}`)
-    }
-    else {
-      console.error(`Mod target already exists with an unexpected source: ${activeModTarget}`)
-      console.error('Remove or relocate that exact target before running decompile again.')
-      process.exit(1)
-    }
+  const disabledModSource = path.join(modsRoot, disabledModName)
+  const targetMatches = path.resolve(path.dirname(disabledModTarget), readlinkSync(disabledModTarget)) === disabledModSource
+  if (!targetMatches) {
+    console.error(`Disabled Mod target has an unexpected source: ${disabledModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
+    process.exit(1)
+  }
+  unlinkSync(disabledModTarget)
+  console.log(`Disabled legacy Mod by removing its repository link: ${disabledModTarget}`)
+}
+
+const activeModSource = path.join(modsRoot, activeModName, 'scripts')
+const activeModSourceStat = lstatSync(activeModSource, { throwIfNoEntry: false })
+if (activeModSourceStat === undefined || !activeModSourceStat.isDirectory()) {
+  console.error(`Active Mod source is not a directory: ${activeModSource}`)
+  process.exit(1)
+}
+
+const activeModTarget = path.join(modsUnpackedDir, activeModName)
+const activeModTargetStat = lstatSync(activeModTarget, { throwIfNoEntry: false })
+if (activeModTargetStat !== undefined) {
+  const targetMatches = activeModTargetStat.isSymbolicLink()
+    && path.resolve(path.dirname(activeModTarget), readlinkSync(activeModTarget)) === activeModSource
+  if (targetMatches) {
+    console.log(`Mod source is already linked to ${activeModTarget}`)
   }
   else {
-    try {
-      symlinkSync(activeModSource, activeModTarget, 'junction')
-      console.log(`Linked mod source to ${activeModTarget}`)
-    }
-    catch (error) {
-      console.error(`Failed to link mod source for ${activeModName}.`)
-      console.error(error)
-      process.exit(1)
-    }
+    console.error(`Mod target already exists with an unexpected source: ${activeModTarget}`)
+    console.error('Remove or relocate that exact target before running decompile again.')
+    process.exit(1)
   }
 }
 else {
-  console.warn(`Mods directory not found at ${modsRoot}. Skipping link step.`)
+  try {
+    symlinkSync(activeModSource, activeModTarget, 'junction')
+    console.log(`Linked mod source to ${activeModTarget}`)
+  }
+  catch (error) {
+    console.error(`Failed to link mod source for ${activeModName}.`)
+    console.error(error)
+    process.exit(1)
+  }
 }

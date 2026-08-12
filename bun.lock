@@ -49,6 +49,18 @@
         "vitest": "^4.1.10",
       },
     },
+    "packages/vikeeper": {
+      "name": "@vikeeper/vitest",
+      "version": "0.0.0",
+      "dependencies": {
+        "@vidot/vitest": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+        "typescript-to-gdscript": "^0.1.3",
+        "vitest": "^4.1.10",
+      },
+    },
   },
   "packages": {
     "@airi-dome-keeper/status-dashboard": ["@airi-dome-keeper/status-dashboard@workspace:packages/status-dashboard"],
@@ -368,6 +380,8 @@
     "@unocss/vite": ["@unocss/vite@66.7.5", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "@unocss/config": "66.7.5", "@unocss/core": "66.7.5", "@unocss/inspector": "66.7.5", "chokidar": "^5.0.0", "magic-string": "^0.30.21", "pathe": "^2.0.3", "tinyglobby": "^0.2.17", "unplugin-utils": "^0.3.1" }, "peerDependencies": { "vite": "^5.0.0-0 || ^6.0.0-0 || ^7.0.0-0 || ^8.0.0-0" } }, "sha512-1z1TBCNJCR2WzjPtjzmCHr8rtzXHosMjLdsCNe6Mzsfwiw044gzzLVuiEZO9vIjkI50lvQ+gIOxOiVQG0hGAeA=="],
 
     "@vidot/vitest": ["@vidot/vitest@workspace:packages/vidot"],
+
+    "@vikeeper/vitest": ["@vikeeper/vitest@workspace:packages/vikeeper"],
 
     "@vitejs/plugin-vue": ["@vitejs/plugin-vue@6.0.8", "", { "dependencies": { "@rolldown/pluginutils": "^1.0.1" }, "peerDependencies": { "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0", "vue": "^3.2.25" } }, "sha512-0ZjgOg7oO6farnNGup7yvoM/YXZV84OZxHAwtflItNa/6zzQyVb5LNxyea3FEKEX2XlagIKzrlH7wwxkKgtiew=="],
 

@@ -4,8 +4,8 @@
   "private": true,
   "module": "index.ts",
   "scripts": {
-    "build": "bun test/godot-fixture.ts clean && bunx tstogd convert",
-    "typecheck": "tsc -p tsconfig.json && tsc -p test/godot/tsconfig.json"
+    "build": "bunx tstogd convert",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
