@@ -107,9 +107,14 @@ This page collects external resources useful for understanding and maintaining t
 - [mise Environments](https://mise.jdx.dev/environments/) — Documentation for mise-managed environment variables, used for project versions and machine-local decompilation inputs.
 - [mise Python](https://mise.jdx.dev/lang/python.html) — Documentation for Python installation and version management through mise, which owns the project interpreter.
 - [mise Format Command](https://mise.jdx.dev/cli/fmt.html) — Documentation for `mise fmt`, used to format and validate the project's `mise.toml`.
-- [Bun ImportMeta Environment Reference](https://bun.com/reference/globals/ImportMeta) — The `import.meta.env` API reference used by the project's TypeScript scripts to read machine-local inputs.
-- [Bun Package Installation](https://bun.sh/docs/pm/cli/install) — Documentation for Bun package installation and lockfiles, which the project uses for JavaScript dependencies and `bun.lock`.
-- [Bun TypeScript Runtime](https://bun.sh/docs/runtime/typescript) — Documentation for running TypeScript directly with Bun, used by automation under `scripts/` without a compile step.
+- [Node.js TypeScript Modules](https://nodejs.org/api/typescript.html) — The native erasable-TypeScript execution boundary used by repository automation under `scripts/`.
+- [Node.js ECMAScript Modules](https://nodejs.org/api/esm.html#importmetadirname) — The `import.meta.dirname` and ESM resolution behavior used by the project's TypeScript scripts.
+- [Node.js Environment Variables](https://nodejs.org/api/environment_variables.html#processenv) — The `process.env` API used to read machine-local script inputs.
+- [pnpm Workspaces](https://pnpm.io/workspaces) — The workspace and `workspace:` protocol contract defined by `pnpm-workspace.yaml`.
+- [pnpm Install](https://pnpm.io/cli/install) — The installation and frozen-lockfile behavior used by repository setup.
+- [pnpm Run](https://pnpm.io/cli/run) — Package-script executable resolution and workspace-root binary behavior used by package scripts.
+- [pnpm Build Settings](https://pnpm.io/settings/build#allowbuilds) — The explicit dependency build-script allowlist used for reviewed native bindings.
+- [pnpm Dependency Trust Policy](https://pnpm.io/settings/dependency-resolution#trustpolicyexclude) — The version-specific trust-policy exclusion used for the reviewed `chokidar@4.0.3` artifact while retaining downgrade checks for every other dependency.
 - [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` and ViDot to author Godot-compatible code in TypeScript and emit runtime GDScript.
 - [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used for ViDot's TypeScript-authored Autoload.
 - [typescript-to-gdscript Transform Rules](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/transform-rules.md) — The documented TypeScript-to-GDScript transform boundary used alongside direct target-Godot validation.

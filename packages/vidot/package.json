@@ -12,7 +12,7 @@
     "src"
   ],
   "scripts": {
-    "build": "cd runtime && bunx tstogd convert",
+    "build": "cd runtime && tstogd convert",
     "test": "vitest run --config ../../examples/basic-vidot/vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p runtime/tsconfig.json"
   },

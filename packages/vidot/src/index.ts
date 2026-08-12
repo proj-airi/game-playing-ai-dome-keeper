@@ -13,6 +13,8 @@ import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from './sandbox
 
 const startupTimeoutMs = 30_000
 const shutdownTimeoutMs = 5_000
+const lineBreakPattern = /\r?\n/
+const readyMessagePattern = /^(\d+) (".*")$/
 
 export { type JsonValue, VidotClient } from './client'
 export * from 'vitest'
@@ -142,14 +144,14 @@ async function waitForReady(
       const text = chunk.toString()
       buffer += text
       diagnostics = `${diagnostics}${text}`.slice(-8192)
-      const lines = buffer.split(/\r?\n/)
+      const lines = buffer.split(lineBreakPattern)
       buffer = lines.pop() ?? ''
       for (const line of lines) {
         const marker = line.indexOf(prefix)
         if (marker < 0)
           continue
 
-        const ready = line.slice(marker + prefix.length).match(/^(\d+) (".*")$/)
+        const ready = line.slice(marker + prefix.length).match(readyMessagePattern)
         cleanup()
         if (!ready) {
           reject(new Error(`ViDot reported an invalid sandbox: ${line}`))
@@ -239,7 +241,7 @@ async function stopGodot(
 
 function exitsWithin(subprocess: GodotProcess, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(false), timeoutMs)
+    const timeout = setTimeout(resolve, timeoutMs, false)
     const exited = () => {
       clearTimeout(timeout)
       resolve(true)

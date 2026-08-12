@@ -5,6 +5,10 @@ import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 
+const applicationSectionPattern = /^\[application\][ \t]*$/m
+const nextSectionPattern = /^\[/m
+const sandboxNamePattern = /^[\w-]+$/
+
 export interface GodotProjectSandbox {
   path: string
   userDataDir: string
@@ -20,7 +24,7 @@ export async function createGodotProjectSandbox(
   namespace: string,
   sandboxFiles: GodotSandboxFile[] = [],
 ): Promise<GodotProjectSandbox> {
-  if (!/^[\w-]+$/.test(namespace))
+  if (!sandboxNamePattern.test(namespace))
     throw new Error('Godot sandbox names may contain only letters, numbers, underscores, and hyphens')
 
   projectPath = path.resolve(projectPath)
@@ -105,7 +109,7 @@ function setUserDataSettings(config: string, customUserDir: string): string {
     'config/use_custom_user_dir=true',
     `config/custom_user_dir_name=${JSON.stringify(customUserDir)}`,
   ]
-  const section = /^\[application\][ \t]*$/m.exec(config)
+  const section = applicationSectionPattern.exec(config)
   if (!section)
     return `${config}${config === '' || config.endsWith(eol) ? '' : eol}${eol}[application]${eol}${settings.join(eol)}${eol}`
 
@@ -114,7 +118,7 @@ function setUserDataSettings(config: string, customUserDir: string): string {
     return `${config}${eol}${settings.join(eol)}${eol}`
 
   const bodyStart = headerEnd + 1
-  const relativeBodyEnd = /^\[/m.exec(config.slice(bodyStart))?.index
+  const relativeBodyEnd = nextSectionPattern.exec(config.slice(bodyStart))?.index
   const bodyEnd = relativeBodyEnd === undefined ? config.length : bodyStart + relativeBodyEnd
   let body = config.slice(bodyStart, bodyEnd)
   for (const setting of settings) {

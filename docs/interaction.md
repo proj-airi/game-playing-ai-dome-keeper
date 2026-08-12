@@ -31,7 +31,7 @@ interaction-type state machine.
    boundary from path length and current movement speed.
 6. Estimate the time to reach the target directly from the intervening tiles,
    current drilling strength, and movement time.
-7. Use the A* route when it is no slower. Dig directly toward the target when the
+7. Use the A\* route when it is no slower. Dig directly toward the target when the
    A* estimate is longer.
 8. Identify the interaction type and subtype and record the decision before
    leaving the current path. The event must explain why the teacher deviated

@@ -1,5 +1,4 @@
 {
-  "eslint.runtime": "bun",
   "eslint.validate": [
     "javascript",
     "javascriptreact",

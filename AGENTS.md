@@ -13,7 +13,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 - Manage Godot, Node.js, .NET, Java, Python, and other repository development tools through mise. Do not depend on ambient installations.
 - Pin tool versions in `mise.toml`. When tool configuration changes, update and commit `mise.toml` and `mise.lock` together.
-- Bun owns JavaScript and TypeScript dependencies and `bun.lock`; install with Bun and run TypeScript scripts with Bun.
+- pnpm owns JavaScript and TypeScript dependencies and `pnpm-lock.yaml`; install with pnpm and run TypeScript scripts with Node.js.
 - uv owns Python dependencies, `uv.lock`, and `.venv`; invoke Python tools through uv or mise tasks, not bare `python`, `pip`, or `yolo`. Do not add a second overlapping Python environment manager.
 - ESLint uses `@antfu/eslint-config` with the flat `eslint.config.mjs`; treat `mise.toml` as mise-owned configuration and format it with `mise fmt`, not ESLint.
 - Use `execa` directly for TypeScript process execution and prefer its built-in output and termination behavior over local process wrappers.
@@ -43,7 +43,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 ## Source Layout
 
 - Store GDScript mods under `mods/<Author>-<ModName>/`.
-- Store Bun-executable TypeScript automation under `scripts/` and expose repository-wide workflows through mise tasks.
+- Store Node.js-executable TypeScript automation under `scripts/` and expose repository-wide workflows through mise tasks.
 - Keep reusable application and package code under the existing `apps/` and `packages/` workspaces.
 - Keep decompiled projects under `external/domekeeper-decompiled/<game-version>/` and recordings or datasets in their documented ignored locations.
 

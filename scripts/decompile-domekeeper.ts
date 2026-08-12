@@ -1,14 +1,14 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, statSync, symlinkSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execa } from 'execa'
 
-const env = import.meta.env
+const env = process.env
 const gameDir = env.DOMEKEEPER_GAME_DIR
 const gdreToolsBin = env.GDRETOOLS_BIN
 const version = env.DOMEKEEPER_VERSION
-const repoRoot = path.resolve(import.meta.dir, '..')
+const repoRoot = path.resolve(import.meta.dirname, '..')
 const outRoot = env.DOMEKEEPER_OUT_ROOT ?? path.join(repoRoot, 'external/domekeeper-decompiled')
 const run = execa({ stdio: 'inherit' })
 const activeModName = 'LemonNekoGH-DataCollectorAI'
@@ -65,7 +65,7 @@ catch (error) {
 
 console.log('\nGenerating TypeScript declarations for the decompiled game...')
 try {
-  await run('bun', ['run', path.join(repoRoot, 'scripts/generate-domekeeper-typings.ts'), outDir])
+  await run(process.execPath, [path.join(repoRoot, 'scripts/generate-domekeeper-typings.ts'), outDir])
 }
 catch (error) {
   console.error('Failed to generate TypeScript declarations.')

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { createReadStream, existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -24,11 +24,11 @@ const { values } = parseArgs({
 const fps = Number(values.fps ?? 10)
 if (!Number.isInteger(fps) || fps <= 0)
   fail('--fps must be a positive integer')
-const godot = import.meta.env.GODOT_BIN
-const version = import.meta.env.DOMEKEEPER_VERSION
+const godot = process.env.GODOT_BIN
+const version = process.env.DOMEKEEPER_VERSION
 if (!godot || !version)
   fail('GODOT_BIN and DOMEKEEPER_VERSION must be provided by mise')
-const project = path.resolve(import.meta.dir, '..', 'external', 'domekeeper-decompiled', version)
+const project = path.resolve(import.meta.dirname, '..', 'external', 'domekeeper-decompiled', version)
 const recordingResolution = '1280x720'
 
 if (!existsSync(godot))

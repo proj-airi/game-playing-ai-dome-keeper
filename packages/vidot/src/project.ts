@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 const autoloadName = '__ViDot'
 const runtimeName = '__vidot_runtime.gd'
 const runtimeSource = fileURLToPath(new URL('../runtime/scripts/vidot_autoload.gd', import.meta.url))
+const autoloadSectionPattern = /^\[autoload\]\s*$/m
 
 export async function installAutoload(projectPath: string): Promise<void> {
   const projectFile = path.join(projectPath, 'project.godot')
@@ -26,7 +27,7 @@ function addAutoload(project: string): string {
     throw new Error(`Godot project already defines the ${autoloadName} Autoload`)
 
   const eol = project.includes('\r\n') ? '\r\n' : '\n'
-  const section = /^\[autoload\]\s*$/m.exec(project)
+  const section = autoloadSectionPattern.exec(project)
   if (!section)
     return `[autoload]${eol}${entry}${eol}${eol}${project}`
 

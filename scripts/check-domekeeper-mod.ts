@@ -1,16 +1,16 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { existsSync, lstatSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execa } from 'execa'
-import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from '../packages/vidot/src/sandbox'
+import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from '../packages/vidot/src/sandbox.ts'
 
-const godot = import.meta.env.GODOT_BIN
-const version = import.meta.env.DOMEKEEPER_VERSION
+const godot = process.env.GODOT_BIN
+const version = process.env.DOMEKEEPER_VERSION
 if (!godot || !version)
   fail('GODOT_BIN and DOMEKEEPER_VERSION must be provided by mise')
 
-const project = path.resolve(import.meta.dir, '..', 'external', 'domekeeper-decompiled', version)
+const project = path.resolve(import.meta.dirname, '..', 'external', 'domekeeper-decompiled', version)
 if (!existsSync(godot))
   fail(`Godot binary does not exist: ${godot}`)
 if (!existsSync(path.join(project, 'project.godot')))

@@ -1,6 +1,8 @@
 import type { ReplayRecording, StatusSnapshot } from './types/status'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
+const lineBreakPattern = /\r?\n/
+
 export function useDashboard() {
   const live = ref<StatusSnapshot | null>(null)
   const liveError = ref<string | null>(null)
@@ -37,7 +39,7 @@ export function useDashboard() {
     if (!file)
       return
     try {
-      const lines = (await file.text()).split(/\r?\n/)
+      const lines = (await file.text()).split(lineBreakPattern)
       if (lines.at(-1) === '')
         lines.pop()
       const metadata = JSON.parse(lines.shift() ?? '') as Pick<ReplayRecording, 'fixed_fps'>

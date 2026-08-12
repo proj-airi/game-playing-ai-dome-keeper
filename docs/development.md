@@ -54,7 +54,7 @@ development workflows while the YOLO Mod is disabled.
 - It is acceptable to commit a local decompilation script as long as it does not include or distribute any game assets or decompiled outputs, and only operates on the user's local installation.
 - Manage the required official Dome Keeper Editor with mise's GitHub backend. For the repository's Dome Keeper 5.0.5.19 target, pin editor release 5.1, a custom Godot 4.3.1 build containing the multiplayer modules used by the 5.0 update. Select exact editor assets and published SHA-256 digests for macOS arm64/x64, Linux x64, and Windows x64; unsupported architectures must fail instead of falling back to a mismatched artifact. Do not substitute a regular Godot or generic GodotSteam build, and keep the complete extracted bundle so its native Steam and multiplayer libraries remain beside the editor.
 - The decompile script uses GDRETools CLI (`gdre_tools --headless --recover=... --output=...`) for one-step recovery, then links DataCollectorAI into the decompiled `mods-unpacked/` directory. It removes only an exact repository-owned `LemonNekoGH-YoloDataCollector` symlink and fails on an unexpected target. The mise task builds DataCollectorAI before the script installs its generated root.
-- Decompile script machine-local inputs are provided through `DOMEKEEPER_GAME_DIR`, `GDRETOOLS_BIN`, and optional `DOMEKEEPER_OUT_ROOT`, read via `import.meta.env`; mise provides the repository-owned `DOMEKEEPER_VERSION`. Godot tasks use the mise-managed editor and must not require a user-supplied `GODOT_BIN`.
+- Decompile script machine-local inputs are provided through `DOMEKEEPER_GAME_DIR`, `GDRETOOLS_BIN`, and optional `DOMEKEEPER_OUT_ROOT`, read via `process.env`; mise provides the repository-owned `DOMEKEEPER_VERSION`. Godot tasks use the mise-managed editor and must not require a user-supplied `GODOT_BIN`.
 - For macOS stability, set the project rendering method to `forward_plus` in `project.godot` (rendering/renderer/rendering_method).
 
 ## Repo Structure
@@ -66,15 +66,17 @@ development workflows while the YOLO Mod is disabled.
 
 ## Tooling
 
-- Use mise as the repository-level development-tool manager and task entry point. Pin tool versions in `mise.toml`; mise tasks delegate dependency-specific work to the owning package manager. Pin an LTS Node.js runtime because npm package executables such as ESLint and TypeScript use Node shebangs even when Bun launches their package scripts. Keep mise tool paths ahead of ambient package-manager paths so child-process shebangs resolve the pinned tools.
+- Use mise as the repository-level development-tool manager and task entry point. Pin Node.js and pnpm in `mise.toml`; mise tasks delegate dependency-specific work to pnpm. Keep mise tool paths ahead of ambient package-manager paths so child-process shebangs resolve the pinned tools.
 - Enable mise lockfiles, commit `mise.lock`, and run `mise lock` whenever tool configuration changes so tool URLs and supported checksums remain reproducible. Commit `mise.toml` and `mise.lock` together.
-- Use Bun for JavaScript dependency installation and lockfile management. Keep `package.json` and `bun.lock`, and run TypeScript scripts with Bun.
-- The root Bun workspace includes `apps/*`, `packages/*`, and `mods/*`. Use `bun run build` to build every workspace that exposes a build script; this currently includes the TypeScript-to-GDScript AI mod and the status dashboard.
+- Use pnpm for JavaScript dependency installation and lockfile management. Keep `pnpm-workspace.yaml`, package manifests, and `pnpm-lock.yaml` together. Execute repository automation under `scripts/` directly with the pinned Node.js runtime.
+- The root pnpm workspace includes `apps/*`, `packages/*`, and `mods/*`. Use `pnpm run build` to build every workspace that exposes a build script; this currently includes the TypeScript-to-GDScript AI mod and the status dashboard.
+- Keep dependency build scripts fail-closed through pnpm's `allowBuilds`. Approve only the reviewed Tree-sitter native bindings required by `typescript-to-gdscript`; explicitly deny optional install-time rewrites that the resolved runtime does not need.
+- Keep pnpm's trust-downgrade policy enabled. Exclude only `chokidar@4.0.3`, the `typescript-to-gdscript` file-watcher dependency already present with the same integrity in the previous lockfile, because that release lacks the provenance evidence present on an earlier release.
 
 ## Linting
 
 - Use ESLint with `@antfu/eslint-config` and the flat config (`eslint.config.mjs`).
-- Use alint with the official `@alint-js/plugin-js` `js/recommended` preset in `alint.config.ts` for model-assisted JavaScript and TypeScript design review. Configure a model provider with `bunx alint setup`, then run the review through `mise run alint`.
+- Use alint with the official `@alint-js/plugin-js` `js/recommended` preset in `alint.config.ts` for model-assisted JavaScript and TypeScript design review. Configure a model provider with `pnpm exec alint setup`, then run the review through `mise run alint`.
 - Keep alint separate from the aggregate `mise run check`: it supplements deterministic ESLint rather than replacing it, requires machine-local model configuration, and may consume paid model tokens. Its `.alintcache` output is local-only.
 - Treat `mise.toml` as mise-owned configuration: format and validate it with `mise fmt`, and exclude it from ESLint's conflicting TOML formatting rules.
 
@@ -89,17 +91,17 @@ development workflows while the YOLO Mod is disabled.
 
 ## Scripts Convention
 
-- `scripts/` should contain TypeScript scripts executable directly via Bun. Expose shared workflow entry points through mise tasks when repository-level orchestration is useful.
+- `scripts/` should contain TypeScript scripts executable directly via Node.js. Keep their runtime syntax within Node.js's erasable TypeScript boundary, and expose shared workflow entry points through mise tasks when repository-level orchestration is useful.
 
 ## Planned Monorepo Structure
 
 The listed application and crate paths are reserved target locations unless they already contain implemented project code.
-- `apps/airi-plugin/` for the AIRI plugin (TypeScript + Bun).
+- `apps/airi-plugin/` for the AIRI plugin (TypeScript + Node.js).
 - `crates/capture/` for Rust performance-sensitive modules (capture/input/inference helpers).
 - `mods/LemonNekoGH-YoloDataCollector/` for the existing GDScript mod (teacher and YOLO auto-labeling).
 - `mods/LemonNekoGH-DataCollectorAI/` for the replacement TypeScript-authored AI mod and its generated GDScript.
 - `packages/vikeeper/` for Dome Keeper test scenes, mirror-only fixture files, and the future map-definition DSL.
 - `packages/shared/` for shared types/protocols/schema.
 - `packages/status-dashboard/` for the local Vue status observer.
-- `scripts/` for Bun-executable TypeScript automation scripts.
+- `scripts/` for Node.js-executable TypeScript automation scripts.
 - `data/` for datasets and labels, and `recordings/` for replay sessions (both ignored by git).

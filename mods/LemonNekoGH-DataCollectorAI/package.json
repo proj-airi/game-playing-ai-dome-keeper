@@ -4,11 +4,15 @@
   "private": true,
   "module": "index.ts",
   "scripts": {
-    "build": "bunx tstogd convert",
+    "build": "tstogd convert",
+    "test": "vitest run --config test/vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "typescript-to-gdscript": "^0.1.3"
+    "@vidot/vitest": "workspace:*",
+    "@vikeeper/vitest": "workspace:*",
+    "typescript": "^5.9.3",
+    "typescript-to-gdscript": "^0.1.3",
+    "vitest": "^4.1.10"
   }
 }

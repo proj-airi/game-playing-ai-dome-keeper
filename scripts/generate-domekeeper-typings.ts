@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -6,10 +6,10 @@ import ts from 'typescript'
 import { convertGdToTs, resolveRegistry } from 'typescript-to-gdscript'
 
 if (!process.argv[2])
-  throw new Error('Usage: bun scripts/generate-domekeeper-typings.ts <decompiled-project>')
+  throw new Error('Usage: node scripts/generate-domekeeper-typings.ts <decompiled-project>')
 
 const gameRoot = path.resolve(process.argv[2]!)
-const outputFile = path.resolve(import.meta.dir, '../mods/LemonNekoGH-DataCollectorAI/src/_typings/domekeeper.generated.d.ts')
+const outputFile = path.resolve(import.meta.dirname, '../mods/LemonNekoGH-DataCollectorAI/src/_typings/domekeeper.generated.d.ts')
 
 const gdFiles: string[] = []
 function walk(dir: string) {

@@ -53,7 +53,7 @@ Maker's decorated `960x540` window and write `recordings/move.avi`.
 Build the generated runtime files with:
 
 ```bash
-bun run build
+pnpm run build
 ```
 
 ### Terms

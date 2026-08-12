@@ -6,7 +6,7 @@ The dashboard can still inspect existing artifacts, but its legacy live and
 replay producer is inactive while `LemonNekoGH-YoloDataCollector` is disabled.
 
 ```sh
-bun run --cwd packages/status-dashboard dev
+pnpm --dir packages/status-dashboard run dev
 ```
 
 ## Live
@@ -25,8 +25,8 @@ movie scrubbing, playback speed, and event reasons.
 Replay is manual-only: select a replay JSONL, then its MP4. The Vite bridge serves only the Live status file and never discovers or serves recorded sessions.
 
 ```sh
-bun run --cwd packages/status-dashboard typecheck
-bun run --cwd packages/status-dashboard build
+pnpm --dir packages/status-dashboard run typecheck
+pnpm --dir packages/status-dashboard run build
 ```
 
 References: [@proj-airi/ui](https://www.npmjs.com/package/@proj-airi/ui), [Vue TypeScript guide](https://vuejs.org/guide/typescript/overview.html), [Vite plugin API](https://vite.dev/guide/api-plugin.html#configureserver), [UnoCSS Vite integration](https://unocss.dev/integrations/vite).

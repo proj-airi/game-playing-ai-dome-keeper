@@ -112,10 +112,11 @@ release asset in `mise.toml`, run `mise lock` and commit both files together.
 The Dome Keeper Editor assets are pinned to the SHA-256 digests published by the
 official GitHub release; review URL, digest, and asset-size changes together.
 
-mise owns development-tool versions (including the Node runtime used by npm
-package executables) and repository-level tasks. Bun owns JavaScript and
-TypeScript workspace dependencies through `package.json` and `bun.lock`; this
-includes the TypeScript-authored Godot mod under `mods/*`. uv owns Python
+mise owns development-tool versions, including Node.js and pnpm, and
+repository-level tasks. pnpm owns JavaScript and TypeScript workspace
+dependencies through `pnpm-workspace.yaml`, `package.json`, and
+`pnpm-lock.yaml`; this includes the TypeScript-authored Godot mod under
+`mods/*`. uv owns Python
 dependencies and the project environment through `pyproject.toml`, `uv.lock`,
 and `.venv`. Run Python tools through `uv run` or a mise task rather than using
 bare `python`, `pip`, or `yolo` commands.

@@ -5,8 +5,8 @@ activate_aggressive = true
 lockfile = true
 
 [tools]
-bun = "1.3.14"
-node = "24.18.0"                # TODO: use bun instead, dashboard depends on node
+node = "24.18.0"
+pnpm = "11.21.0"
 python = "3.12.13"
 "aqua:astral-sh/uv" = "0.11.32"
 
@@ -30,19 +30,19 @@ windows-x64 = { asset_pattern = "windows.zip", bin_path = "windows", checksum = 
 
 [tasks.setup]
 description = "Install locked JavaScript and Python dependencies"
-run = ["bun install --frozen-lockfile", "uv sync --locked"]
+run = ["pnpm install --frozen-lockfile", "uv sync --locked"]
 
 [tasks.lint]
 description = "Lint the repository"
-run = "bun run lint"
+run = "pnpm run lint"
 
 [tasks.alint]
 description = "Run model-assisted JavaScript and TypeScript review"
-run = "bun run alint"
+run = "pnpm run alint"
 
 [tasks.typecheck]
 description = "Type-check the repository"
-run = "bun run typecheck"
+run = "pnpm run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
@@ -50,36 +50,36 @@ depends = ["domekeeper:vidot:test", "lint", "typecheck", "vidot:test"]
 
 [tasks."vidot:build"]
 description = "Build the TypeScript-authored ViDot runtime"
-run = "bun run --cwd packages/vidot build"
+run = "pnpm --dir packages/vidot run build"
 
 [tasks."vidot:test"]
 description = "Build ViDot and run the basic example integration test"
 depends = ["vidot:build"]
-run = "bun run --cwd packages/vidot test"
+run = "pnpm --dir packages/vidot run test"
 
 [tasks."vikeeper:build"]
 description = "Build the TypeScript-authored Dome Keeper test fixture"
-run = "bun run --cwd packages/vikeeper build"
+run = "pnpm --dir packages/vikeeper run build"
 
 [tasks."data-collector-ai:build"]
 description = "Build the TypeScript-authored DataCollectorAI Mod"
-run = "bun run --cwd mods/LemonNekoGH-DataCollectorAI build"
+run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run build"
 
 [tasks."domekeeper:vidot:test"]
 description = "Run the Dome Keeper Move test map"
 depends = ["godot:check", "vidot:build", "vikeeper:build"]
-run = "bunx vitest run --config mods/LemonNekoGH-DataCollectorAI/test/vitest.config.ts"
+run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test"
 
 [tasks."domekeeper:vidot:record"]
 description = "Record the Dome Keeper Move test with Godot Movie Maker"
 depends = ["godot:check", "vidot:build", "vikeeper:build"]
 env = { VIDOT_MOVIE = "{{ config_root }}/recordings/move.avi" }
-run = "bunx vitest run --config mods/LemonNekoGH-DataCollectorAI/test/vitest.config.ts"
+run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test"
 
 [tasks.decompile]
 description = "Decompile Dome Keeper and link repository mods"
 depends = ["data-collector-ai:build"]
-run = "bun scripts/decompile-domekeeper.ts"
+run = "node scripts/decompile-domekeeper.ts"
 
 [tasks."godot:open"]
 description = "Open the decompiled project in Godot"
@@ -89,7 +89,7 @@ run = "\"{{ env.GODOT_BIN }}\" ./external/domekeeper-decompiled/$DOMEKEEPER_VERS
 [tasks."godot:check"]
 description = "Check that repository mods load in an isolated headless game"
 depends = ["data-collector-ai:build"]
-run = "bun scripts/check-domekeeper-mod.ts"
+run = "node scripts/check-domekeeper-mod.ts"
 
 [tasks.train]
 description = "Train an Ultralytics detection model"

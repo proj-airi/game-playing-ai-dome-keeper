@@ -7,7 +7,7 @@
     "noEmit": true
   },
   "include": [
-    "../../../node_modules/typescript-to-gdscript/typings",
+    "../node_modules/typescript-to-gdscript/typings",
     "src/**/*.ts",
     "src/_typings/**/*.d.ts",
     "types/**/*.d.ts"

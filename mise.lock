@@ -59,71 +59,6 @@ checksum = "sha256:acfde570451cfdb8689fa159a138ee805ba4e241c466432750302c86254b0
 url = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-x86_64-pc-windows-msvc.zip"
 provenance = "github-attestations"
 
-[[tools.bun]]
-version = "1.3.14"
-backend = "core:bun"
-
-[tools.bun."platforms.linux-arm64"]
-checksum = "sha256:a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip"
-
-[tools.bun."platforms.linux-arm64-musl"]
-checksum = "sha256:b98e0ad3625c5c00d1d5b5ff55605c7adddbfae151861e68ade57b2d3b8703bb"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64-musl.zip"
-
-[tools.bun."platforms.linux-x64"]
-checksum = "sha256:951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip"
-
-[tools.bun."platforms.linux-x64-baseline"]
-checksum = "sha256:a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip"
-
-[tools.bun."platforms.linux-x64-musl"]
-checksum = "sha256:14bd9aedeebf1dba67e8def9531c89bc989ecfdf1de42e5bfcaf1b8cd9294719"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-musl.zip"
-
-[tools.bun."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:56a7d6806cf155536c0178f0ea5fbd098e684fa509ebdb4fc0a7e19fb65382dc"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-musl-baseline.zip"
-
-[tools.bun."platforms.macos-arm64"]
-checksum = "sha256:d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-aarch64.zip"
-
-[tools.bun."platforms.macos-x64"]
-checksum = "sha256:4183df3374623e5bab315c547cfa0974533cd457d86b73b639f7a87974cd6633"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-x64.zip"
-
-[tools.bun."platforms.macos-x64-baseline"]
-checksum = "sha256:3e35ad6f53971a9834bf9e6786e2adf72b5f1921cc9a9c5fde073d2972944076"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-x64-baseline.zip"
-
-[tools.bun."platforms.windows-x64"]
-checksum = "sha256:0a0620930b6675d7ba440e81f4e0e00d3cfbe096c4b140d3fff02205e9e18922"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64.zip"
-
-[tools.bun."platforms.windows-x64-baseline"]
-checksum = "sha256:538f9c846355d9e847b2671bc00c47da4229a0befb24df3282b739770f3b475f"
-url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64-baseline.zip"
-
-[[tools.godotdome]]
-version = "5.1"
-backend = "github:DomeKeeperMods/Docs"
-
-[tools.godotdome.options]
-asset_pattern = "windows.zip"
-
-[tools.godotdome."platforms.windows-x64"]
-checksum = "sha256:d446c93864d03275f370e06ab83d3b9082ecc8e1710c32aaf42f307e7b4c5f98"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/windows.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329364"
-
-[tools.godotdome."platforms.windows-x64-baseline"]
-checksum = "sha256:d446c93864d03275f370e06ab83d3b9082ecc8e1710c32aaf42f307e7b4c5f98"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/windows.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329364"
-
 [[tools.godotdome]]
 version = "5.1"
 backend = "github:DomeKeeperMods/Docs"
@@ -132,60 +67,19 @@ backend = "github:DomeKeeperMods/Docs"
 asset_pattern = "godot.macos.editor.zip"
 
 [tools.godotdome."platforms.macos-arm64"]
-checksum = "sha256:ac8c975c6cb261132c9860ccf20415e11aa51ee2df1829d7c140a6a9cb425e46"
+checksum = "sha256:b43337e22ea261ba942ed5a49629ac30f5dd33a639bcb17fe910f7faa0918bfc"
 url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/godot.macos.editor.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329216"
+url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/508769487"
 
 [tools.godotdome."platforms.macos-x64"]
-checksum = "sha256:ac8c975c6cb261132c9860ccf20415e11aa51ee2df1829d7c140a6a9cb425e46"
+checksum = "sha256:b43337e22ea261ba942ed5a49629ac30f5dd33a639bcb17fe910f7faa0918bfc"
 url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/godot.macos.editor.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329216"
+url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/508769487"
 
 [tools.godotdome."platforms.macos-x64-baseline"]
-checksum = "sha256:ac8c975c6cb261132c9860ccf20415e11aa51ee2df1829d7c140a6a9cb425e46"
+checksum = "sha256:b43337e22ea261ba942ed5a49629ac30f5dd33a639bcb17fe910f7faa0918bfc"
 url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/godot.macos.editor.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329216"
-
-[[tools.godotdome]]
-version = "5.1"
-backend = "github:DomeKeeperMods/Docs"
-
-[tools.godotdome.options]
-asset_pattern = "linux.zip"
-
-[tools.godotdome."platforms.linux-x64"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
-
-[tools.godotdome."platforms.linux-x64-baseline"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
-
-[tools.godotdome."platforms.linux-x64-musl"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
-
-[tools.godotdome."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
-
-[[tools.godotdome]]
-version = "5.1"
-backend = "github:DomeKeeperMods/Docs"
-
-[tools.godotdome."platforms.linux-arm64"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
-
-[tools.godotdome."platforms.linux-arm64-musl"]
-checksum = "sha256:9a31fd18199dca76ef0b24f46f97220ba956628f36ea0e0780ba54bf46b113b8"
-url = "https://github.com/DomeKeeperMods/Docs/releases/download/5.1/linux.zip"
-url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/469329312"
+url_api = "https://api.github.com/repos/DomeKeeperMods/Docs/releases/assets/508769487"
 
 [[tools.node]]
 version = "24.18.0"
@@ -235,61 +129,110 @@ url = "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip"
 checksum = "sha256:0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821"
 url = "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip"
 
+[[tools.pnpm]]
+version = "11.21.0"
+backend = "aqua:pnpm/pnpm"
+
+[tools.pnpm."platforms.linux-arm64"]
+checksum = "sha256:64eb219b008f7a4c176d81fbce919c20b0b7e093e815cbb669d46e681451f43b"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-arm64.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-arm64-musl"]
+checksum = "sha256:43587a1f3d26ee009c640378ef377cac3531990579acf0f35646531b7832831d"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-arm64-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-x64"]
+checksum = "sha256:aadc489ce4473c2af0fec06a5c19e113b5793d404eac49853c8153bf4b0d8263"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-x64.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-x64-baseline"]
+checksum = "sha256:aadc489ce4473c2af0fec06a5c19e113b5793d404eac49853c8153bf4b0d8263"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-x64.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-x64-musl"]
+checksum = "sha256:8cad0a4d20318c0445d992630ace51edc0853fd259573f50ee5d0216dce9b420"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-x64-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:8cad0a4d20318c0445d992630ace51edc0853fd259573f50ee5d0216dce9b420"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-linux-x64-musl.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.macos-arm64"]
+checksum = "sha256:860a96978a79ca5132bdc247375f94150a3c98edbecbee36e9f8e0c9e2f7f056"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-darwin-arm64.tar.gz"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.windows-x64"]
+checksum = "sha256:6643043caa3b01c65c431039926a2af954326d5cefbdb4da7baceceb17f5051f"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-win32-x64.zip"
+provenance = "github-attestations"
+
+[tools.pnpm."platforms.windows-x64-baseline"]
+checksum = "sha256:6643043caa3b01c65c431039926a2af954326d5cefbdb4da7baceceb17f5051f"
+url = "https://github.com/pnpm/pnpm/releases/download/v11.21.0/pnpm-win32-x64.zip"
+provenance = "github-attestations"
+
 [[tools.python]]
 version = "3.12.13"
 backend = "core:python"
 
 [tools.python."platforms.linux-arm64"]
-checksum = "sha256:f3510827b61e7a2aa89a1bb7bac73d45521939c489cf43f4699618efaead0611"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:11e713ae1f969385907a76533cc554f6b2e3f1a84896009f91c3fc871034a170"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-arm64-musl"]
-checksum = "sha256:6834de136880a89d8dce81214b064dfdc7f019460b00888bba24b9982e1ed298"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-aarch64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:0c9164b6f4ab0768bbcdf84683aabd680e8d75fa8347c6cecfdc5dad817ffd08"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-aarch64-unknown-linux-musl-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:f04a55ae95e8bd352cdff8da11c344fe609ec84795d106fa91b6620366d786fe"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:506191be3ee7bd190a8834dcdc1b3bc70aab50608deccc711935aa007239cabd"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64-baseline"]
-checksum = "sha256:f04a55ae95e8bd352cdff8da11c344fe609ec84795d106fa91b6620366d786fe"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:506191be3ee7bd190a8834dcdc1b3bc70aab50608deccc711935aa007239cabd"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64-musl"]
-checksum = "sha256:b0a88847d60e93609e37e61e42c4bde0cdce19815cfa1ee00ed52d7cc13f9796"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:dbe1e98775846b1503e0135353bbd47c51f02b0fc3dcf822ea82386921af1fbd"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:b0a88847d60e93609e37e61e42c4bde0cdce19815cfa1ee00ed52d7cc13f9796"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:dbe1e98775846b1503e0135353bbd47c51f02b0fc3dcf822ea82386921af1fbd"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-arm64"]
-checksum = "sha256:a4b36035915038104aabee94d6f02827161da444296881fe4493cb98f70304b2"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-aarch64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:25baa97c65b3f0aa90e21131b4f9e80aef8899e8144006db8a9d2c1ab9e807e3"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-aarch64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-x64"]
-checksum = "sha256:0d232711501680a619ea6113046603567d93be3218e326e4357557e771d1aec7"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:127053f1736f721e391ddb46f07585d05756e15bb8d757d3bbc0519738998ba1"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-x64-baseline"]
-checksum = "sha256:0d232711501680a619ea6113046603567d93be3218e326e4357557e771d1aec7"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:127053f1736f721e391ddb46f07585d05756e15bb8d757d3bbc0519738998ba1"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.windows-x64"]
-checksum = "sha256:b304536477587bbb729322b77ac1c59bdb95706651ab2ef38cae0fec77ede00f"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
+checksum = "sha256:18bcc65b17921806b72cdc88bcf000bf67a2c99a8fc381fe1629f2b9ba56858d"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.windows-x64-baseline"]
-checksum = "sha256:b304536477587bbb729322b77ac1c59bdb95706651ab2ef38cae0fec77ede00f"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260805/cpython-3.12.13+20260805-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
+checksum = "sha256:18bcc65b17921806b72cdc88bcf000bf67a2c99a8fc381fe1629f2b9ba56858d"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.12.13+20260807-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 provenance = "github-attestations"
