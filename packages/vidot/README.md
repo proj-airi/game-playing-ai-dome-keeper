@@ -1,10 +1,10 @@
 # ViDot
 
-ViDot is a Godot integration for Vitest. This package README describes the
-checked-in WebSocket prototype and its currently runnable API. The frozen
-replacement compiles Vitest-shaped TypeScript tests to GDScript and executes
-their collection and test bodies inside Godot; it is documented in
-[`docs/vidot.md`](../../docs/vidot.md) but is not implemented yet.
+This README documents the checked-in predecessor and its currently runnable
+API. It is not the target ViDot contract. The unimplemented Godot-native target
+is documented in [`docs/vidot.md`](../../docs/vidot.md).
+
+## Current Predecessor API
 
 The repository's
 [`examples/basic-vidot`](../../examples/basic-vidot) project keeps its Godot

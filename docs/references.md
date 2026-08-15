@@ -21,28 +21,20 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Godot Testing and Automation
 
-- [Vitest](https://vitest.dev/) — The outer test runner whose CLI, file discovery, filtering, watch mode, scheduling, and reporting are retained while Godot collects and executes ViDot test modules.
-- [Vitest: Custom Pool](https://vitest.dev/guide/advanced/pool) — The advanced, experimental integration boundary selected to schedule one Godot process per test file; ViDot pins the supported Vitest minor because this API is low-level.
-- [Vitest: Expect](https://vitest.dev/api/expect) — The assertion contract ViDot follows: ordinary assertions terminate the current test body, while `expect.soft` records a failure and continues.
+- [Vitest](https://vitest.dev/) — The outer test runner whose CLI, file discovery, filter inputs, watch mode, scheduling, and reporting are retained while Godot dynamically collects ViDot test modules and applies selection within each collected tree.
+- [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter and one Godot process per test file.
+- [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration that ViDot's Godot-side dynamic collector and compatibility fixtures track for the supported minor.
+- [Vitest 4.1.10: Task-Mode Interpretation](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/utils/collect.ts) — The upstream `.only`, `.skip`, name, location, and task-selection behavior ported to the dynamically collected Godot tree.
+- [Vitest: Expect](https://vitest.dev/api/expect) — The assertion contract ViDot preserves for direct assertions in test and hook callbacks: ordinary assertions stop the callback, while `expect.soft` records a failure and continues.
 - [Vitest: Setup and Teardown](https://vitest.dev/guide/learn/setup-teardown) — The lifecycle contract requiring `afterEach` cleanup even when a test fails.
 - [Vitest: Test Run Lifecycle](https://vitest.dev/guide/lifecycle) — The collection, hook, test, and reporting order mirrored by the Godot-side runner.
-- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The file-scoped fixture API used by the checked-in WebSocket prototype; the Godot-native replacement uses a custom pool instead.
+- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The callback-context model followed by ViDot's Godot-native `tree` context.
 - [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI.
-- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session boundary used by the checked-in prototype to provide launch configuration before test workers start.
-- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by both the prototype and its replacement.
+- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system populated by ViDot's custom-pool adapter.
 - [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
 - [GUT Quick Start](https://gut.readthedocs.io/en/latest/Quick-Start.html) — Godot-native testing prior art for test classes, per-test hooks, and assertions.
 - [GdUnit4 Assertions](https://godot-gdunit-labs.github.io/gdUnit4/latest/testing/assert/) — Godot-native assertion prior art reviewed while defining ViDot's smaller Vitest-compatible assertion slice.
-- [Godot 4.6: ProjectSettings](https://docs.godotengine.org/en/4.6/classes/class_projectsettings.html) — The documented exported-project `override.cfg` mechanism used by the successful stock-release bootstrap probe.
-- [Godot 4.6.2 source: project settings loading](https://github.com/godotengine/godot/blob/4.6.2-stable/core/config/project_settings.cpp) — The exact engine path showing that an executable-adjacent `override.cfg` is loaded after the original PCK project settings unless overrides are disabled.
-- [Godot 4.6: Command-Line Tutorial](https://docs.godotengine.org/en/4.6/tutorials/editor/command_line_tutorial.html) — The command availability legend used to distinguish stock release-template options from editor and custom-template launch paths.
-- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request and response model used by the checked-in WebSocket prototype; that transport is superseded by the Godot-native design.
-- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility used by the checked-in prototype's temporary bridge and preserved from the original project during replacement bootstrap.
-- [Godot 4.3: WebSocketPeer](https://docs.godotengine.org/en/4.3/classes/class_websocketpeer.html) — The polling WebSocket API used only by the checked-in prototype.
-- [Godot 4.3: TCPServer](https://docs.godotengine.org/en/4.3/classes/class_tcpserver.html) — The loopback server used only by the checked-in prototype.
-- [Godot source: `TCPServer::listen`](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/core/io/tcp_server.cpp#L530-L586) — The upstream implementation supporting port `0` for an OS-selected ephemeral ViDot port.
-- [Godot 4.3: Object](https://docs.godotengine.org/en/4.3/classes/class_object.html) — The dynamic property, method, and signal APIs behind the checked-in prototype's remote commands.
-- [Godot 4.3: GDScript VM member storage](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/modules/gdscript/gdscript_vm.cpp#L678-L681) — The upstream implementation that motivated bounded property observation in the checked-in prototype; the replacement removes that remote wait API.
+- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility whose original project instances remain available while ViDot runs its own test scene.
 
 ## Mod Development and Godot 4.3
 
@@ -124,9 +116,12 @@ This page collects external resources useful for understanding and maintaining t
 - [pnpm Run](https://pnpm.io/cli/run) — Package-script executable resolution and workspace-root binary behavior used by package scripts.
 - [pnpm Build Settings](https://pnpm.io/settings/build#allowbuilds) — The explicit dependency build-script allowlist used for reviewed native bindings.
 - [pnpm Dependency Trust Policy](https://pnpm.io/settings/dependency-resolution#trustpolicyexclude) — The version-specific trust-policy exclusion used for the reviewed `chokidar@4.0.3` artifact while retaining downgrade checks for every other dependency.
-- [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` and ViDot to author Godot-compatible code in TypeScript and emit runtime GDScript.
-- [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used for ViDot's TypeScript-authored Autoload.
-- [typescript-to-gdscript Transform Rules](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/transform-rules.md) — The documented TypeScript-to-GDScript transform boundary used alongside direct target-Godot validation.
+- [typescript-to-gdscript](https://github.com/nnn3d/typescript-to-gdscript) — The converter used by `LemonNekoGH-DataCollectorAI` and ViDot to author Godot-compatible code in TypeScript and emit runtime GDScript; outside ViDot's test-module transformation, its supported language and import surface is ViDot's conversion boundary.
+- [typescript-to-gdscript commit 5675bd8: Programmatic Converter](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/index.ts#L10-L46) — The upstream public `convertTsToGd` seam used after ViDot generates tstogd's required class-shaped TypeScript wrapper, without a patch or fork.
+- [typescript-to-gdscript commit 5675bd8: Module Transformation](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/transformer.ts#L304-L437) — The upstream exported-class and top-level-statement constraints that make ViDot's test-module wrapper necessary.
+- [typescript-to-gdscript commit 5675bd8: Import Transformation](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/imports.ts#L75-L160) — The converter's import behavior, which ViDot inherits after binding its own virtual `@vidot/test` module.
+- [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used by ViDot's TypeScript-authored runtime code.
+- [typescript-to-gdscript commit 5675bd8: Transform Rules](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/docs/transform-rules.md#restrictions--unsupported-typescript-features) — The documented TypeScript-to-GDScript language boundary inherited by ViDot, including unsupported exception constructs.
 - [Node.js Release Schedule](https://nodejs.org/en/about/previous-releases) — The Node.js release and LTS schedule used to select the pinned runtime for npm package executables.
 - [Node.js File-System Promises API](https://nodejs.org/api/fs.html#promises-api) — The asynchronous file-system API used by the status dashboard development server to read live snapshots.
 - [Node.js OS Temporary Directory](https://nodejs.org/api/os.html#ostmpdir) — Documentation for `os.tmpdir()`, used to align the Godot snapshot location with the Node.js reader.

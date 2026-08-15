@@ -83,11 +83,8 @@ The HTN literature is a design reference, not an implementation contract.
 
 ## ViDot Test Topology
 
-The checked-in ViDot prototype currently executes test modules in Node.js and
-controls an editable Godot mirror through a temporary Autoload and loopback
-WebSocket. The frozen replacement design removes that bridge: tstogd compiles
-Vitest-shaped TypeScript test modules to GDScript, and the real Godot runtime
-collects and executes their test trees.
+ViDot compiles Vitest-shaped TypeScript test modules through tstogd, and the real
+Godot runtime collects and executes their test trees.
 
 ViKeeper is the thin Dome Keeper-specific layer above that generic boundary. It
 owns game startup, test scenes, and the planned map-definition DSL. ViDot starts
@@ -95,20 +92,24 @@ its runner without automatically entering the original main scene; ViKeeper
 starts Dome Keeper's main scene when a test requires it. DataCollectorAI keeps
 only its assertions, and its production Mod does not contain the test runtime.
 
-Vitest retains file discovery, filtering, watch mode, scheduling, and reporting
-through a ViDot custom pool. Each test file receives one fresh Godot process;
-tests in that file run sequentially and share its Godot state, while different
-files may run in separate processes. Godot evaluates the generated module's
-top-level code to collect `describe`, `test`, and hook registrations, then runs
-the test bodies, assertions, and engine waits itself. Shared processes remain
-deferred until startup measurements justify them.
+Vitest retains file discovery, its filter-facing CLI and configuration, watch
+mode, scheduling, and reporting through a ViDot custom pool. Its thin Node.js
+adapter passes selection inputs when it launches each file and maps one-way
+Godot events into Vitest tasks. Each test file receives one fresh Godot process.
+Godot evaluates the generated module's top-level code to collect `describe`,
+`test`, and hook registrations, applies the supported in-tree filtering, then
+runs the test bodies, assertions, and engine waits. Tests in one file run
+sequentially and share its Godot state, while different files may run in
+separate processes. Shared processes remain deferred until startup measurements
+justify them.
 
-The replacement must preserve original project settings and Autoloads without a
-Mod, GDExtension, permanent Autoload, or source change. A release-export probe
-confirmed that an executable-adjacent `override.cfg` can select a loose ViDot
-runner scene while retaining the original PCK and initialized Autoload state.
-The detailed status, evidence, compatibility contract, and remaining design
-questions belong to [`vidot.md`](vidot.md).
+The first supported baseline is an editable Godot 4.3.1 project,
+including the recovered project used by ViKeeper. ViDot does not gate later
+engine versions at runtime; they may work but are not guaranteed. The
+runtime must preserve original project settings and Autoloads without a Mod,
+GDExtension, permanent ViDot Autoload, or source change. Released-game execution
+is outside the initial scope. The detailed contract belongs to
+[`vidot.md`](vidot.md).
 
 ## Evidence for Target Design
 

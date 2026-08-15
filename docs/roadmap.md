@@ -10,36 +10,23 @@ unless an explicit project decision says so.
 
 ## Capability Milestones
 
-### Build the ViDot WebSocket Prototype and Example — Complete, Superseded
+### Implement Godot-Native ViDot Test Execution — Design Frozen
 
-- Add the first `@vidot/vitest` integration with a temporary Autoload, one Godot
-  process per test file, and a loopback WebSocket bridge.
-- Expose `get`, `set`, `call`, frame-bounded `waitForProperty`, and signal-first
-  `waitForSignal` commands. Keep property checks limited to active waits and do
-  not instrument arbitrary Godot property writes.
-- Add a small editable example Godot project that proves mirror-only Autoload
-  installation and removal, Godot process creation and destruction, bridge
-  readiness, all five commands, and timeout cleanup without depending on Dome
-  Keeper.
-- Use one Godot process per test file, sequential tests within a file, automatic
-  process teardown, and separate processes for cross-project parallelism.
-- Retain this implementation only until the Godot-native replacement proves its
-  full path. Do not expand its bridge or build another remote-node facade.
-
-### Replace the ViDot Bridge with Godot-Native Test Execution — Design Frozen
-
-- Keep Vitest's discovery, filtering, watch, scheduling, CLI, and reporters
-  through a pinned custom-pool integration.
+- Keep Vitest's discovery, filter-facing CLI and configuration, watch,
+  scheduling, and reporters through a custom-pool integration targeting Vitest
+  4.1.10. Pass selection inputs when each file process starts; Godot dynamically
+  collects the file's test tree and applies the supported in-tree filtering
+  without a post-collection handshake.
 - Convert Vitest-shaped TypeScript test modules with tstogd, evaluate their
   top-level code in Godot, build the test tree there, and execute hooks,
   assertions, bodies, signals, and frame waits in the game runtime.
 - Start one fresh Godot process per test file with the original project settings
   and Autoloads, but do not automatically enter the original main scene. Revisit
   shared processes only after startup performance is measured.
-- Replace the remote client, WebSocket, temporary bridge Autoload, and property
-  or signal wait commands instead of preserving compatibility layers.
-- Prove the replacement in the editable example, then migrate the existing
-  ViKeeper Move test. Keep the current prototype until both proofs pass.
+- Prove the runtime in the editable example, then migrate the existing ViKeeper
+  Move test. Keep the checked-in predecessor until both proofs pass.
+- Treat Godot 4.3.1 editable projects as the first supported baseline without a
+  runtime version gate. Released-game execution is outside the initial scope.
 - Extend the initial Vitest-compatible API only when a real test requires more
   than the frozen first slice in [`vidot.md`](vidot.md).
 
@@ -55,9 +42,9 @@ unless an explicit project decision says so.
   action cleanup, and separate processes for cross-project parallelism.
 - Treat this proof as a prerequisite for expanding the recursive `TaskExecutor`
   implementation to more actions and compound-task behavior.
-- Migrate this proof to Godot-native ViDot execution after the replacement
-  example passes; ViKeeper, not ViDot, remains responsible for starting Dome
-  Keeper's main scene.
+- Re-run this proof through Godot-native ViDot after the editable example passes;
+  ViKeeper, not ViDot, remains responsible for starting Dome Keeper's main
+  scene.
 
 ### Replace the Existing Collector with the TypeScript AI Mod
 
