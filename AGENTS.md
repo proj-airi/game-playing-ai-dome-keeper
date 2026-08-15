@@ -84,7 +84,12 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 ## Current Priority
 
-- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled while proving the replacement DataCollectorAI runtime through ViDot. Retain the legacy source as reference, but do not load its collector or rule teacher in repository workflows.
+- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled while rebuilding
+  Godot-native ViDot. The old WebSocket RPC test path has been removed; retain
+  the basic ViDot and ViKeeper Godot fixture assets, but treat them as
+  non-runnable until the new adapter exists. Use `mise run godot:check` for the
+  current DataCollectorAI Mod-load validation, and keep the legacy source only
+  as an unloaded reference.
 
 ## Unattended Long-Run Optimization
 

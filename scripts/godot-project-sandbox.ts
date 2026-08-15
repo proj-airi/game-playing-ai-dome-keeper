@@ -14,15 +14,9 @@ export interface GodotProjectSandbox {
   userDataDir: string
 }
 
-export interface GodotSandboxFile {
-  source: string
-  target: string
-}
-
 export async function createGodotProjectSandbox(
   projectPath: string,
   namespace: string,
-  sandboxFiles: GodotSandboxFile[] = [],
 ): Promise<GodotProjectSandbox> {
   if (!sandboxNamePattern.test(namespace))
     throw new Error('Godot sandbox names may contain only letters, numbers, underscores, and hyphens')
@@ -38,13 +32,7 @@ export async function createGodotProjectSandbox(
   await cleanupGodotProjectSandbox(sandbox)
   await mkdir(sandbox.path)
   try {
-    const sandboxFileRoots = new Set(sandboxFiles.map(file => file.target.split('/')[0]))
     const entries = await readdir(projectPath, { withFileTypes: true })
-    for (const root of sandboxFileRoots) {
-      if (root === 'project.godot' || root === 'override.cfg' || entries.some(entry => entry.name === root))
-        throw new Error(`Godot sandbox file target already exists in the source project: res://${root}`)
-    }
-
     await Promise.all(entries.map(async (entry) => {
       if (entry.name === 'project.godot' || entry.name === 'override.cfg')
         return
@@ -68,11 +56,6 @@ export async function createGodotProjectSandbox(
     const sourceOverride = path.join(projectPath, 'override.cfg')
     const override = existsSync(sourceOverride) ? await readFile(sourceOverride, 'utf8') : ''
     await writeFile(path.join(sandbox.path, 'override.cfg'), setUserDataSettings(override, customUserDir))
-    await Promise.all(sandboxFiles.map(async (file) => {
-      const destination = path.join(sandbox.path, file.target)
-      await mkdir(path.dirname(destination), { recursive: true })
-      await copyFile(file.source, destination)
-    }))
 
     return sandbox
   }

@@ -77,10 +77,11 @@ mise run godot:open
 ```
 
 The legacy pause-menu collection and replay workflows are unavailable while the
-old Mod is disabled. Use `mise run domekeeper:vidot:test` for the active
-DataCollectorAI gameplay proof. Use `mise run domekeeper:vidot:record` for the
-same proof in a real window through Godot Movie Maker; it writes
-`recordings/move.avi`.
+old Mod is disabled. The former ViDot loopback WebSocket RPC gameplay and movie
+proofs have also been removed so that transport is not retained as the target
+design. Their basic Godot and ViKeeper fixture assets remain in the repository,
+but they are not runnable until the Godot-native adapter is implemented. Use
+`mise run godot:check` for the current DataCollectorAI Mod-load validation.
 
 ### 2. Train a Baseline (Ultralytics)
 

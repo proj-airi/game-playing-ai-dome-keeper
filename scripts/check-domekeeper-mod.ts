@@ -3,7 +3,7 @@ import { existsSync, lstatSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execa } from 'execa'
-import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from '../packages/vidot/src/sandbox.ts'
+import { cleanupGodotProjectSandbox, createGodotProjectSandbox } from './godot-project-sandbox.ts'
 
 const godot = process.env.GODOT_BIN
 const version = process.env.DOMEKEEPER_VERSION

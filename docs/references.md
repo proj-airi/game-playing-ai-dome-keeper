@@ -21,20 +21,22 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Godot Testing and Automation
 
-- [Vitest](https://vitest.dev/) — The outer test runner whose CLI, file discovery, filter inputs, watch mode, scheduling, and reporting are retained while Godot dynamically collects ViDot test modules and applies selection within each collected tree.
-- [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter and one Godot process per test file.
-- [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration that ViDot's Godot-side dynamic collector and compatibility fixtures track for the supported minor.
+- [Vitest](https://vitest.dev/) — The outer test runner whose CLI, candidate test-file discovery, filter inputs, watch mode, scheduling, and reporting are retained while Godot dynamically collects ViDot test modules and applies selection within each collected tree.
+- [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter, which forwards a file batch to one Godot runner instead of evaluating the tests in Node.js.
+- [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration used as a semantic reference for ViDot's Godot-side collector and compatibility fixtures, not as a Node-side collector in ViDot's runtime.
 - [Vitest 4.1.10: Task-Mode Interpretation](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/utils/collect.ts) — The upstream `.only`, `.skip`, name, location, and task-selection behavior ported to the dynamically collected Godot tree.
 - [Vitest: Expect](https://vitest.dev/api/expect) — The assertion contract ViDot preserves for direct assertions in test and hook callbacks: ordinary assertions stop the callback, while `expect.soft` records a failure and continues.
 - [Vitest: Setup and Teardown](https://vitest.dev/guide/learn/setup-teardown) — The lifecycle contract requiring `afterEach` cleanup even when a test fails.
 - [Vitest: Test Run Lifecycle](https://vitest.dev/guide/lifecycle) — The collection, hook, test, and reporting order mirrored by the Godot-side runner.
 - [Vitest: Test Context](https://vitest.dev/guide/test-context) — The callback-context model followed by ViDot's Godot-native `tree` context.
-- [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI.
+- [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which each Vitest project enables ViDot and selects either an editable Godot project directory or a standalone unencrypted PCK.
 - [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system populated by ViDot's custom-pool adapter.
-- [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
+- [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot retains Vitest for outer orchestration and reporting.
 - [GUT Quick Start](https://gut.readthedocs.io/en/latest/Quick-Start.html) — Godot-native testing prior art for test classes, per-test hooks, and assertions.
 - [GdUnit4 Assertions](https://godot-gdunit-labs.github.io/gdUnit4/latest/testing/assert/) — Godot-native assertion prior art reviewed while defining ViDot's smaller Vitest-compatible assertion slice.
-- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility whose original project instances remain available while ViDot runs its own test scene.
+- [Godot 4.3: Command-Line Tutorial](https://docs.godotengine.org/en/4.3/tutorials/editor/command_line_tutorial.html) — The `--path`, `--main-pack`, and `--script` launch boundaries behind ViDot's configurable editable-project and standalone-PCK target forms.
+- [Godot 4.3 source: Project Setup](https://github.com/godotengine/godot/blob/4.3-stable/core/config/project_settings.cpp#L538-L670) — The engine setup path showing that `--path` loads a source project and `--main-pack` loads a PCK and its packaged project settings.
+- [Godot 4.3 source: Scripted `SceneTree` Startup](https://github.com/godotengine/godot/blob/4.3-stable/main/main.cpp#L3505-L3704) — The startup path showing that an external runner script replaces the default main-scene entry while the target's configured Autoloads are still instantiated.
 
 ## Mod Development and Godot 4.3
 
@@ -70,7 +72,6 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `Window.Mode`](https://docs.godotengine.org/en/4.3/classes/class_window.html#enum-window-mode) — The runtime window-mode contract used to require a decorated Movie Maker window after Dome Keeper loads its options.
 - [Godot 4.3: Creating Movies](https://docs.godotengine.org/en/4.3/tutorials/animation/creating_movies.html) — The Movie Maker guide used for deterministic fixed-frame-rate replay recording.
 - [Godot 4.3: Project Organization](https://docs.godotengine.org/en/4.3/tutorials/best_practices/project_organization.html) — The organization guidance consulted when defining responsibility boundaries during teacher cleanup.
-- [Godot 4.3: Command-Line Tutorial](https://docs.godotengine.org/en/4.3/tutorials/editor/command_line_tutorial.html) — The command-line reference used for headless validation and Movie Maker launches.
 - [Godot 4.3: Input Events](https://docs.godotengine.org/en/4.3/tutorials/inputs/inputevent.html#how-does-it-work) — The input-flow guide supporting normal UI-driven upgrade and modal interaction.
 - [Godot 4.3: Physics Introduction](https://docs.godotengine.org/en/4.3/tutorials/physics/physics_introduction.html) — The physics-timing guide behind running active Laser aiming on physics ticks.
 - [Godot 4.3: Pausing Games](https://docs.godotengine.org/en/4.3/tutorials/scripting/pausing_games.html) — The pause-behavior guide used to coordinate upgrade menus, combat, and restored station control.
@@ -78,7 +79,6 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: `Node.add_to_group`](https://docs.godotengine.org/en/4.3/classes/class_node.html#class-node-method-add-to-group) — The grouping API used to mark dynamically discovered interfaces that should suspend capture.
 - [Godot 4.3: `OS.shell_open`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-shell-open) — The system-opening API used to reveal the current dataset directory after capture stops.
 - [Godot 4.3: ProjectSettings](https://docs.godotengine.org/en/4.3/classes/class_projectsettings.html) — The project-settings reference used for target rendering configuration and per-process custom `user://` isolation.
-- [Godot 4.3: `OS.get_user_data_dir`](https://docs.godotengine.org/en/4.3/classes/class_os.html#class-os-method-get-user-data-dir) — The runtime path query used to fail closed unless a ViDot process received its expected isolated user-data directory.
 
 ## Vision, Datasets, and Experiments
 
@@ -120,7 +120,7 @@ This page collects external resources useful for understanding and maintaining t
 - [typescript-to-gdscript commit 5675bd8: Programmatic Converter](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/index.ts#L10-L46) — The upstream public `convertTsToGd` seam used after ViDot generates tstogd's required class-shaped TypeScript wrapper, without a patch or fork.
 - [typescript-to-gdscript commit 5675bd8: Module Transformation](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/transformer.ts#L304-L437) — The upstream exported-class and top-level-statement constraints that make ViDot's test-module wrapper necessary.
 - [typescript-to-gdscript commit 5675bd8: Import Transformation](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/src/converter/ts-to-gd/imports.ts#L75-L160) — The converter's import behavior, which ViDot inherits after binding its own virtual `@vidot/test` module.
-- [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used by ViDot's TypeScript-authored runtime code.
+- [typescript-to-gdscript Configuration](https://github.com/nnn3d/typescript-to-gdscript/blob/master/docs/configuration.md) — The compiler and Godot-typings configuration used by DataCollectorAI and the retained ViKeeper runtime fixture, and expected by the future ViDot runner.
 - [typescript-to-gdscript commit 5675bd8: Transform Rules](https://github.com/nnn3d/typescript-to-gdscript/blob/5675bd8f157977afed754576c67e41b11e757554/docs/transform-rules.md#restrictions--unsupported-typescript-features) — The documented TypeScript-to-GDScript language boundary inherited by ViDot, including unsupported exception constructs.
 - [Node.js Release Schedule](https://nodejs.org/en/about/previous-releases) — The Node.js release and LTS schedule used to select the pinned runtime for npm package executables.
 - [Node.js File-System Promises API](https://nodejs.org/api/fs.html#promises-api) — The asynchronous file-system API used by the status dashboard development server to read live snapshots.

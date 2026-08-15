@@ -1,8 +1,6 @@
 # Basic ViDot Example
 
-This directory keeps a minimal editable Godot project and its ViDot integration
-test together. From the repository root, run:
-
-```bash
-mise run vidot:test
-```
+This directory retains the Godot assets for ViDot's minimal editable-project
+fixture. The former Vitest lifecycle and loopback WebSocket RPC test have been
+removed, so there is currently no runnable ViDot example here. The fixture will
+be reconnected after the Godot-native adapter is implemented.

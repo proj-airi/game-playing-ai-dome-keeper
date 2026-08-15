@@ -1,24 +1,15 @@
 # ViKeeper
 
-ViKeeper is the Dome Keeper-specific test adapter above
-[`@vidot/vitest`](../vidot/README.md). It finds the decompiled project that
-actually links the tested Mod and places its generated test scene under
-`res://__vikeeper/` only inside ViDot's isolated project mirror.
+ViKeeper is the planned Dome Keeper-specific wrapper above ViDot. Its previous
+adapter depended on ViDot's loopback WebSocket RPC implementation and has been
+removed with that transport.
 
-Configure the adapter from Vitest:
+The Godot scene and TypeScript-authored runtime assets under `runtime/` remain
+as a fixture, but no current test harness launches them. They model an Engineer
+and Laser on a minimal map built with Dome Keeper's `MapData` API and keep that
+game-specific setup outside the production DataCollectorAI Mod.
 
-```ts
-export default setupViKeeper({
-  modPath,
-  movie: process.env.VIDOT_MOVIE,
-  projectsPath,
-  root,
-})
-```
-
-The Mod manifest supplies the Mod ID used to inspect links; Godot Mod Loader
-remains the owner of game-version compatibility. The current fixture starts an
-Engineer and Laser directly on a minimal map built with Dome Keeper's `MapData`
-API, then sends one ordinary Enter key event through the landing stage's native
-skip path as soon as the map is ready. DataCollectorAI keeps its own controller
-assertions and does not contain the game test scene.
+The fixture is currently non-runnable. The pending Godot-native adapter will
+reconnect it, with ViKeeper owning Dome Keeper and Mod startup while generic
+ViDot remains unaware of Mod packaging and loading. See
+[`docs/vidot.md`](../../docs/vidot.md) for that target contract.

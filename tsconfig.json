@@ -14,12 +14,9 @@
     "alint.config.ts",
     "scripts/**/*.ts",
     "apps/**/*.ts",
-    "packages/**/*.ts",
-    "examples/**/*.ts",
-    "mods/*/test/**/*.ts"
+    "packages/**/*.ts"
   ],
   "exclude": [
-    "packages/vidot",
     "packages/vikeeper",
     "packages/status-dashboard"
   ]
