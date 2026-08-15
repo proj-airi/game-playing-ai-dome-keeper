@@ -21,19 +21,28 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Godot Testing and Automation
 
-- [Vitest](https://vitest.dev/) — The test runner that owns ViDot's collection, filtering, watch mode, scheduling, assertions, and reporting.
-- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The file-scoped fixture API that lets `@vidot/vitest` own one Godot process per test file without exposing lifecycle hooks to tests.
-- [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI or configuration file.
-- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session boundary used to provide ViDot's validated launch configuration before test workers start.
-- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by ViDot.
+- [Vitest](https://vitest.dev/) — The outer test runner whose CLI, file discovery, filtering, watch mode, scheduling, and reporting are retained while Godot collects and executes ViDot test modules.
+- [Vitest: Custom Pool](https://vitest.dev/guide/advanced/pool) — The advanced, experimental integration boundary selected to schedule one Godot process per test file; ViDot pins the supported Vitest minor because this API is low-level.
+- [Vitest: Expect](https://vitest.dev/api/expect) — The assertion contract ViDot follows: ordinary assertions terminate the current test body, while `expect.soft` records a failure and continues.
+- [Vitest: Setup and Teardown](https://vitest.dev/guide/learn/setup-teardown) — The lifecycle contract requiring `afterEach` cleanup even when a test fails.
+- [Vitest: Test Run Lifecycle](https://vitest.dev/guide/lifecycle) — The collection, hook, test, and reporting order mirrored by the Godot-side runner.
+- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The file-scoped fixture API used by the checked-in WebSocket prototype; the Godot-native replacement uses a custom pool instead.
+- [Vitest: Configuration](https://vitest.dev/config/) — The configuration boundary through which a project enables ViDot without a separate ViDot CLI.
+- [Vitest: Global Setup](https://vitest.dev/config/globalsetup) — The once-per-test-session boundary used by the checked-in prototype to provide launch configuration before test workers start.
+- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system reused by both the prototype and its replacement.
 - [Vieval](https://github.com/vieval-dev/vieval) — A test-evaluation runner reviewed as prior art; its independent CLI and configuration are unnecessary because ViDot delegates runner responsibilities to Vitest.
-- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request, response, error, and notification model used as the basis for ViDot's small JSON-RPC-like WebSocket protocol.
-- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility used to load ViDot's temporary bridge runtime before project scenes.
-- [Godot 4.3: WebSocketPeer](https://docs.godotengine.org/en/4.3/classes/class_websocketpeer.html) — The WebSocket peer API used by the ViDot Autoload, including its required polling model.
-- [Godot 4.3: TCPServer](https://docs.godotengine.org/en/4.3/classes/class_tcpserver.html) — The loopback server accepted by `WebSocketPeer` for ViDot's single-client bridge.
+- [GUT Quick Start](https://gut.readthedocs.io/en/latest/Quick-Start.html) — Godot-native testing prior art for test classes, per-test hooks, and assertions.
+- [GdUnit4 Assertions](https://godot-gdunit-labs.github.io/gdUnit4/latest/testing/assert/) — Godot-native assertion prior art reviewed while defining ViDot's smaller Vitest-compatible assertion slice.
+- [Godot 4.6: ProjectSettings](https://docs.godotengine.org/en/4.6/classes/class_projectsettings.html) — The documented exported-project `override.cfg` mechanism used by the successful stock-release bootstrap probe.
+- [Godot 4.6.2 source: project settings loading](https://github.com/godotengine/godot/blob/4.6.2-stable/core/config/project_settings.cpp) — The exact engine path showing that an executable-adjacent `override.cfg` is loaded after the original PCK project settings unless overrides are disabled.
+- [Godot 4.6: Command-Line Tutorial](https://docs.godotengine.org/en/4.6/tutorials/editor/command_line_tutorial.html) — The command availability legend used to distinguish stock release-template options from editor and custom-template launch paths.
+- [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification) — The request and response model used by the checked-in WebSocket prototype; that transport is superseded by the Godot-native design.
+- [Godot 4.3: Autoloads Versus Regular Nodes](https://docs.godotengine.org/en/4.3/tutorials/scripting/singletons_autoload.html) — The engine facility used by the checked-in prototype's temporary bridge and preserved from the original project during replacement bootstrap.
+- [Godot 4.3: WebSocketPeer](https://docs.godotengine.org/en/4.3/classes/class_websocketpeer.html) — The polling WebSocket API used only by the checked-in prototype.
+- [Godot 4.3: TCPServer](https://docs.godotengine.org/en/4.3/classes/class_tcpserver.html) — The loopback server used only by the checked-in prototype.
 - [Godot source: `TCPServer::listen`](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/core/io/tcp_server.cpp#L530-L586) — The upstream implementation supporting port `0` for an OS-selected ephemeral ViDot port.
-- [Godot 4.3: Object](https://docs.godotengine.org/en/4.3/classes/class_object.html) — The dynamic property, method, and signal APIs behind ViDot's `get`, `set`, `call`, and `waitForSignal` commands; Godot exposes property-list changes but no universal property-value change signal.
-- [Godot 4.3: GDScript VM member storage](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/modules/gdscript/gdscript_vm.cpp#L678-L681) — The upstream implementation showing direct script-member storage, which rules out a complete property-change observer implemented only around `Object.set` and motivates bounded observation of active `waitForProperty` requests.
+- [Godot 4.3: Object](https://docs.godotengine.org/en/4.3/classes/class_object.html) — The dynamic property, method, and signal APIs behind the checked-in prototype's remote commands.
+- [Godot 4.3: GDScript VM member storage](https://github.com/godotengine/godot/blob/77dcf97d82cbfe4e4615475fa52ca03da645dbd8/modules/gdscript/gdscript_vm.cpp#L678-L681) — The upstream implementation that motivated bounded property observation in the checked-in prototype; the replacement removes that remote wait API.
 
 ## Mod Development and Godot 4.3
 
