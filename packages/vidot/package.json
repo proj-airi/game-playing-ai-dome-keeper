@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./test": {
+      "types": "./src/test.d.ts"
+    }
   },
   "files": [
     "runtime/runner.gd",

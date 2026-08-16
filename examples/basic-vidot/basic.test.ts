@@ -1,5 +1,5 @@
 import type { _Example } from './src/main.ts'
-import { describe, expect, test } from '@vidot/test'
+import { describe, expect, test } from '@vidot/vitest/test'
 
 describe('editable Godot project', () => {
   const expectedValue = 7

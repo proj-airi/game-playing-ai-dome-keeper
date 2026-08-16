@@ -14,7 +14,6 @@
     "@alint-js/plugin-js": "0.4.0",
     "@antfu/eslint-config": "^7.4.2",
     "@types/node": "^24.13.3",
-    "@vidot/test": "workspace:*",
     "@vidot/vitest": "workspace:*",
     "eslint": "^10.0.0",
     "execa": "^10.0.1",

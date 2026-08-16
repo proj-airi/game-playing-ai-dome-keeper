@@ -55,15 +55,15 @@ A test module is adapted only where tstogd requires it:
 
 - module-level executable statements are placed in a generated
   `vidot_collect(api)` method;
-- every currently supported test API name is bound to a Godot Callable while
+- every name from `@vidot/vitest/test` is bound to a Godot Callable while
   the original calls remain unchanged;
 - a block-bodied arrow passed directly to a standalone registration call is
   first stored in an adjacent local variable because tstogd 0.1.3 does not emit
   that block correctly in argument position.
 
-The retained `@vidot/test` import emits no GDScript. All other supported syntax
-and behavior comes from tstogd. ViDot does not rewrite assertions or helper
-control flow.
+The retained authoring import emits no GDScript. All other supported syntax and
+behavior comes from tstogd. ViDot does not rewrite assertions or helper control
+flow.
 
 ## Current Test API
 
