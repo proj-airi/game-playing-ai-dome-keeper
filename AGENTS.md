@@ -6,7 +6,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 - Run `mise install`, then `mise run setup`, to install pinned tools and locked dependencies.
 - Use `mise.toml` as the executable source of truth and `mise tasks` to discover repository commands. Use mise tasks and pinned tools instead of ambient substitutes.
-- After code changes, run `mise run check`; it covers the Godot mod load check, ESLint, and TypeScript/Vue typechecking.
+- After code changes, run `mise run check`; it covers the Godot mod load check, the basic ViDot integration proof, ESLint, and TypeScript/Vue typechecking.
 - Before decompiling, launching, or testing Dome Keeper, read [`docs/development.md`](docs/development.md). Decompilation requires an owned local game and configured machine-local inputs; it is not part of unconditional setup.
 
 ## Tool Ownership
@@ -60,6 +60,9 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Keep this root file focused on the first-read development contract, cross-cutting agent instructions, and task-based documentation routes.
 - Before changing a subsystem, read only the relevant document listed below.
 - When a decision or assumption changes, update its owning document automatically.
+- Keep active documentation concise and current. Delete superseded behavior and
+  design history instead of retaining migration notes or warnings against old
+  implementations.
 - Update `docs/references.md` only when the external reference material changes.
 - Prefer reliable workflow automation, using manual steps only as fallback.
 
@@ -84,12 +87,10 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 ## Current Priority
 
-- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled while rebuilding
-  Godot-native ViDot. The old WebSocket RPC test path has been removed; retain
-  the basic ViDot and ViKeeper Godot fixture assets, but treat them as
-  non-runnable until the new adapter exists. Use `mise run godot:check` for the
-  current DataCollectorAI Mod-load validation, and keep the legacy source only
-  as an unloaded reference.
+- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled. Maintain the
+  editable-project ViDot proof through `mise run vidot:test`, reconnect the
+  ViKeeper fixture next, and use `mise run godot:check` for the current
+  DataCollectorAI Mod-load validation.
 
 ## Unattended Long-Run Optimization
 

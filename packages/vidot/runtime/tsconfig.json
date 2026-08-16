@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "noLib": true,
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "../node_modules/typescript-to-gdscript/typings",
+    "src/**/*.ts"
+  ]
+}

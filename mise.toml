@@ -46,7 +46,11 @@ run = "pnpm run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
-depends = ["godot:check", "lint", "typecheck"]
+depends = ["godot:check", "lint", "typecheck", "vidot:test"]
+
+[tasks."vidot:test"]
+description = "Run the basic Godot-native ViDot integration test"
+run = "pnpm --dir packages/vidot run test"
 
 [tasks."vikeeper:build"]
 description = "Build the TypeScript-authored Dome Keeper test fixture"

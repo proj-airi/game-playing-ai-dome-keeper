@@ -11,15 +11,6 @@
     "noEmit": true
   },
   "include": [
-    "alint.config.ts",
-    "scripts/**/*.ts",
-    "apps/**/*.ts",
-    "packages/**/*.ts"
-  ],
-  "exclude": [
-    "packages/vidot/runtime",
-    "packages/vidot-test",
-    "packages/vikeeper",
-    "packages/status-dashboard"
+    "src/**/*.ts"
   ]
 }

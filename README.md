@@ -76,11 +76,7 @@ task, and `Quark Action` structure.
 mise run godot:open
 ```
 
-The legacy pause-menu collection and replay workflows are unavailable while the
-old Mod is disabled. The former ViDot loopback WebSocket RPC gameplay and movie
-proofs have also been removed so that transport is not retained as the target
-design. Their basic Godot and ViKeeper fixture assets remain in the repository,
-but they are not runnable until the Godot-native adapter is implemented. Use
+The basic editable-project ViDot proof runs with `mise run vidot:test`. Use
 `mise run godot:check` for the current DataCollectorAI Mod-load validation.
 
 ### 2. Train a Baseline (Ultralytics)

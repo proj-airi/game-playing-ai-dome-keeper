@@ -10,53 +10,22 @@ unless an explicit project decision says so.
 
 ## Capability Milestones
 
-### Implement Godot-Native ViDot Test Execution — Design Frozen
+### Implement Godot-Native ViDot Test Execution — First Editable Proof Working
 
-- Keep Vitest's candidate file discovery, filter-facing CLI and configuration,
-  watch, scheduling, and reporters through a custom-pool integration targeting
-  Vitest 4.1.10. Pass candidate paths and raw selection inputs to Godot; only
-  Godot evaluates each module, collects its test tree, and applies in-tree
-  selection.
-- Convert Vitest-shaped TypeScript test modules with tstogd, evaluate their
-  top-level code in Godot, build the test tree there, and execute hooks,
-  assertions, bodies, signals, and frame waits in the game runtime.
-- Let each Vitest project configuration select an editable Godot project
-  directory or standalone unencrypted PCK, then handle its candidate files
-  sequentially in one Godot runner. Give every file a fresh generated module
-  and tree, release test-owned scenes after each test, and release file state
-  after `afterAll`.
-- Prove the shared runtime against both the editable fixture project and its
-  standalone fixture PCK, then start the owned Dome Keeper PCK and migrate the
-  existing ViKeeper Move test. ViKeeper must accept the DataCollectorAI Mod
-  project, prepare its Dome Keeper-specific startup, and let the real game Mod
-  Loader validate and load it without adding Mod semantics to ViDot. The old
-  loopback WebSocket RPC predecessor has been removed; retain its Godot fixture
-  assets as non-runnable inputs until this adapter reconnects them.
-- Treat Godot 4.3.1 as the first supported engine baseline without a runtime
-  version gate. Include editable project directories and separate unencrypted
-  PCKs; defer only embedded and encrypted PCKs.
-- Extend the initial Vitest-compatible API only when a real test requires more
-  than the frozen first slice in [`vidot.md`](vidot.md).
+- Keep the editable-project proof passing through `mise run vidot:test`.
+- Add a configured PCK target for the Dome Keeper integration.
+- Extend the test API only when a concrete test requires it.
 
-### Reconnect the First Dome Keeper ViKeeper Fixture — Pending Adapter
+### Reconnect the First Dome Keeper ViKeeper Fixture — Pending Wrapper
 
-- Retain the controlled game-scene assets in the Dome Keeper-specific ViKeeper
-  package, above the generic ViDot boundary and outside the production Mod. The
-  old RPC harness is gone, so these assets are not currently runnable as a
-  ViDot test.
-- Re-establish one DataCollectorAI Move proof with one explicitly imported
+- Connect the retained ViKeeper scene to ViDot and establish one DataCollectorAI
+  Move proof with one explicitly imported
   controlled test map, one Quark Action executed through `TaskExecutor`,
   signal-first completion waiting, and a final assertion that the character is
   inside the target tile.
-- Keep sequential test execution within a file and explicit action and scene
-  cleanup.
-- Treat this proof as a prerequisite for expanding the recursive `TaskExecutor`
-  implementation to more actions and compound-task behavior.
-- Reconnect this proof through Godot-native ViDot after both generic fixture
-  target forms pass; ViKeeper, not ViDot, remains responsible for constructing
-  the Dome Keeper scene and dependencies used by the test. ViKeeper also owns
-  helping the configured DataCollectorAI Mod project participate in target
-  startup.
+- Keep Dome Keeper and Mod startup in ViKeeper rather than generic ViDot.
+- Use this proof before expanding `TaskExecutor` to more actions or compound
+  tasks.
 
 ### Replace the Existing Collector with the TypeScript AI Mod
 

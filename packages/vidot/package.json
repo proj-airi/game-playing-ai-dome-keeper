@@ -2,5 +2,25 @@
   "name": "@vidot/vitest",
   "type": "module",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "runtime/runner.gd",
+    "src"
+  ],
+  "scripts": {
+    "build": "cd runtime && tstogd convert --godot-path \"$GODOT_BIN\" --project-root ../../../examples/basic-vidot",
+    "prepack": "pnpm run build",
+    "test": "pnpm run build && cd ../../examples/basic-vidot && tstogd convert --godot-path \"$GODOT_BIN\" && vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p runtime/tsconfig.json && tsc -p ../../examples/basic-vidot/tsconfig.json"
+  },
+  "dependencies": {
+    "@vitest/runner": "4.1.10",
+    "execa": "^10.0.1",
+    "typescript": "^5.9.3",
+    "typescript-to-gdscript": "^0.1.3",
+    "vitest": "4.1.10"
+  }
 }

@@ -33,14 +33,10 @@ planner completeness, search semantics, partial ordering, or method-effect
 semantics. The exact source-file layout and the TypeScript data types are not
 frozen yet.
 
-DataCollectorAI does not depend on or register APIs with ViDot. The former
-ViKeeper proof reached it through ViDot's loopback WebSocket RPC implementation;
-that harness and its runnable Vitest entry points have been deliberately
-removed. The basic ViDot and ViKeeper Godot fixture assets remain, but they are
-currently non-runnable and will be reconnected through the pending Godot-native
-adapter. ViKeeper will continue to own the Dome Keeper-only scene and startup,
-while DataCollectorAI-specific assertions belong with this Mod. No test scene
-is compiled or installed beneath the production Mod.
+DataCollectorAI does not depend on or register APIs with ViDot. ViKeeper owns
+the Dome Keeper test scene and startup, while DataCollectorAI-specific
+assertions stay with this Mod. No test scene is compiled or installed beneath
+the production Mod.
 
 Build the generated runtime files with:
 

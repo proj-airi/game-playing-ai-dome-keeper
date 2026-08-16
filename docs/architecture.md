@@ -22,9 +22,8 @@ implements its Dome Keeper game-playing integration.
   as dormant behavior and data-collection references. They are not linked into
   newly decompiled projects, and their collection, replay, and dashboard
   producer workflows are inactive.
-- The old ViDot loopback WebSocket RPC implementation has been deliberately
-  removed. The basic ViDot and ViKeeper Godot fixture assets remain but are not
-  runnable until the Godot-native adapter is implemented.
+- A minimal Godot-native ViDot adapter runs the basic editable-project fixture
+  end to end. The ViKeeper fixture is not connected yet.
 - Runtime Vision inference does not yet control gameplay.
 
 ## Confirmed Target Runtime Architecture
@@ -86,48 +85,14 @@ The HTN literature is a design reference, not an implementation contract.
 
 ## ViDot Test Topology
 
-The topology below is the confirmed target, not a description of a currently
-runnable harness. Godot-native ViDot will compile Vitest-shaped TypeScript test
-modules through tstogd, and the real Godot runtime will collect and execute
-their test trees.
+Vitest discovers candidate files and reports results through a ViDot custom
+pool. The Node.js adapter compiles the test modules and starts the configured
+editable Godot project. Godot evaluates the modules, collects the authoritative
+test trees, and executes the tests sequentially in one process.
 
-ViKeeper is the thin Dome Keeper-specific layer above that generic boundary. It
-owns Dome Keeper startup, test scenes, and the planned map-definition DSL.
-ViDot starts its test runner instead of the selected target's original main
-scene, so ViKeeper explicitly constructs the game scene and dependencies a test
-needs. DataCollectorAI keeps only its assertions, and its production Mod does
-not contain the test runtime.
-
-Vitest retains candidate test-file discovery, its filter-facing CLI and
-configuration, watch mode, scheduling, and reporting through a ViDot custom
-pool. The Node.js adapter compiles the candidate modules, passes their paths and
-raw selection inputs to Godot, and mirrors Godot's one-way tree and result
-events into Vitest. It does not evaluate test modules, collect their trees, or
-select tests.
-
-Each Vitest project configuration selects an editable Godot project directory
-or a standalone unencrypted PCK. The adapter starts that configured target with
-its project settings and original Autoload configuration, then one Godot runner
-handles candidate test files sequentially. Godot evaluates each generated
-module's top-level code, dynamically collects and selects the authoritative test
-tree, and runs hooks, assertions, bodies, and engine waits. Test-owned scenes
-are released after each test; the generated module, hooks, and tree are released
-after each file. The configured target remains alive until the runner exits.
-
-The configured target and the production Mod under test are separate inputs.
-The user or an upper wrapper owns how application-specific components join
-startup; ViDot does not define a generic Mod loader or packaging contract.
-ViKeeper is the first wrapper and helps a configured DataCollectorAI Mod project
-start against the selected Dome Keeper target. ViDot itself is not installed as
-a Mod.
-
-The first supported engine baseline is Godot 4.3.1 without a runtime version
-gate. Later versions may work but are not guaranteed. Editable project
-directories and separate unencrypted PCKs, including those from released games,
-are in scope; PCKs embedded in an executable and encrypted PCKs are deferred.
-The runner does not permanently modify the target or require a ViDot Mod,
-Autoload, GDExtension, or production source change. The detailed contract
-belongs to [`vidot.md`](vidot.md).
+ViKeeper is the Dome Keeper-specific layer above ViDot. It will own game and
+Mod startup while ViDot remains unaware of Mod packaging. The current contract
+and example live in [`vidot.md`](vidot.md).
 
 ## Evidence for Target Design
 
