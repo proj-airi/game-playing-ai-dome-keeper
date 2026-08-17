@@ -13,17 +13,16 @@ unless an explicit project decision says so.
 ### Implement Godot-Native ViDot Test Execution — First Editable Proof Working
 
 - Keep the editable-project proof passing through `mise run vidot:test`.
-- Add a configured PCK target for the Dome Keeper integration.
 - Extend the test API only when a concrete test requires it.
 
-### Reconnect the First Dome Keeper ViKeeper Fixture — Pending Wrapper
+### Connect the First Dome Keeper ViKeeper Test — Complete
 
-- Connect the retained ViKeeper scene to ViDot and establish one DataCollectorAI
-  Move proof with one explicitly imported
-  controlled test map, one Quark Action executed through `TaskExecutor`,
-  signal-first completion waiting, and a final assertion that the character is
-  inside the target tile.
-- Keep Dome Keeper and Mod startup in ViKeeper rather than generic ViDot.
+- Keep the DataCollectorAI-owned fixture and Move test passing through the
+  ViKeeper Dome Keeper wrapper, with a controlled map, signal-first completion,
+  one Quark Action executed through `TaskExecutor`, and a final target-tile
+  assertion.
+- Keep headless and Movie Maker launch policy in ViKeeper, while each Mod owns
+  its fixture, startup behavior, and assertions.
 - Use this proof before expanding `TaskExecutor` to more actions or compound
   tasks.
 

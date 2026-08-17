@@ -39,7 +39,9 @@ export default defineConfig({
 ```
 
 `godotPath` may be supplied to `vidot`; otherwise it resolves from `GODOT_BIN`
-and then `godot`.
+and then `godot`. Wrappers may supply a `launch` callback to add generic Godot
+arguments, environment variables, and before/after process hooks; ordinary
+ViDot use defaults to headless execution.
 
 Vitest and `@vitest/runner` are pinned to 4.1.10 because the custom-pool API is
 experimental. Godot 4.3.1 is the tested engine baseline.
@@ -73,7 +75,14 @@ The current runner implements:
 - `beforeAll`, `beforeEach`, `afterEach`, and `afterAll`;
 - `expect(...).toBe(...)` and `expect(...).toEqual(...)`;
 - synchronous and asynchronous callbacks;
-- a callback context containing the real Godot `SceneTree` as `tree`.
+- a callback context containing the real Godot `SceneTree` as `tree`;
+- `instantiate(path)` for instantiating an external GDScript file;
+- `waitUntil(predicate, timeoutMs)` for frame-driven bounded waits.
+
+`instantiate` records an assertion failure and returns `null` when the
+script cannot be read, compiled, or instantiated. `waitUntil` evaluates the
+predicate once per process frame and returns its final boolean state at the
+deadline.
 
 Matchers record failures and return a boolean. They do not stop the callback.
 Tests that need fail-fast behavior use ordinary control flow:
@@ -91,7 +100,8 @@ Godot sends collected trees and results as structured stdout events. The Node.js
 adapter rehydrates those records and uses Vitest's worker reporting channel;
 Godot does not implement the Vitest worker protocol.
 
-## Next Milestone
+## Dome Keeper Integration
 
-Reconnect the ViKeeper Move fixture through this adapter. Add target forms or
-Vitest behavior only when that proof or another concrete test requires them.
+ViKeeper composes `vidot()` with Dome Keeper launch policy. ViDot remains
+game-agnostic, and each Mod owns its tests, fixtures, and assertions. `mise run
+domekeeper:vidot:test` exercises the first DataCollectorAI Move proof.

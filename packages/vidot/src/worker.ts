@@ -47,9 +47,10 @@ export async function runViDot(
     const files = await compileFiles(state, outputRoot)
     const filesByPath = indexFiles(files)
     let finished = false
+    const launch = options.launch({ method })
 
     const args = [
-      '--headless',
+      ...launch.args,
       '--path',
       options.projectPath,
       '--script',
@@ -58,7 +59,9 @@ export async function runViDot(
       ...(method === 'collect' ? ['--vidot-collect'] : []),
       ...files.map(file => `--vidot-test=${file.scriptPath}`),
     ]
+    await launch.before?.()
     const child = execa(options.godotPath, args, {
+      env: launch.env,
       reject: false,
       stderr: 'inherit',
       stdout: 'pipe',
@@ -114,6 +117,8 @@ export async function runViDot(
           `Godot did not finish: ${incomplete.map(file => file.specification.filepath).join(', ')}`,
         )
       }
+
+      await launch.after?.()
     }
     finally {
       activeCancellations.delete(cancel)

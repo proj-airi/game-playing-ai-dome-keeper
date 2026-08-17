@@ -1,7 +1,3 @@
-interface TestContext {
-  tree: SceneTree
-}
-
 interface TaskBase {
   id: string
   name: string
@@ -180,6 +176,36 @@ export class _Runner extends SceneTree {
     this._active_errors.append(this._error(message, 'AssertionError'))
   }
 
+  instantiate(path: string): unknown {
+    const loaded = this._load_test_script(path)
+    if (loaded.script === null) {
+      this.record_assertion(loaded.error)
+
+      return null
+    }
+
+    const instance = loaded.script.new()
+    if (instance === null) {
+      this.record_assertion(`could not instantiate script ${path}`)
+
+      return null
+    }
+
+    return instance
+  }
+
+  async waitUntil(predicate: Callable, timeoutMs: int): Promise<bool> {
+    const deadline = Time.get_ticks_msec() + timeoutMs
+    while (Time.get_ticks_msec() < deadline) {
+      if (predicate.call())
+        return true
+
+      await this.process_frame
+    }
+
+    return predicate.call() === true
+  }
+
   private async _run_suite(
     suite: SuiteTask,
     parents: Array<SuiteTask>,
@@ -206,7 +232,7 @@ export class _Runner extends SceneTree {
     const started_at = Time.get_ticks_msec()
     this._active_errors = []
     this._emit({ type: 'test_start', file: this._current_file, id: task.id })
-    const context: TestContext = { tree: this }
+    const context = this._test_context()
 
     for (const suite of lineage)
       await this._run_callbacks(suite.before_each, context)
@@ -231,12 +257,12 @@ export class _Runner extends SceneTree {
     this._emit(event)
   }
 
-  private async _run_callbacks(callbacks: Array<Callable>, context: TestContext): Promise<void> {
+  private async _run_callbacks(callbacks: Array<Callable>, context: _Runner.Context): Promise<void> {
     for (const callback of callbacks)
       await this._run_callback(callback, context)
   }
 
-  private async _run_callback(callback: Callable, context: TestContext): Promise<void> {
+  private async _run_callback(callback: Callable, context: _Runner.Context): Promise<void> {
     if (callback.get_argument_count() === 0) {
       await callback.call()
 
@@ -248,8 +274,12 @@ export class _Runner extends SceneTree {
 
   private async _run_file_hooks(callbacks: Array<Callable>): Promise<void> {
     this._active_errors = []
-    await this._run_callbacks(callbacks, { tree: this })
+    await this._run_callbacks(callbacks, this._test_context())
     this._file_errors.append_array(this._active_errors)
+  }
+
+  private _test_context(): _Runner.Context {
+    return _Runner.Context.create(this)
   }
 
   private async _cleanup_test_nodes(): Promise<void> {
@@ -339,6 +369,27 @@ export class _Runner extends SceneTree {
 // eslint-disable-next-line ts/no-namespace
 export namespace _Runner {
   export const EVENT_PREFIX = 'VIDOT '
+
+  export class Context extends RefCounted {
+    tree!: SceneTree
+    private _runner!: TSOnly<_Runner>
+
+    static create(runner: TSOnly<_Runner>): Context {
+      const context = new Context()
+      context.tree = runner
+      context._runner = runner
+
+      return context
+    }
+
+    instantiate(path: string): unknown {
+      return this._runner.instantiate(path)
+    }
+
+    async waitUntil(predicate: Callable, timeoutMs: int): Promise<bool> {
+      return await this._runner.waitUntil(predicate, timeoutMs)
+    }
+  }
 
   export class Expectation extends RefCounted {
     private _runner!: TSOnly<_Runner>

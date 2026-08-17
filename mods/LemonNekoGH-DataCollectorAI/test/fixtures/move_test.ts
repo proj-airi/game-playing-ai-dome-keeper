@@ -1,4 +1,7 @@
 export class _MoveTest extends Node {
+  startup_error = ''
+  task_failure = ''
+  task_finished = false
   test_map_selected = false
   private landingSkipped = false
 
@@ -38,11 +41,13 @@ export class _MoveTest extends Node {
       const window = this.get_window()
       if (window.mode !== Window.MODE_WINDOWED || window.borderless)
         this._fail('Movie mode requires a decorated window')
+
+      DisplayServer.window_move_to_foreground()
     }
   }
 
   _process(_delta: float): void {
-    if (this.landingSkipped)
+    if (this.landingSkipped || this.startup_error !== '')
       return
 
     const landingReady = gd.eval<boolean>('StageManager.currentStage is LandingStage and StageManager.currentStage.allClientsReady()')
@@ -61,10 +66,32 @@ export class _MoveTest extends Node {
     this.set_process(false)
   }
 
+  _exit_tree(): void {
+    const connected = gd.eval<boolean>('StageManager.stage_started.is_connected(self._load_test_map)')
+    if (connected)
+      gd.eval('StageManager.stage_started.disconnect(self._load_test_map)')
+  }
+
+  watch_task(_controller: Node): void {
+    this.task_failure = ''
+    this.task_finished = false
+    gd.eval('_controller.task_completed.connect(self._task_completed, CONNECT_ONE_SHOT)')
+    gd.eval('_controller.task_failed.connect(self._task_failed, CONNECT_ONE_SHOT)')
+  }
+
+  private _task_completed(): void {
+    this.task_finished = true
+  }
+
+  private _task_failed(reason: string): void {
+    this.task_failure = reason
+    this.task_finished = true
+  }
+
   private _write_movie_options(): boolean {
     const options = FileAccess.open('user://options.txt', FileAccess.WRITE)
     if (options === null) {
-      this._fail('The Move test could not configure its isolated movie window')
+      this._fail('The Move test could not configure its movie window')
 
       return false
     }
@@ -110,7 +137,11 @@ export class _MoveTest extends Node {
   }
 
   private _fail(reason: string): void {
+    if (this.startup_error !== '')
+      return
+
+    this.startup_error = reason
+    this.set_process(false)
     push_error(reason)
-    this.get_tree().quit(1)
   }
 }

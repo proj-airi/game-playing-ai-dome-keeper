@@ -1,13 +1,28 @@
 export interface ViDotOptions {
   projectPath: string
   godotPath?: string
+  launch?: ViDotLaunch
 }
 
 export interface ResolvedViDotOptions {
   projectPath: string
   godotPath: string
   runnerPath: string
+  launch: ViDotLaunch
 }
+
+export interface ViDotLaunchContext {
+  method: 'run' | 'collect'
+}
+
+export interface ViDotLaunchOptions {
+  args: string[]
+  env?: Record<string, string>
+  before?: () => Promise<void>
+  after?: () => Promise<void>
+}
+
+export type ViDotLaunch = (context: ViDotLaunchContext) => ViDotLaunchOptions
 
 export interface ViDotSuiteNode {
   type: 'suite'

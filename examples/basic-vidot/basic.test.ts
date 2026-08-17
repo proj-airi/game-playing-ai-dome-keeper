@@ -9,14 +9,17 @@ describe('editable Godot project', () => {
   })
 
   test('runs inside the project', async (context) => {
-    const scene = gd.eval<_Example>('load("res://main.tscn").instantiate()')
+    const scriptPath = ProjectSettings.globalize_path('res://scripts/main.gd')
+    const scene = context.instantiate<_Example>(scriptPath)
+    if (!expect(scene !== null).toBe(true) || scene === null)
+      return
+
     context.tree.root.add_child(scene)
 
     expect(scene.increment(2)).toBe(2)
 
     scene.set_later(expectedValue)
-    await scene.completed
-
+    expect(await context.waitUntil(() => scene.value === expectedValue, 500)).toBe(true)
     expect(scene.value).toBe(expectedValue)
   })
 })

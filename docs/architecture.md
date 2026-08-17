@@ -22,8 +22,8 @@ implements its Dome Keeper game-playing integration.
   as dormant behavior and data-collection references. They are not linked into
   newly decompiled projects, and their collection, replay, and dashboard
   producer workflows are inactive.
-- A minimal Godot-native ViDot adapter runs the basic editable-project fixture
-  end to end. The ViKeeper fixture is not connected yet.
+- Godot-native ViDot runs both the basic editable-project proof and the
+  ViKeeper-wrapped DataCollectorAI Move proof end to end.
 - Runtime Vision inference does not yet control gameplay.
 
 ## Confirmed Target Runtime Architecture
@@ -90,9 +90,11 @@ pool. The Node.js adapter compiles the test modules and starts the configured
 editable Godot project. Godot evaluates the modules, collects the authoritative
 test trees, and executes the tests sequentially in one process.
 
-ViKeeper is the Dome Keeper-specific layer above ViDot. It will own game and
-Mod startup while ViDot remains unaware of Mod packaging. The current contract
-and example live in [`vidot.md`](vidot.md).
+ViKeeper is the Dome Keeper Mod testing layer above ViDot. It owns the
+headless and Movie Maker launch policies for an explicitly configured editable
+project. Each Mod owns its own fixtures, game setup, and assertions; ViKeeper
+does not locate projects or inspect Mod manifests. The current ViDot contract
+lives in [`vidot.md`](vidot.md).
 
 ## Evidence for Target Design
 

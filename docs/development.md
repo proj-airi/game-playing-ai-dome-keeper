@@ -17,10 +17,10 @@ unless explicitly marked as planned, future, or historical.
 
 ## Mod Dev Workflow
 
-- Keep mod source in this repo under `mods/<Author>-<ModName>/`. The decompile workflow links only the active TypeScript-authored DataCollectorAI Mod and removes an existing repository-owned legacy YOLO Mod link. DataCollectorAI's loadable root is its generated `scripts/` directory because that directory contains the runtime GDScript and manifest. The decompile, Godot open, and Godot check tasks own the required production build. The separate `packages/vikeeper/` package retains Dome Keeper-only test-scene assets outside the production Mod.
+- Keep mod source in this repo under `mods/<Author>-<ModName>/`. The decompile workflow links only the active TypeScript-authored DataCollectorAI Mod and removes an existing repository-owned legacy YOLO Mod link. DataCollectorAI's loadable root is its generated `scripts/` directory because that directory contains the runtime GDScript and manifest. The decompile, Godot open, and Godot check tasks own the required production build. Mod-specific tests and fixtures live under that Mod's `test/` directory; ignored test GDScript output remains separate from production `scripts/`.
 - Do not use Mod Loader script extensions for base scripts that declare `class_name`; Godot 4 global classes are unsupported by that mechanism. Remove nonessential extensions instead of retaining a known parse failure, and use a script hook only when the behavior is required.
-- The retained ViKeeper Move fixture selects the built-in single-player Engineer and Laser configuration and constructs a bounded map through Dome Keeper's `MapData` API. ViKeeper will own the game-specific startup and keep it outside the production controller. Dome Keeper's Mod Loader remains responsible for manifest validation and loading.
-- ViDot keeps the target game and tested Mod as separate inputs. ViKeeper defines how DataCollectorAI joins Dome Keeper startup; generic ViDot does not define Mod packaging or loading.
+- ViKeeper wraps ViDot with Dome Keeper's headless and Movie Maker launch policies. The caller supplies the editable project and Mod test root explicitly; ViKeeper does not scan projects or inspect manifests. DataCollectorAI's Move fixture selects the built-in single-player Engineer and Laser configuration and constructs a bounded map through Dome Keeper's `MapData` API.
+- Run `mise run domekeeper:vidot:test` for the automated Move proof. Run `mise run domekeeper:vidot:record` to write `recordings/move.avi` for human visual inspection; recording is not part of the aggregate check.
 - Run `mise run godot:check` after changing a Dome Keeper mod. The task starts the target project headlessly inside its own project and user-data sandbox, requires DataCollectorAI to enter the scene tree, fails if the legacy YOLO Mod is discovered, and ignores known decompiled-project errors outside the active Mod boundary. Build TypeScript-authored mods before this check. Keep the load check in the aggregate `mise run check` task because Godot may exit successfully even after reporting a GDScript parse error.
 - The legacy pause-menu collector, rule teacher, replay producer, checkpoints, and status-dashboard producer remain in source for reference but have no active repository task while `LemonNekoGH-YoloDataCollector` is disabled.
 
@@ -101,7 +101,7 @@ The listed application and crate paths are reserved target locations unless they
 - `crates/capture/` for Rust performance-sensitive modules (capture/input/inference helpers).
 - `mods/LemonNekoGH-YoloDataCollector/` for the existing GDScript mod (teacher and YOLO auto-labeling).
 - `mods/LemonNekoGH-DataCollectorAI/` for the replacement TypeScript-authored AI mod and its generated GDScript.
-- `packages/vikeeper/` for Dome Keeper test scenes and startup support.
+- `packages/vikeeper/` for the Dome Keeper Mod testing wrapper and launch policy.
 - `packages/shared/` for shared types/protocols/schema.
 - `packages/status-dashboard/` for the local Vue status observer.
 - `scripts/` for Node.js-executable TypeScript automation scripts.

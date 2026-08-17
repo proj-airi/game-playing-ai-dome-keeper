@@ -1,9 +1,18 @@
 # ViKeeper
 
-ViKeeper is the planned Dome Keeper-specific wrapper above ViDot. The retained
-TypeScript runtime fixture models an Engineer and Laser on a minimal map built
-with Dome Keeper's `MapData` API.
+ViKeeper wraps ViDot for Dome Keeper Mod tests. The caller supplies an editable
+Dome Keeper project and the Mod-owned test root; ViKeeper does not locate
+projects, inspect manifests, or contain Mod-specific fixtures.
 
-The next milestone connects this fixture to ViDot. ViKeeper owns Dome Keeper
-and Mod startup while generic ViDot remains unaware of Mod packaging. See
-[`docs/vidot.md`](../../docs/vidot.md) for the current adapter contract.
+```ts
+pool: vikeeper({
+  projectPath,
+  testRoot,
+  movie: process.env.VIDOT_MOVIE,
+})
+```
+
+Tests run headlessly unless `movie` is provided. Movie mode uses a decorated
+960×540 window at 30 FPS and requires Godot to produce a non-empty AVI. Each Mod
+builds its fixtures outside its production runtime and loads them through
+ViDot's `instantiate` context method.

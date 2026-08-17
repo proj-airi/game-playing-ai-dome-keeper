@@ -1,6 +1,0 @@
-{
-  "tsDir": "src",
-  "gdDir": "scripts",
-  "typingsDir": "src/_typings",
-  "disableGodotLint": true
-}

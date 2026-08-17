@@ -1,0 +1,6 @@
+{
+  "tsDir": "fixtures",
+  "gdDir": "runtime",
+  "typingsDir": "fixtures/_typings",
+  "disableGodotLint": true
+}

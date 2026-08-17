@@ -33,16 +33,20 @@ planner completeness, search semantics, partial ordering, or method-effect
 semantics. The exact source-file layout and the TypeScript data types are not
 frozen yet.
 
-DataCollectorAI does not depend on or register APIs with ViDot. ViKeeper owns
-the Dome Keeper test scene and startup, while DataCollectorAI-specific
-assertions stay with this Mod. No test scene is compiled or installed beneath
-the production Mod.
+DataCollectorAI does not depend on or register APIs with ViDot. Its Move test,
+controlled Dome Keeper fixture, and assertions live under `test/`; generated
+test GDScript is ignored and never installed under the production `scripts/`
+root. ViKeeper supplies the shared Dome Keeper process launch policy.
 
 Build the generated runtime files with:
 
 ```bash
 pnpm run build
 ```
+
+Run the automated Move proof with `mise run domekeeper:vidot:test`. Generate
+`recordings/move.avi` for visual inspection with
+`mise run domekeeper:vidot:record`.
 
 ### Terms
 
