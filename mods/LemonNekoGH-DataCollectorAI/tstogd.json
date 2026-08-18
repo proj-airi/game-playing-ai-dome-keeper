@@ -1,6 +1,6 @@
 {
   "tsDir": "src",
-  "gdDir": "scripts",
+  "gdDir": "mods-unpacked/LemonNekoGH-DataCollectorAI",
   "typingsDir": "src/_typings",
   "disableGodotLint": true
 }

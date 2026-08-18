@@ -19,8 +19,8 @@ unless an explicit project decision says so.
 
 - Keep the DataCollectorAI-owned fixture and Move test passing through the
   ViKeeper Dome Keeper wrapper, with a controlled map, signal-first completion,
-  one Quark Action executed through `TaskExecutor`, and a final target-tile
-  assertion.
+  a frame-scoped Move Quark Action executed by `MoveToTask` through
+  `TaskExecutor`, and a final non-adjacent target-tile assertion.
 - Keep headless and Movie Maker launch policy in ViKeeper, while each Mod owns
   its fixture, startup behavior, and assertions.
 - Use this proof before expanding `TaskExecutor` to more actions or compound

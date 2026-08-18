@@ -1,12 +1,12 @@
 export class _MoveQuarkAction extends RefCounted {
-  static resolve(currentX: int, currentY: int, targetX: int, targetY: int): string {
-    if (currentX < targetX)
+  static resolve(current: Vector2i, target: Vector2i): string {
+    if (current.x < target.x)
       return 'ui_right'
-    if (currentX > targetX)
+    if (current.x > target.x)
       return 'ui_left'
-    if (currentY < targetY)
+    if (current.y < target.y)
       return 'ui_down'
-    if (currentY > targetY)
+    if (current.y > target.y)
       return 'ui_up'
 
     return ''

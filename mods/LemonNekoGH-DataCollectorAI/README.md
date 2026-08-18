@@ -2,8 +2,8 @@
 
 The replacement TypeScript-authored Godot AI mod for AIRI. TypeScript is the
 authoring layer; `tstogd convert` emits the GDScript that Godot loads from
-`scripts/`, alongside the tracked mod manifest. It replaces
-`LemonNekoGH-YoloDataCollector`.
+`mods-unpacked/LemonNekoGH-DataCollectorAI/`, alongside the tracked mod manifest.
+It replaces `LemonNekoGH-YoloDataCollector`.
 
 ## Runtime design
 
@@ -21,12 +21,34 @@ planner or a formally compliant HTN implementation:
 Each executor owns its current method and method step. Only the active
 primitive-task executor owns gameplay input.
 
+The current action hierarchy keeps frame control separate from task state
+without fixing the future Lower Agent interface:
+
+- `Move` is a stateless Quark Action that returns the directional input for the
+  current frame. The current `MoveTo` task may own an arbitrary map coordinate
+  and resolve `Move` each frame until the target is reached. Coordinates are
+  useful for the privileged runtime and controlled tests but are not a promised
+  student-model input.
+- `MovePath` is not a confirmed task. Introduce a path-consuming compound task
+  only after a concrete caller and behavior require one; a future student model
+  may instead act from frame history and uncertain relative target direction.
+- `Activate`, `Pickup`, and `Drop` are separate Quark Actions. They resolve the
+  configured `ui_select`, `keeper1_pickup`, and `keeper1_drop` actions
+  respectively. Their default physical bindings may overlap, but Dome Keeper
+  allows them to be rebound independently.
+- `ActivateTarget`, `PickupTarget`, and `DropCargo` own target selection,
+  one-shot timing, and completion observation. Their Quark Actions do not retain
+  state or decide whether the gameplay operation succeeded.
+
 The first vertical slice exposes `/root/DataCollectorAI` as an ordinary Godot
-runtime node. It supports one adjacent-tile `start_move(x, y)` task, reports the
-current tile through `current_tile()`, and releases active input through
-`reset()`. Tests subscribe to `task_completed` or `task_failed` before starting
-the task. The initial `TaskExecutor` deliberately does not provide pathfinding,
-pickup, interaction, or compound-task behavior.
+runtime node. `start_move_to(target: Vector2i)` accepts an arbitrary target
+coordinate, while `current_tile()` reports the current `Vector2i` and `reset()`
+releases active input. `MoveToTask` owns the target and completion predicate;
+it resolves `Move` every physics frame, while `TaskExecutor` changes the
+configured held action only when the required direction changes. Tests
+subscribe to `task_completed` or `task_failed` before starting the task. The
+initial `TaskExecutor` deliberately does not provide path generation, pickup,
+interaction, or compound-task behavior.
 
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
 planner completeness, search semantics, partial ordering, or method-effect
@@ -35,8 +57,8 @@ frozen yet.
 
 DataCollectorAI does not depend on or register APIs with ViDot. Its Move test,
 controlled Dome Keeper fixture, and assertions live under `test/`; generated
-test GDScript is ignored and never installed under the production `scripts/`
-root. ViKeeper supplies the shared Dome Keeper process launch policy.
+test GDScript is ignored and never installed under the production output root.
+ViKeeper supplies the shared Dome Keeper process launch policy.
 
 Build the generated runtime files with:
 
@@ -44,12 +66,13 @@ Build the generated runtime files with:
 pnpm run build
 ```
 
-Run the automated Move proof with `mise run domekeeper:vidot:test`. Generate
+Run the automated MoveTo proof with `mise run domekeeper:vidot:test`. Generate
 `recordings/move.avi` for visual inspection with
 `mise run domekeeper:vidot:record`.
 
 ### Terms
 
-- `Quark Action` - The basic action unit that can be executed by the AI,
-  such as `move`, `pickup`, `interact`, etc. I don't want to use
-  `Atomic Action` because the Atom is not the smallest unit in physics.
+- `Quark Action` - The stateless, frame-scoped control result resolved by an
+  active primitive task, such as `Move`, `Activate`, `Pickup`, or `Drop`. I
+  don't want to use `Atomic Action` because the Atom is not the smallest unit
+  in physics.

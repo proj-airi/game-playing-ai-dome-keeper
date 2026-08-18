@@ -26,6 +26,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Return promises directly instead of using `return await` when no adaptation or error-boundary behavior is needed.
 - Prefer eta reduction when a wrapper does not adapt arguments, bind context, add control flow, or improve readability.
 - Represent state machines with enums instead of string-literal union types.
+- In tstogd source, prefer ordinary TypeScript imports, construction, property access, method calls, operators, and type declarations. Treat `gd.eval` as a last-resort raw-GDScript escape hatch: use it only when tstogd cannot represent the required construct, and keep the injected expression or statement as narrow as possible.
 
 ### General
 

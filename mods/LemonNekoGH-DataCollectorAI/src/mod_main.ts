@@ -1,3 +1,5 @@
+import { _DataCollectorAI } from './controller.ts'
+
 export class _ModMain extends Node {
   _ready() {
     const root = this.get_tree().root
@@ -7,7 +9,7 @@ export class _ModMain extends Node {
       return
     }
 
-    const controller = gd.eval<Node>('preload("res://mods-unpacked/LemonNekoGH-DataCollectorAI/controller.gd").new()')
+    const controller = new _DataCollectorAI()
     controller.name = 'DataCollectorAI'
     root.call_deferred('add_child', controller)
   }

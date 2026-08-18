@@ -102,7 +102,7 @@ if (disabledModTargetStat !== undefined) {
   console.log(`Disabled legacy Mod by removing its repository link: ${disabledModTarget}`)
 }
 
-const activeModSource = path.join(modsRoot, activeModName, 'scripts')
+const activeModSource = path.join(modsRoot, activeModName, 'mods-unpacked', activeModName)
 const activeModSourceStat = lstatSync(activeModSource, { throwIfNoEntry: false })
 if (activeModSourceStat === undefined || !activeModSourceStat.isDirectory()) {
   console.error(`Active Mod source is not a directory: ${activeModSource}`)
@@ -119,7 +119,7 @@ if (activeModTargetStat !== undefined) {
   }
   else {
     console.error(`Mod target already exists with an unexpected source: ${activeModTarget}`)
-    console.error('Remove or relocate that exact target before running decompile again.')
+    console.error('Delete the decompiled output or that exact target and run decompile again to rebuild it.')
     process.exit(1)
   }
 }

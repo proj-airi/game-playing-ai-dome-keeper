@@ -1,17 +1,13 @@
-interface TaskExecutorContract extends RefCounted {
-  cancel: () => void
-  is_complete: (currentX: int, currentY: int) => boolean
-  start: (currentX: int, currentY: int, targetX: int, targetY: int) => string
-  step: (delta: float) => string
-}
+import { _TaskExecutor } from './task_executor.ts'
+import { _MoveToTask } from './tasks/move_to_task.ts'
 
 export class _DataCollectorAI extends Node {
-  move_ready = false
+  move_to_ready = false
   task_completed = gd.signal()
   task_failed = gd.signal<[reason: string]>()
 
-  private executor: TaskExecutorContract | null = null
-  private keeper: Node2D | null = null
+  private executor: _TaskExecutor | null = null
+  private keeper: Keeper | null = null
   private lastError = ''
 
   _ready(): void {
@@ -22,21 +18,21 @@ export class _DataCollectorAI extends Node {
 
   _process(_delta: float): void {
     if (this.executor === null)
-      this.move_ready = this._level_ready()
+      this.move_to_ready = this._level_ready()
   }
 
-  _physics_process(delta: float): void {
+  _physics_process(_delta: float): void {
     if (this.executor === null)
       return
     const keeper = this.keeper
     if (keeper === null || !is_instance_valid(keeper)) {
-      this._finish_failed('Keeper was freed during Move')
+      this._finish_failed('Keeper was freed during MoveTo')
 
       return
     }
 
     const tile = this._tile(keeper)
-    if (this.executor.is_complete(tile.x, tile.y)) {
+    if (this.executor.is_complete(tile)) {
       this.executor.cancel()
       this._clear_task()
       this.task_completed.emit()
@@ -44,46 +40,56 @@ export class _DataCollectorAI extends Node {
       return
     }
 
-    const error = this.executor.step(delta)
+    const error = this.executor.step(tile)
     if (error !== '')
       this._finish_failed(error)
   }
 
-  start_move(targetX: int, targetY: int): boolean {
+  start_move_to(target: Vector2i): boolean {
     if (this.executor !== null)
       return this._reject('Another task is already active')
     if (!this._level_ready())
-      return this._reject('Move requires one active local keyboard Engineer in a loaded level')
+      return this._reject('MoveTo requires one active local keyboard Engineer in a loaded level')
 
-    const keeper = gd.eval<Node2D>('Keepers.local.first()')
+    const keeper = Keepers.local.first()
     if (!is_instance_valid(keeper))
       return this._reject('The local Keeper is unavailable')
 
     const tile = this._tile(keeper)
-    const executor = gd.eval<TaskExecutorContract>('preload("res://mods-unpacked/LemonNekoGH-DataCollectorAI/task_executor.gd").new()')
-    const error = executor.start(tile.x, tile.y, targetX, targetY)
-    if (error !== '')
+    const task = new _MoveToTask()
+    task.initialize(target)
+    const executor = new _TaskExecutor()
+    const error = executor.start(task, tile)
+    if (error !== '') {
+      executor.cancel()
+
       return this._reject(error)
+    }
 
     this.executor = executor
     this.keeper = keeper
     this.lastError = ''
-    this.move_ready = false
+    this.move_to_ready = false
     this.set_physics_process(true)
 
     return true
   }
 
-  current_tile(): int[] {
-    if (!this._level_ready())
-      return []
+  current_tile(): Vector2i {
+    if (!this._level_ready()) {
+      push_error('MoveTo current_tile requires one active local keyboard Engineer in a loaded level')
 
-    const keeper = gd.eval<Node2D>('Keepers.local.first()')
-    if (!is_instance_valid(keeper))
-      return []
+      return Vector2i.ZERO
+    }
 
-    const tile = this._tile(keeper)
-    return [tile.x, tile.y]
+    const keeper = Keepers.local.first()
+    if (!is_instance_valid(keeper)) {
+      push_error('MoveTo current_tile could not access the local Keeper')
+
+      return Vector2i.ZERO
+    }
+
+    return this._tile(keeper)
   }
 
   get_last_error(): string {
@@ -105,7 +111,7 @@ export class _DataCollectorAI extends Node {
     this.set_physics_process(false)
     this.executor = null
     this.keeper = null
-    this.move_ready = false
+    this.move_to_ready = false
   }
 
   private _finish_failed(reason: string): void {
@@ -117,8 +123,16 @@ export class _DataCollectorAI extends Node {
   }
 
   private _level_ready(): boolean {
-    const ready = gd.eval<boolean>('StageManager.isInLevel() and Level.initialized and Level.map != null and Level.stage.keeperInputStarted and Keepers.local.getCount() == 1 and Keepers.local.first().techId == "keeper1" and not Options.useGamepad(Keepers.local.first().deviceId)')
-    return ready
+    const levelStage = Level.stage as LevelStage | null
+
+    return StageManager.isInLevel()
+      && Level.initialized
+      && Level.map !== null
+      && levelStage !== null
+      && levelStage.keeperInputStarted
+      && Keepers.local.getCount() === 1
+      && Keepers.local.first().techId === 'keeper1'
+      && !Options.useGamepad(Keepers.local.first().deviceId)
   }
 
   private _reject(reason: string): boolean {
@@ -127,8 +141,8 @@ export class _DataCollectorAI extends Node {
     return false
   }
 
-  private _tile(_keeper: Node2D): Vector2i {
-    const tile = gd.eval<Vector2i>('Level.map.getTileCoord(_keeper.global_position)')
+  private _tile(keeper: Keeper): Vector2i {
+    const tile: Vector2i = Level.map.getTileCoord(keeper.global_position)
     return tile
   }
 }

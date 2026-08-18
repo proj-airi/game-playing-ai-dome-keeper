@@ -16,8 +16,9 @@ implements its Dome Keeper game-playing integration.
 
 - `LemonNekoGH-DataCollectorAI` is the only repository Mod loaded by current
   workflows. It is authored in TypeScript and converted to GDScript during the
-  build; its first proven runtime slice executes one adjacent-tile Move through
-  normal configured input.
+  build; its first proven runtime slice executes `MoveTo` through normal
+  configured input. The controlled test starts the Engineer underground and
+  reaches a non-adjacent target that requires changing direction.
 - `LemonNekoGH-YoloDataCollector` and its in-process rule teacher are retained
   as dormant behavior and data-collection references. They are not linked into
   newly decompiled projects, and their collection, replay, and dashboard
@@ -76,6 +77,34 @@ Quark actions are declarative control results rather than side-effecting
 operations: they describe what the controller should currently hold, release,
 or pulse. The executor performs the input side effects and observes the game
 state to determine completion or failure.
+
+The current coordinate-based movement work keeps frame control separate from
+task state without freezing the Lower Agent contract:
+
+- `Move` is a stateless Quark action. For the current frame, it resolves the
+  directional input needed from the current position toward a target. It does
+  not retain the target, determine task completion, or plan a path.
+- The current `MoveTo` task may own an arbitrary map coordinate, determine
+  whether that coordinate has been reached, and resolve `Move` again on every
+  active frame until completion. Coordinates are an implementation aid for the
+  current privileged runtime and controlled tests, not a promised Lower Agent
+  observation or task field.
+
+`MovePath` is not a confirmed task. Add a path-consuming compound task only if
+a concrete caller can supply an ordered path and demonstrated behavior requires
+that abstraction. The future student or other Lower Agent may instead act from
+frame history and an uncertain relative impression such as a resource being in
+a general direction. Its observation and task contracts remain open until the
+Vision and teacher evidence establish the smallest useful representation.
+
+Configured gameplay actions remain separate Quark actions even when their
+default physical bindings overlap. `Activate` resolves `ui_select`, `Pickup`
+resolves `keeper1_pickup`, and `Drop` resolves `keeper1_drop`. Dome Keeper lets
+players rebind Use, Engineer Pickup, and Engineer Drop independently, so none of
+these actions may be implemented as a hard-coded key or collapsed into one
+generic primary action. Tasks such as `ActivateTarget`, `PickupTarget`, and
+`DropCargo` own their exact target, one-shot timing, and observable completion;
+the Quark actions only describe the input for the current frame.
 
 The initial design may use ordered method steps. Recursive child executors are
 required even in that form so that a method step can itself be a compound task.

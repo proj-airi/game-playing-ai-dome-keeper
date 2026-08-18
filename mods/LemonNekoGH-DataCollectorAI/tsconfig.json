@@ -2,6 +2,7 @@
   "compilerOptions": {
     "noLib": true,
     "types": [],
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true

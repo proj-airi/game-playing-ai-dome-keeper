@@ -34,6 +34,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 _typings/
-scripts/**/*.gd
+mods-unpacked/**/*.gd
 test/runtime/
 test/fixtures/_typings/

@@ -50,7 +50,10 @@ for (const [filePath, autoloadName] of targets) {
   const fixedSource = result.code.replace(/[A-Za-z_$][\w$]*:\s*: = \| null = [^,\n)]+/g, match => `${match.split(':', 1)[0]}?: any`)
   const emitted = ts.transpileDeclaration(fixedSource, {}).outputText
   const parsed = ts.createSourceFile('generated.d.ts', emitted, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS) as ts.SourceFile & { parseDiagnostics: ts.Diagnostic[] }
-  const className = emitted.match(/\bclass\s+([A-Za-z_$][\w$]*)/)?.[1]
+  const className = parsed.statements
+    .find(ts.isClassDeclaration)
+    ?.name
+    ?.text
   if (!className || parsed.parseDiagnostics.length > 0)
     throw new Error(`typescript-to-gdscript emitted invalid declarations for ${filePath}`)
 
@@ -73,7 +76,7 @@ writeFileSync(outputFile, [
   '',
   ...autoloadTypes
     .filter(([name, type]) => name !== type)
-    .map(([name, type]) => `  const ${name}: ${type};`),
+    .map(([name, type]) => `  const ${name}: ${type} & typeof ${type};`),
   '}',
   '',
 ].join('\n'))
