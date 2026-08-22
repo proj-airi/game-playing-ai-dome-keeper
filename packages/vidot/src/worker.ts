@@ -214,7 +214,7 @@ async function reportCollection(
 ): Promise<void> {
   const file = runFile.file
   file.mode = 'run'
-  file.tasks = tree.children.map((node, index) => createTask(
+  file.tasks = tree.children.map((node: ViDotTaskNode, index: number) => createTask(
     state,
     runFile,
     file,
@@ -263,7 +263,7 @@ function createTask(
       tasks: [],
     }
     runFile.tasks.set(node.id, suite)
-    suite.tasks = node.children.map((child, childIndex) => createTask(
+    suite.tasks = node.children.map((child: ViDotTaskNode, childIndex: number) => createTask(
       state,
       runFile,
       suite,

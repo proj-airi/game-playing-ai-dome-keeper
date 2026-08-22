@@ -4,20 +4,25 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "godot": "./fixture/fixture.ts",
+      "node": "./src/node.ts"
+    }
   },
   "files": [
+    "fixture",
     "src"
   ],
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.godot.json"
   },
   "dependencies": {
     "@vidot/vitest": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "typescript": "^5.9.3",
-    "vitest": "4.1.10"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "typescript-to-gdscript": "catalog:",
+    "vitest": "catalog:"
   }
 }

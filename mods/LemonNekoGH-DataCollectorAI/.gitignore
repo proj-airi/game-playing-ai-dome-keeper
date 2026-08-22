@@ -36,4 +36,5 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 _typings/
 mods-unpacked/**/*.gd
 test/runtime/
+test/.tstogd_modules/
 test/fixtures/_typings/

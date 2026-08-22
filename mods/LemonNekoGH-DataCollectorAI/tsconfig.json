@@ -1,15 +1,8 @@
 {
-  "compilerOptions": {
-    "noLib": true,
-    "types": [],
-    "allowImportingTsExtensions": true,
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true
-  },
-  "include": [
-    "node_modules/typescript-to-gdscript/typings",
-    "src/**/*.ts",
-    "src/_typings/**/*.d.ts"
-  ]
+  "references": [
+    { "path": "./tsconfig.godot.json" },
+    { "path": "./test/tsconfig.godot.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "files": []
 }

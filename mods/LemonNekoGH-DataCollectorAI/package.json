@@ -6,15 +6,15 @@
   "scripts": {
     "build": "tstogd convert",
     "test": "vitest run --config test/vitest.config.ts",
-    "test:build": "cd test && tstogd convert",
-    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json && tsc -p test/tsconfig.node.json"
+    "test:build": "cd test && tstogd convert --tsconfig tsconfig.godot.json --project-root \"../../../external/domekeeper-decompiled/$DOMEKEEPER_VERSION\"",
+    "typecheck": "tsc -p tsconfig.godot.json && tsc -p test/tsconfig.godot.json && tsc -p tsconfig.node.json"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "catalog:",
     "@vidot/vitest": "workspace:*",
     "@vikeeper/vitest": "workspace:*",
-    "typescript": "^5.9.3",
-    "typescript-to-gdscript": "^0.1.3",
-    "vitest": "4.1.10"
+    "typescript": "catalog:",
+    "typescript-to-gdscript": "catalog:",
+    "vitest": "catalog:"
   }
 }

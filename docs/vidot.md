@@ -46,6 +46,14 @@ ViDot use defaults to headless execution.
 Vitest and `@vitest/runner` are pinned to 4.1.10 because the custom-pool API is
 experimental. Godot 4.3.1 is the tested engine baseline.
 
+Each project using ViDot has a root `tsconfig.json` solution that references
+separate `tsconfig.node.json` and `tsconfig.godot.json` programs. The Node
+program sets `customConditions: ["node"]` and includes the Vitest
+configuration; the Godot program sets `customConditions: ["godot"]`, includes
+tstogd's Godot typings, and includes the test sources. Both import
+`@vidot/vitest`; conditional exports select the runtime-appropriate
+implementation.
+
 ## Build and Compilation
 
 The runner source is `packages/vidot/runtime/src/runner.ts`. The package build
@@ -57,7 +65,7 @@ A test module is adapted only where tstogd requires it:
 
 - module-level executable statements are placed in a generated
   `vidot_collect(api)` method;
-- every name from `@vidot/vitest/test` is bound to a Godot Callable while
+- every name from `@vidot/vitest` is bound to a Godot Callable while
   the original calls remain unchanged;
 - a block-bodied arrow passed directly to a standalone registration call is
   first stored in an adjacent local variable because tstogd 0.1.3 does not emit

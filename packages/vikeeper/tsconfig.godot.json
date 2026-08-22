@@ -12,9 +12,8 @@
     "skipLibCheck": true
   },
   "include": [
-    "../../node_modules/typescript-to-gdscript/typings",
-    "basic.test.ts",
-    "src/**/*.ts",
-    "src/_typings/**/*.d.ts"
+    "node_modules/typescript-to-gdscript/typings",
+    "fixture/_typings/**/*.d.ts",
+    "fixture/fixture.ts"
   ]
 }

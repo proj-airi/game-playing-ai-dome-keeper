@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022"],
+    "noLib": true,
+    "customConditions": ["godot"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": [],
@@ -11,9 +11,9 @@
     "skipLibCheck": true
   },
   "include": [
-    "../node_modules/typescript-to-gdscript/typings",
-    "../src/_typings/**/*.d.ts",
-    "fixtures/**/*.ts",
-    "move.test.ts"
+    "node_modules/typescript-to-gdscript/typings",
+    "src/**/*.ts",
+    "src/_typings/**/*.d.ts",
+    "../../packages/vikeeper/fixture/_typings/**/*.d.ts"
   ]
 }

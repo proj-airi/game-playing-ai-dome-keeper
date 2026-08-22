@@ -14,6 +14,7 @@ export interface CompiledTestFile {
 }
 
 const TEST_FILE_EXTENSION = /\.[cm]?tsx?$/
+const TEST_API_MODULE = '@vidot/vitest'
 const REGISTRATION_API_NAMES: readonly string[] = [
   'afterAll',
   'afterEach',
@@ -118,6 +119,11 @@ function transformTestModule(sourcePath: string, source: string): string {
   const fileStatements: ts.Statement[] = []
   const collectionStatements: ts.Statement[] = []
   for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement)
+      && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text === TEST_API_MODULE) {
+      continue
+    }
     if (ts.isImportDeclaration(statement))
       fileStatements.push(statement)
     else

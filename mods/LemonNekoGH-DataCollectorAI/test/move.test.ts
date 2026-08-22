@@ -1,6 +1,6 @@
 import type { _DataCollectorAI } from '../src/controller.ts'
 import type { _MoveTest } from './fixtures/move_test.ts'
-import { afterEach, expect, test } from '@vidot/vitest/test'
+import { afterEach, expect, test } from '@vidot/vitest'
 
 const controllerPath = 'DataCollectorAI'
 
@@ -31,14 +31,14 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
   const controller = controllerNode as _DataCollectorAI
 
   const ready = await context.waitUntil(
-    () => fixture.startup_error !== '' ? true : fixture.keeper_positioned ? controller.move_to_ready : false,
+    () => fixture.startup_error !== '' ? true : fixture.fixture_ready ? controller.move_to_ready : false,
     60_000,
   )
   if (!expect(ready).toBe(true))
     return
   if (!expect(fixture.startup_error).toBe(''))
     return
-  if (!expect(fixture.keeper_positioned).toBe(true))
+  if (!expect(fixture.fixture_ready).toBe(true))
     return
   if (!expect(controller.move_to_ready).toBe(true))
     return

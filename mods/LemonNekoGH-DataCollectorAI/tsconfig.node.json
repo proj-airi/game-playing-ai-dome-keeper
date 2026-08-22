@@ -4,19 +4,10 @@
     "customConditions": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "src/godot.ts",
-    "src/index.ts",
-    "src/test.ts"
-  ]
+  "include": ["test/vitest.config.ts"]
 }

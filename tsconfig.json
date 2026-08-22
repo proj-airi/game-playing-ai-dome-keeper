@@ -17,7 +17,7 @@
     "packages/**/*.ts"
   ],
   "exclude": [
-    "packages/vidot/src/test.d.ts",
+    "packages/vidot",
     "packages/vidot/runtime",
     "packages/vikeeper",
     "packages/status-dashboard"

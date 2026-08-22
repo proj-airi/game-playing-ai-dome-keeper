@@ -12,9 +12,10 @@
     "skipLibCheck": true
   },
   "include": [
-    "../../node_modules/typescript-to-gdscript/typings",
-    "basic.test.ts",
-    "src/**/*.ts",
-    "src/_typings/**/*.d.ts"
+    "../node_modules/typescript-to-gdscript/typings",
+    "../src/_typings/**/*.d.ts",
+    "../../../packages/vikeeper/fixture/_typings/**/*.d.ts",
+    "fixtures/**/*.ts",
+    "move.test.ts"
   ]
 }

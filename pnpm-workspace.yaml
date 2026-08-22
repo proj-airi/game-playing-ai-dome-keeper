@@ -9,6 +9,26 @@ packages:
   - 'packages/*'
   - 'mods/*'
 
+catalog:
+  '@alint-js/cli': 0.4.0
+  '@alint-js/plugin-js': 0.4.0
+  '@antfu/eslint-config': ^7.4.2
+  '@proj-airi/ui': ^0.11.3
+  '@types/node': ^24.13.3
+  '@unocss/reset': ^66.7.5
+  '@vitejs/plugin-vue': ^6.0.8
+  '@vitest/runner': 4.1.10
+  eslint: ^10.0.0
+  execa: ^10.0.1
+  nanoid: ^6.0.0
+  typescript: ^5.9.3
+  typescript-to-gdscript: github:LemonNekoGH/typescript-to-gdscript#demo/external-package-sources
+  unocss: ^66.7.5
+  vite: ^8.1.5
+  vitest: 4.1.10
+  vue: ^3.5.40
+  vue-tsc: ^3.3.8
+
 allowBuilds:
   tree-sitter: true
   tree-sitter-gdscript: true

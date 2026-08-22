@@ -1,12 +1,7 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "types": ["node"],
-    "allowImportingTsExtensions": true,
-    "strict": true,
-    "noEmit": true
-  },
-  "include": ["src/**/*.ts"]
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.godot.json" }
+  ],
+  "files": []
 }

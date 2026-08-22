@@ -9,7 +9,7 @@ if (!process.argv[2])
   throw new Error('Usage: node scripts/generate-domekeeper-typings.ts <decompiled-project>')
 
 const gameRoot = path.resolve(process.argv[2]!)
-const outputFile = path.resolve(import.meta.dirname, '../mods/LemonNekoGH-DataCollectorAI/src/_typings/domekeeper.generated.d.ts')
+const outputFile = path.resolve(import.meta.dirname, '../packages/vikeeper/fixture/_typings/domekeeper.generated.d.ts')
 
 const gdFiles: string[] = []
 function walk(dir: string) {

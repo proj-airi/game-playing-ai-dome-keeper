@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "customConditions": ["node"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": ["node"],
