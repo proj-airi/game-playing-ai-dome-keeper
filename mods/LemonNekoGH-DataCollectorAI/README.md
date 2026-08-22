@@ -18,8 +18,9 @@ planner or a formally compliant HTN implementation:
 - the active primitive executor applies the resulting control state through
   normal configured game inputs.
 
-Each executor owns its current method and method step. Only the active
-primitive-task executor owns gameplay input.
+Each executor owns its current method and method step. A parent advances only
+after its child reports a result, so a method step may itself be a compound task.
+Only the active primitive-task executor owns gameplay input.
 
 The current action hierarchy keeps frame control separate from task state
 without fixing the future Lower Agent interface:
@@ -51,9 +52,9 @@ initial `TaskExecutor` deliberately does not provide path generation, pickup,
 interaction, or compound-task behavior.
 
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
-planner completeness, search semantics, partial ordering, or method-effect
-semantics. The exact source-file layout and the TypeScript data types are not
-frozen yet.
+planner completeness, search semantics, partial ordering, method-effect
+semantics, or alternative-method backtracking. The exact source-file layout and
+the TypeScript data types are not frozen yet.
 
 DataCollectorAI does not depend on or register APIs with ViDot. Its Move test,
 controlled Dome Keeper fixture, and assertions live under `test/`; generated

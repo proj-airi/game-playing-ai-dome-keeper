@@ -5,13 +5,13 @@ an editable Godot project and is exercised by `mise run vidot:test`.
 
 ## Current Flow
 
-```text
-Vitest
-  -> ViDot custom pool
-  -> compile each test module with tstogd
-  -> start one Godot process for the batch
-  -> collect and execute the tests in Godot
-  -> report Godot events through Vitest
+```mermaid
+flowchart LR
+  vitest[Vitest] --> pool[ViDot custom pool]
+  pool --> compile[Compile test modules with tstogd]
+  compile --> godot[One Godot process]
+  godot -->|collect and execute tests| events[Structured result events]
+  events --> vitest
 ```
 
 Vitest discovers candidate files and owns reporting. Node.js compiles those
@@ -111,5 +111,10 @@ Godot does not implement the Vitest worker protocol.
 ## Dome Keeper Integration
 
 ViKeeper composes `vidot()` with Dome Keeper launch policy. ViDot remains
-game-agnostic, and each Mod owns its tests, fixtures, and assertions. `mise run
-domekeeper:vidot:test` exercises the first DataCollectorAI Move proof.
+game-agnostic: it neither discovers a project nor owns a Mod fixture, game setup,
+or assertion. ViKeeper receives the explicit editable project and Mod test root,
+then supplies the headless or Movie Maker process policy. Each Mod owns its
+fixtures, setup, and assertions. The ViKeeper package README owns its caller
+contract and launch-mode details.
+
+`mise run domekeeper:vidot:test` exercises the first DataCollectorAI Move proof.
