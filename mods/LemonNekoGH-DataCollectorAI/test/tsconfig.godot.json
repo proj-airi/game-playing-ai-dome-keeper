@@ -16,6 +16,6 @@
     "../src/_typings/**/*.d.ts",
     "../../../packages/vikeeper/fixture/_typings/**/*.d.ts",
     "fixtures/**/*.ts",
-    "move.test.ts"
+    "*.test.ts"
   ]
 }

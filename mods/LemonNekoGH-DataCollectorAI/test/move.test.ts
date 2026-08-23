@@ -1,14 +1,7 @@
-import type { _DataCollectorAI } from '../src/controller.ts'
 import type { _MoveTest } from './fixtures/move_test.ts'
-import { afterEach, expect, test } from '@vidot/vitest'
-
-const controllerPath = 'DataCollectorAI'
-
-afterEach((context) => {
-  const controller = context.tree.root.get_node_or_null(controllerPath)
-  if (controller !== null)
-    controller.call('reset')
-})
+import { expect, test } from '@vidot/vitest'
+import { _TaskExecutor } from '../src/task_executor.ts'
+import { _MoveToTask } from '../src/tasks/move_to_task.ts'
 
 test('moves the Engineer to a non-adjacent underground tile', async (context) => {
   const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
@@ -18,20 +11,8 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
     return
 
   context.tree.root.add_child(fixture)
-  const hasController = await context.waitUntil(
-    () => context.tree.root.has_node(controllerPath),
-    5_000,
-  )
-  if (!expect(hasController).toBe(true))
-    return
-
-  const controllerNode = context.tree.root.get_node_or_null(controllerPath)
-  if (!expect(controllerNode !== null).toBe(true) || controllerNode === null)
-    return
-  const controller = controllerNode as _DataCollectorAI
-
   const ready = await context.waitUntil(
-    () => fixture.startup_error !== '' ? true : fixture.fixture_ready ? controller.move_to_ready : false,
+    () => fixture.startup_error !== '' ? true : fixture.fixture_ready,
     60_000,
   )
   if (!expect(ready).toBe(true))
@@ -39,8 +20,6 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
   if (!expect(fixture.startup_error).toBe(''))
     return
   if (!expect(fixture.fixture_ready).toBe(true))
-    return
-  if (!expect(controller.move_to_ready).toBe(true))
     return
   if (!expect(fixture.test_map_selected).toBe(true))
     return
@@ -55,12 +34,19 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
       return
   }
 
-  const current = controller.current_tile()
+  const keeper = Keepers.local.first()
+  if (!expect(is_instance_valid(keeper)).toBe(true))
+    return
+  const current: Vector2i = Level.map.getTileCoord(keeper.global_position)
   if (!expect(current).toEqual(fixture.move_start))
     return
 
-  fixture.watch_task(controller)
-  if (!expect(controller.start_move_to(current)).toBe(true))
+  const executor = new _TaskExecutor()
+  fixture.add_child(executor)
+  const alreadyThereTask = new _MoveToTask()
+  alreadyThereTask.initialize(current)
+  fixture.watch_task(executor)
+  if (!expect(executor.start(keeper, alreadyThereTask)).toBe(''))
     return
 
   const alreadyThereFinished = await context.waitUntil(
@@ -71,7 +57,7 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
     return
   if (!expect(fixture.task_failure).toBe(''))
     return
-  if (!expect(controller.current_tile()).toEqual(current))
+  if (!expect(Level.map.getTileCoord(keeper.global_position)).toEqual(current))
     return
 
   const target = fixture.move_target
@@ -81,9 +67,11 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
     return
   if (!expect(target.y !== current.y).toBe(true))
     return
-  fixture.watch_task(controller)
 
-  if (!expect(controller.start_move_to(target)).toBe(true))
+  const moveTask = new _MoveToTask()
+  moveTask.initialize(target)
+  fixture.watch_task(executor)
+  if (!expect(executor.start(keeper, moveTask)).toBe(''))
     return
 
   const finished = await context.waitUntil(
@@ -94,11 +82,9 @@ test('moves the Engineer to a non-adjacent underground tile', async (context) =>
     return
   if (!expect(fixture.task_failure).toBe(''))
     return
-  if (!expect(controller.get_last_error()).toBe(''))
-    return
 
-  if (!expect(controller.current_tile()).toEqual(target))
+  if (!expect(Level.map.getTileCoord(keeper.global_position)).toEqual(target))
     return
   await context.tree.create_timer(1).timeout
-  expect(controller.current_tile()).toEqual(target)
+  expect(Level.map.getTileCoord(keeper.global_position)).toEqual(target)
 })

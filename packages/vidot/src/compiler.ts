@@ -1,12 +1,14 @@
+import type { TransformResult } from 'typescript-to-gdscript'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
 
+import { basename, dirname, resolve } from 'node:path'
 import ts from 'typescript'
-import { convertTsToGd } from 'typescript-to-gdscript'
+import { convertRuntimeModules } from 'typescript-to-gdscript'
 
 export interface CompileTestFileOptions {
   sourcePath: string
   outputDirectory: string
+  projectPath: string
 }
 
 export interface CompiledTestFile {
@@ -30,29 +32,38 @@ export async function compileTestFile(
 ): Promise<CompiledTestFile> {
   const sourcePath = resolve(options.sourcePath)
   const outputDirectory = resolve(options.outputDirectory)
+  const projectPath = resolve(options.projectPath)
   const source = await readFile(sourcePath, 'utf8')
   const wrapper = transformTestModule(sourcePath, source)
   const stem = basename(sourcePath).replace(TEST_FILE_EXTENSION, '')
   const wrapperPath = resolve(outputDirectory, `${stem}.vidot.ts`)
-  const scriptPath = resolve(outputDirectory, `${stem}.gd`)
 
   await mkdir(outputDirectory, { recursive: true })
   await writeFile(wrapperPath, wrapper)
-
-  const result = convertTsToGd({
-    filePath: wrapperPath,
+  const convertedModules = convertRuntimeModules({
+    entryFiles: [wrapperPath],
     rootDir: outputDirectory,
-    projectRoot: outputDirectory,
+    tsDir: outputDirectory,
+    gdDir: outputDirectory,
+    projectRoot: projectPath,
   })
-  assertConversionSucceeded(sourcePath, result)
 
-  await writeFile(scriptPath, result.code)
-  return { scriptPath }
+  for (const module of convertedModules) {
+    assertConversionSucceeded(module.sourcePath, module.result)
+    await mkdir(dirname(module.outputPath), { recursive: true })
+    await writeFile(module.outputPath, module.result.code)
+  }
+
+  const wrapperModule = convertedModules.find(module => module.sourcePath === wrapperPath)
+  if (!wrapperModule)
+    throw new Error(`tstogd did not compile ${sourcePath}`)
+
+  return { scriptPath: wrapperModule.outputPath }
 }
 
 function assertConversionSucceeded(
   sourcePath: string,
-  result: ReturnType<typeof convertTsToGd>,
+  result: TransformResult,
 ): void {
   const errors = result.diagnostics.filter(diagnostic =>
     diagnostic.severity === 'error' || diagnostic.severity === 'type-error',
@@ -125,7 +136,7 @@ function transformTestModule(sourcePath: string, source: string): string {
       continue
     }
     if (ts.isImportDeclaration(statement))
-      fileStatements.push(statement)
+      fileStatements.push(rewriteRelativeImport(sourcePath, statement, factory))
     else
       collectionStatements.push(...lowerStatements([statement]))
   }
@@ -171,6 +182,25 @@ function transformTestModule(sourcePath: string, source: string): string {
   const wrapper = factory.updateSourceFile(sourceFile, [...fileStatements, moduleClass])
 
   return ts.createPrinter({ newLine: ts.NewLineKind.LineFeed }).printFile(wrapper)
+}
+
+function rewriteRelativeImport(
+  sourcePath: string,
+  statement: ts.ImportDeclaration,
+  factory: ts.NodeFactory,
+): ts.ImportDeclaration {
+  if (!ts.isStringLiteral(statement.moduleSpecifier)
+    || !statement.moduleSpecifier.text.startsWith('.')) {
+    return statement
+  }
+
+  return factory.updateImportDeclaration(
+    statement,
+    statement.modifiers,
+    statement.importClause,
+    factory.createStringLiteral(resolve(dirname(sourcePath), statement.moduleSpecifier.text)),
+    statement.attributes,
+  )
 }
 
 function readRegistration(

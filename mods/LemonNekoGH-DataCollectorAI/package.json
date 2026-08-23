@@ -1,10 +1,11 @@
 {
   "name": "lemonnekogh-ai",
   "type": "module",
+  "version": "0.0.0",
   "private": true,
   "module": "index.ts",
   "scripts": {
-    "build": "tstogd convert",
+    "build": "tstogd convert --tsconfig tsconfig.godot.json",
     "test": "vitest run --config test/vitest.config.ts",
     "test:build": "cd test && tstogd convert --tsconfig tsconfig.godot.json --project-root \"../../../external/domekeeper-decompiled/$DOMEKEEPER_VERSION\"",
     "typecheck": "tsc -p tsconfig.godot.json && tsc -p test/tsconfig.godot.json && tsc -p tsconfig.node.json"

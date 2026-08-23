@@ -2,38 +2,34 @@ import type { FixtureScenario } from '@vikeeper/vitest'
 import type { _TaskExecutor } from '../../src/task_executor.ts'
 import { _Fixture } from '@vikeeper/vitest'
 
-export class _MoveTest extends _Fixture {
-  move_start = Vector2i(-1, 0)
-  move_target = Vector2i(1, 1)
+export class _PickupTest extends _Fixture {
+  pickup_start = Vector2i(-1, 0)
+  pickup_target_position = Vector2i(1, 0)
+  target_was_focussed = false
   task_failure = ''
   task_finished = false
 
   private scenario: FixtureScenario = {
-    drops: [],
+    drops: [
+      { position: this.pickup_target_position, type: CONST.IRON },
+    ],
+    keeper_position: this.pickup_start,
     map: {
       map_data: [
-        { type: Data.TILE_EMPTY, position: Vector2i(0, -2) },
+        { type: Data.TILE_EMPTY, position: Vector2i(-2, -1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(-1, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(0, -1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(1, -1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(2, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(-2, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(-1, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(0, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(1, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(2, 0) },
-        { type: Data.TILE_EMPTY, position: Vector2i(-2, 1) },
-        { type: Data.TILE_EMPTY, position: Vector2i(-1, 1) },
-        { type: Data.TILE_EMPTY, position: Vector2i(0, 1) },
-        { type: Data.TILE_EMPTY, position: Vector2i(1, 1) },
-        { type: Data.TILE_EMPTY, position: Vector2i(2, 1) },
-        { type: Data.TILE_EMPTY, position: Vector2i(-2, 2) },
-        { type: Data.TILE_EMPTY, position: Vector2i(-1, 2) },
-        { type: Data.TILE_EMPTY, position: Vector2i(0, 2) },
-        { type: Data.TILE_EMPTY, position: Vector2i(1, 2) },
-        { type: Data.TILE_EMPTY, position: Vector2i(2, 2) },
       ],
-      left_top: Vector2i(-2, -2),
-      bottom_right: Vector2i(2, 2),
+      left_top: Vector2i(-2, -1),
+      bottom_right: Vector2i(2, 1),
     },
-    keeper_position: this.move_start,
   }
 
   protected get_scenario(): FixtureScenario {
@@ -52,6 +48,16 @@ export class _MoveTest extends _Fixture {
       executor.task_failed.disconnect(this._task_failed)
     executor.task_completed.connect(this._task_completed)
     executor.task_failed.connect(this._task_failed)
+  }
+
+  _physics_process(_delta: float): void {
+    if (this.fixture_drops.is_empty())
+      return
+
+    const target = this.fixture_drops[0]
+    const keeper = Keepers.local.first()
+    if (is_instance_valid(keeper) && keeper.focussedCarryable === target)
+      this.target_was_focussed = true
   }
 
   private _task_completed(): void {

@@ -285,7 +285,7 @@ export class _Runner extends SceneTree {
   private async _cleanup_test_nodes(): Promise<void> {
     let queued = false
     for (const child of this.root.get_children()) {
-      if (!this._baseline_nodes.has(child.get_instance_id())) {
+      if (!this._baseline_nodes.has(child.get_instance_id()) && !child.is_in_group('vidot-persistent-game')) {
         child.queue_free()
         queued = true
       }

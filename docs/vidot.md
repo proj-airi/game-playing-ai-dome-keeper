@@ -23,6 +23,10 @@ The runner starts against the configured editable project, so the project's
 settings and Autoloads are available. It replaces the normal main-scene entry
 and begins collection after the first frame.
 
+Fixtures that need a complete game session may add its root node to the
+`vidot-persistent-game` group. The runner preserves that explicit node between
+tests; fixtures must use the game's own restart API to begin the next session.
+
 ## Configuration
 
 ```ts

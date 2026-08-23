@@ -44,7 +44,7 @@ export async function runViDot(
   const outputRoot = await mkdtemp(join(tmpdir(), 'vidot-'))
 
   try {
-    const files = await compileFiles(state, outputRoot)
+    const files = await compileFiles(state, outputRoot, options.projectPath)
     const filesByPath = indexFiles(files)
     let finished = false
     const launch = options.launch({ method })
@@ -134,6 +134,7 @@ export async function runViDot(
 async function compileFiles(
   state: WorkerGlobalState,
   outputRoot: string,
+  projectPath: string,
 ): Promise<RunFile[]> {
   const files: RunFile[] = []
 
@@ -143,6 +144,7 @@ async function compileFiles(
     const { scriptPath } = await compileTestFile({
       sourcePath: specification.filepath,
       outputDirectory,
+      projectPath,
     })
     const file = createFile(
       specification.filepath,

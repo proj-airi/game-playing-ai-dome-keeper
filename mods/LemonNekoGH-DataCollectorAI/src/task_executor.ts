@@ -1,34 +1,92 @@
 export interface PrimitiveTask extends RefCounted {
-  is_complete: (current: Vector2i) => boolean
-  resolve_action: (current: Vector2i) => string
+  failure: (keeper: Keeper) => string
+  is_complete: (keeper: Keeper, current: Vector2i) => boolean
+  resolve_action: (keeper: Keeper, current: Vector2i) => string
 }
 
-export class _TaskExecutor extends RefCounted {
+export class _TaskExecutor extends Node {
+  task_completed = gd.signal()
+  task_failed = gd.signal<[reason: string]>()
+
   private binding: InputEventKey | null = null
   private heldAction = ''
+  private keeper: Keeper | null = null
   private task: PrimitiveTask | null = null
 
-  start(task: PrimitiveTask, current: Vector2i): string {
+  _ready(): void {
+    this.process_mode = Node.PROCESS_MODE_ALWAYS
+    this.set_physics_process(false)
+  }
+
+  _physics_process(_delta: float): void {
+    const error = this._step()
+    if (error !== '')
+      this._finish_failed(error)
+  }
+
+  _exit_tree(): void {
+    this.cancel()
+  }
+
+  start(keeper: Keeper, task: PrimitiveTask): string {
+    if (this.task !== null)
+      return 'TaskExecutor already has an active task'
+    if (!is_instance_valid(keeper))
+      return 'TaskExecutor requires an active Keeper'
+
     this.task = task
-    return this._apply(task.resolve_action(current))
-  }
+    this.keeper = keeper
+    const error = this._step()
+    if (error !== '') {
+      this.cancel()
 
-  step(current: Vector2i): string {
-    const task = this.task
-    if (task === null)
-      return 'TaskExecutor has no active task'
+      return error
+    }
 
-    return this._apply(task.resolve_action(current))
-  }
+    this.set_physics_process(this.task !== null)
 
-  is_complete(current: Vector2i): boolean {
-    const task = this.task
-    return task !== null && task.is_complete(current)
+    return ''
   }
 
   cancel(): void {
+    this.set_physics_process(false)
     this.task = null
+    this.keeper = null
     this._release()
+  }
+
+  private _step(): string {
+    const keeper = this.keeper
+    const task = this.task
+    if (keeper === null || !is_instance_valid(keeper))
+      return 'Keeper was freed during task execution'
+    if (task === null)
+      return 'TaskExecutor has no active task'
+    if (Level.map === null)
+      return 'TaskExecutor requires a loaded level map'
+
+    const current: Vector2i = Level.map.getTileCoord(keeper.global_position)
+    if (task.is_complete(keeper, current)) {
+      this._finish_completed()
+
+      return ''
+    }
+
+    const failure = task.failure(keeper)
+    if (failure !== '')
+      return failure
+
+    return this._apply(task.resolve_action(keeper, current))
+  }
+
+  private _finish_completed(): void {
+    this.cancel()
+    this.task_completed.emit()
+  }
+
+  private _finish_failed(reason: string): void {
+    this.cancel()
+    this.task_failed.emit(reason)
   }
 
   private _apply(action: string): string {

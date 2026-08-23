@@ -11,7 +11,19 @@ export interface MapTile {
   position: Vector2i
 }
 
+export interface FixtureDrop {
+  position: Vector2i
+  type: typeof CONST.IRON | typeof CONST.SAND | typeof CONST.WATER | typeof CONST.RELIC
+}
+
+interface DropSpawnData {
+  position: Vector2
+  team: string
+  type: FixtureDrop['type']
+}
+
 export interface FixtureScenario {
+  drops: FixtureDrop[]
   keeper_position: Vector2i
   map: {
     left_top: Vector2i
@@ -22,6 +34,7 @@ export interface FixtureScenario {
 
 export class _Fixture extends Node {
   fixture_ready = false
+  fixture_drops: Drop[] = []
   startup_error = ''
   test_map_selected = false
 
@@ -57,9 +70,21 @@ export class _Fixture extends Node {
     if (OS.has_feature('movie') && !this._write_movie_options())
       return
 
-    const game = gameScene.instantiate() as Node & Game
-    game.devMode = false
-    this.add_child(game)
+    const game = this.get_tree().get_first_node_in_group('vidot-persistent-game')
+    if (game === null) {
+      const newGame = gameScene.instantiate() as Node & Game
+      newGame.devMode = false
+      newGame.add_to_group('vidot-persistent-game')
+      this.get_tree().root.add_child(newGame)
+    }
+    else if (StageManager.isInLevel()) {
+      Network.restart_run()
+    }
+    else {
+      this._fail('The previous fixture did not reach a Level that can be restarted')
+
+      return
+    }
 
     if (OS.has_feature('movie')) {
       const window = this.get_window()
@@ -125,6 +150,9 @@ export class _Fixture extends Node {
     if (!positioned)
       return
 
+    if (!this._spawn_fixture_drops(keeper))
+      return
+
     this.on_fixture_ready(keeper)
     this.fixture_ready = true
     this.set_process(false)
@@ -141,6 +169,7 @@ export class _Fixture extends Node {
 
     return {
       keeper_position: Vector2i.ZERO,
+      drops: [],
       map: {
         map_data: [],
         left_top: Vector2i.ZERO,
@@ -179,6 +208,34 @@ export class _Fixture extends Node {
     return true
   }
 
+  private _spawn_fixture_drops(keeper: Keeper): boolean {
+    const map = Level.map
+    const drops = Level.drops
+    if (map === null || drops === null) {
+      this._fail('The fixture could not spawn its Drops before the level was ready')
+
+      return false
+    }
+
+    for (const entry of this.get_scenario().drops) {
+      const data: DropSpawnData = {
+        position: map.getTilePos(entry.position),
+        team: keeper.teamId,
+        type: entry.type,
+      }
+      const carryable = drops.local_spawn(data as Dictionary)
+      if (!(carryable instanceof Drop)) {
+        this._fail('The fixture could not spawn a Drop')
+
+        return false
+      }
+
+      this.fixture_drops.append(gd.as(carryable, Drop))
+    }
+
+    return true
+  }
+
   private _load_test_map(): void {
     StageManager.stage_started.disconnect(this._load_test_map)
     const mapScene = load<PackedScene<MapData>>('res://content/map/MapData.tscn') as PackedScene<MapData> | null
@@ -195,14 +252,24 @@ export class _Fixture extends Node {
     const verySoft = Data.HARDNESS_VERY_SOFT
     const scenarioMap = this.get_scenario().map
 
-    for (let y = scenarioMap.left_top.y; y <= scenarioMap.bottom_right.y; y += 1) {
-      for (let x = scenarioMap.left_top.x; x <= scenarioMap.bottom_right.x; x += 1) {
-        const cell = Vector2i(x, y)
-        const position = Vector2(x, y)
+    for (let mapY = scenarioMap.left_top.y - 1; mapY <= scenarioMap.bottom_right.y + 1; mapY += 1) {
+      for (let mapX = scenarioMap.left_top.x - 1; mapX <= scenarioMap.bottom_right.x + 1; mapX += 1) {
+        const cell = Vector2i(mapX, mapY)
+        const position = Vector2(mapX, mapY)
+        const isBoundary = mapX === scenarioMap.left_top.x - 1
+          || mapX === scenarioMap.bottom_right.x + 1
+          || mapY === scenarioMap.left_top.y - 1
+          || mapY === scenarioMap.bottom_right.y + 1
 
         map.set_biomev(cell, 0)
-        map.set_hardnessv(position, verySoft)
-        map.set_resourcev(position, dirt)
+        if (isBoundary) {
+          map.set_hardnessv(position, Data.HARDNESS_INDESTRUCTIBLE)
+          map.set_resourcev(position, Data.TILE_BORDER)
+        }
+        else {
+          map.set_hardnessv(position, verySoft)
+          map.set_resourcev(position, dirt)
+        }
       }
     }
 

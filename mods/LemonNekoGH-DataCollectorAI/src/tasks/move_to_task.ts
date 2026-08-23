@@ -7,11 +7,15 @@ export class _MoveToTask extends RefCounted {
     this.target = target
   }
 
-  is_complete(current: Vector2i): boolean {
+  failure(_keeper: Keeper): string {
+    return ''
+  }
+
+  is_complete(_keeper: Keeper, current: Vector2i): boolean {
     return current.x === this.target.x && current.y === this.target.y
   }
 
-  resolve_action(_current: Vector2i): string {
-    return _MoveQuarkAction.resolve(_current, this.target)
+  resolve_action(_keeper: Keeper, current: Vector2i): string {
+    return _MoveQuarkAction.resolve(current, this.target)
   }
 }

@@ -16,3 +16,8 @@ Tests run headlessly unless `movie` is provided. Movie mode uses a decorated
 960×540 window at 30 FPS and requires Godot to produce a non-empty AVI. Each Mod
 builds its fixtures outside its production runtime and loads them through
 ViDot's `instantiate` context method.
+
+`FixtureScenario` declares the Keeper start tile, map, and physical `drops`.
+The base fixture spawns those Drops through the game's local drop system after
+the level is ready, then exposes their real instances as `fixture_drops` for
+test assertions and task setup.

@@ -41,25 +41,27 @@ without fixing the future Lower Agent interface:
   one-shot timing, and completion observation. Their Quark Actions do not retain
   state or decide whether the gameplay operation succeeded.
 
-The first vertical slice exposes `/root/DataCollectorAI` as an ordinary Godot
-runtime node. `start_move_to(target: Vector2i)` accepts an arbitrary target
-coordinate, while `current_tile()` reports the current `Vector2i` and `reset()`
-releases active input. `MoveToTask` owns the target and completion predicate;
-it resolves `Move` every physics frame, while `TaskExecutor` changes the
-configured held action only when the required direction changes. Tests
-subscribe to `task_completed` or `task_failed` before starting the task. The
-initial `TaskExecutor` deliberately does not provide path generation, pickup,
-interaction, or compound-task behavior.
+`DataCollectorAI` is an ordinary runtime node reserved for future task
+selection. It does not execute or expose concrete Keeper behavior. A
+`TaskExecutor` is a scene-tree node that owns one Keeper and one primitive task,
+drives it on physics frames, applies configured input, and emits completion or
+failure. Fixtures and tests can therefore instantiate an executor directly,
+without constructing the AI. `MoveToTask` owns the coordinate and completion
+predicate. `PickupTarget` moves toward the target's current tile, presses the
+configured pickup action only when that exact Drop is focused, and completes
+only after it attaches to the local Keeper. The initial executor deliberately
+does not provide path generation, interaction, or compound-task behavior.
 
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
 planner completeness, search semantics, partial ordering, method-effect
 semantics, or alternative-method backtracking. The exact source-file layout and
 the TypeScript data types are not frozen yet.
 
-DataCollectorAI does not depend on or register APIs with ViDot. Its Move test,
-controlled Dome Keeper fixture, and assertions live under `test/`; generated
-test GDScript is ignored and never installed under the production output root.
-ViKeeper supplies the shared Dome Keeper process launch policy.
+DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move
+and Pickup tests, controlled Dome Keeper fixture, and assertions live under
+`test/`; generated test GDScript is ignored and never installed under the
+production output root. ViKeeper supplies the shared Dome Keeper process launch
+policy.
 
 Build the generated runtime files with:
 
@@ -67,8 +69,8 @@ Build the generated runtime files with:
 pnpm run build
 ```
 
-Run the automated MoveTo proof with `mise run domekeeper:vidot:test`. Generate
-`recordings/move.avi` for visual inspection with
+Run the automated MoveTo and Pickup proofs with `mise run domekeeper:vidot:test`.
+Generate `recordings/move.avi` for visual inspection with
 `mise run domekeeper:vidot:record`.
 
 ### Terms
