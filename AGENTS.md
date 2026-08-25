@@ -5,6 +5,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 ## Development Quick Start
 
 - Run `mise install`, then `mise run setup`, to install pinned tools and locked dependencies.
+- Run `apm install` to install repository-managed Agent skills from the locked APM dependencies.
 - Use `mise.toml` as the executable source of truth and `mise tasks` to discover repository commands. Use mise tasks and pinned tools instead of ambient substitutes.
 - After code changes, run `mise run check`; it covers the Godot mod load check, the basic ViDot integration proof, ESLint, and TypeScript/Vue typechecking.
 - Before decompiling, launching, or testing Dome Keeper, read [`docs/development.md`](docs/development.md). Decompilation requires an owned local game and configured machine-local inputs; it is not part of unconditional setup.
@@ -15,6 +16,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Pin tool versions in `mise.toml`. When tool configuration changes, update and commit `mise.toml` and `mise.lock` together.
 - pnpm owns JavaScript and TypeScript dependencies and `pnpm-lock.yaml`; install with pnpm and run TypeScript scripts with Node.js.
 - uv owns Python dependencies, `uv.lock`, and `.venv`; invoke Python tools through uv or mise tasks, not bare `python`, `pip`, or `yolo`. Do not add a second overlapping Python environment manager.
+- apm owns repository-managed Agent skills, `apm.yml`, and `apm.lock.yaml`; install them with `apm install` and do not commit deployed skill contents.
 - ESLint uses `@antfu/eslint-config` with the flat `eslint.config.mjs`; treat `mise.toml` as mise-owned configuration and format it with `mise fmt`, not ESLint.
 - Use `execa` directly for TypeScript process execution and prefer its built-in output and termination behavior over local process wrappers.
 
@@ -64,11 +66,16 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Keep active documentation concise and current. Delete superseded behavior and
   design history instead of retaining migration notes or warnings against old
   implementations.
+- Architecture Decision Records under [`docs/decisions/`](docs/decisions/README.md)
+  are the sole exception to deleting superseded design history. Consult relevant
+  accepted ADRs before architectural work, and supersede an accepted ADR with a
+  new linked ADR instead of rewriting or deleting its history.
 - Update `docs/references.md` only when the external reference material changes.
 - Prefer reliable workflow automation, using manual steps only as fallback.
 
 ## Documentation Map
 
+- Architecture decisions and their preserved rationale: [`docs/decisions/`](docs/decisions/README.md).
 - Architecture, Agent roles, and runtime boundaries: [`docs/architecture.md`](docs/architecture.md).
 - Current rule-teacher behavior and supported gameplay: [`docs/teacher-controller.md`](docs/teacher-controller.md).
 - Shared local interaction behavior: [`docs/interaction.md`](docs/interaction.md).

@@ -11,6 +11,7 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+.pnpm-store/
 .alintcache
 **/.godot/
 packages/status-dashboard/dist/
@@ -19,3 +20,7 @@ runs/
 
 *.local.code-workspace
 *.uid
+
+# APM dependencies
+apm_modules/
+.agents/skills/adr-skill/

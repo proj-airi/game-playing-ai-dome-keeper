@@ -1,7 +1,7 @@
 import antfu from '@antfu/eslint-config'
 
 export default antfu({
-  ignores: ['mise.toml', '**/_typings/**'],
+  ignores: ['mise.toml', 'apm.lock.yaml', '**/_typings/**'],
 }, {
   files: [
     'packages/vidot/runtime/src/**/*.ts',

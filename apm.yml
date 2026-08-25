@@ -1,0 +1,15 @@
+name: airi-dome-keeper
+version: 1.0.0
+description: APM project for airi-dome-keeper
+author: LemonNeko
+# Which agent platforms to deploy to.
+# Resolution order: --target flag > this field > auto-detect from filesystem.
+# Accepted values: agent-skills, antigravity, claude, codex, copilot, cursor, gemini, grok-build, kiro, opencode, windsurf
+targets:
+  - codex
+dependencies:
+  apm:
+    - skillrecordings/adr-skill#2fc2269f83b0d17b2a134ae644a8c0a08cb19e07
+  mcp: []
+includes: auto
+scripts: {}
