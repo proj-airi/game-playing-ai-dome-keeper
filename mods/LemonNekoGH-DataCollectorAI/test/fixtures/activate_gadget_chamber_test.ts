@@ -2,19 +2,20 @@ import type { FixtureScenario } from '@vikeeper/vitest'
 import type { _TaskExecutor } from '../../src/task_executor.ts'
 import { _Fixture } from '@vikeeper/vitest'
 
-export class _PickupTest extends _Fixture {
-  pickup_start = Vector2i(-1, 0)
-  pickup_target_position = Vector2i(1, 0)
+export class _ActivateGadgetChamberTest extends _Fixture {
+  chamber_ready = false
+  chamber_position = Vector2i(1, 0)
+  keeper_start = Vector2i(-2, 0)
   target_was_focussed = false
   task_failure = ''
   task_finished = false
 
   private scenario: FixtureScenario = {
-    drops: [
-      { position: this.pickup_target_position, type: CONST.IRON },
+    drops: [],
+    keeper_position: this.keeper_start,
+    landmarks: [
+      { position: this.chamber_position, type: Data.TILE_GADGET },
     ],
-    keeper_position: this.pickup_start,
-    landmarks: [],
     map: {
       map_data: [
         { type: Data.TILE_EMPTY, position: Vector2i(-2, -1) },
@@ -22,14 +23,22 @@ export class _PickupTest extends _Fixture {
         { type: Data.TILE_EMPTY, position: Vector2i(0, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(1, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(2, -1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(3, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(-2, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(-1, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(0, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(1, 0) },
         { type: Data.TILE_EMPTY, position: Vector2i(2, 0) },
+        { type: Data.TILE_EMPTY, position: Vector2i(3, 0) },
+        { type: Data.TILE_EMPTY, position: Vector2i(-2, 1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(-1, 1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(0, 1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(1, 1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(2, 1) },
+        { type: Data.TILE_EMPTY, position: Vector2i(3, 1) },
       ],
       left_top: Vector2i(-2, -1),
-      bottom_right: Vector2i(2, 1),
+      bottom_right: Vector2i(3, 1),
     },
   }
 
@@ -37,27 +46,31 @@ export class _PickupTest extends _Fixture {
     return this.scenario
   }
 
+  protected on_fixture_ready(_keeper: Keeper): void {
+    const chamber = this.fixture_landmarks[0] as Chamber
+    chamber.tileRevealed(chamber.coord)
+    chamber.onExcavated()
+  }
+
   watch_task(executorNode: Node): void {
     const executor = executorNode as _TaskExecutor
     this.task_failure = ''
     this.task_finished = false
-    const watchingCompletion = executor.task_completed.is_connected(this._task_completed)
-    if (watchingCompletion)
-      executor.task_completed.disconnect(this._task_completed)
-    const watchingFailure = executor.task_failed.is_connected(this._task_failed)
-    if (watchingFailure)
-      executor.task_failed.disconnect(this._task_failed)
     executor.task_completed.connect(this._task_completed)
     executor.task_failed.connect(this._task_failed)
   }
 
   _physics_process(_delta: float): void {
-    if (this.fixture_drops.is_empty())
+    if (this.fixture_landmarks.is_empty())
       return
 
-    const target = this.fixture_drops[0]
+    const chamber = this.fixture_landmarks[0] as Chamber
+    if (chamber.currentState === Chamber.State.OPEN)
+      this.chamber_ready = true
+
+    const usable = chamber.get_node_or_null('Usable')
     const keeper = Keepers.local.first()
-    if (is_instance_valid(keeper) && keeper.focussedCarryable === target)
+    if (usable !== null && is_instance_valid(keeper) && keeper.focussedUsable === usable)
       this.target_was_focussed = true
   }
 

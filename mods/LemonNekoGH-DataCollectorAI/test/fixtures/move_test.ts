@@ -10,6 +10,7 @@ export class _MoveTest extends _Fixture {
 
   private scenario: FixtureScenario = {
     drops: [],
+    landmarks: [],
     map: {
       map_data: [
         { type: Data.TILE_EMPTY, position: Vector2i(0, -2) },

@@ -1,17 +1,17 @@
-export interface PrimitiveTask extends RefCounted {
-  failure: (keeper: Keeper) => string
-  is_complete: (keeper: Keeper, current: Vector2i) => boolean
-  resolve_action: (keeper: Keeper, current: Vector2i) => string
-}
+import type { CompoundTask, PrimitiveTask, Task } from './tasks/task.ts'
+import { _CompoundTask } from './tasks/task.ts'
 
 export class _TaskExecutor extends Node {
   task_completed = gd.signal()
   task_failed = gd.signal<[reason: string]>()
 
   private binding: InputEventKey | null = null
+  private child: Node | null = null
   private heldAction = ''
   private keeper: Keeper | null = null
-  private task: PrimitiveTask | null = null
+  private method: Task[] = []
+  private methodStep = 0
+  private task: Task | null = null
 
   _ready(): void {
     this.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -28,28 +28,45 @@ export class _TaskExecutor extends Node {
     this.cancel()
   }
 
-  start(keeper: Keeper, task: PrimitiveTask): string {
+  start(keeper: Keeper, task: Task): string {
     if (this.task !== null)
       return 'TaskExecutor already has an active task'
     if (!is_instance_valid(keeper))
       return 'TaskExecutor requires an active Keeper'
+    if (Level.map === null)
+      return 'TaskExecutor requires a loaded level map'
 
     this.task = task
     this.keeper = keeper
-    const error = this._step()
+    let error = ''
+    if (task instanceof _CompoundTask) {
+      const current: Vector2i = Level.map.getTileCoord(keeper.global_position)
+      error = task.begin(keeper, current)
+      if (error === '')
+        error = this._start_compound(task, current)
+    }
+    else {
+      error = this._step()
+    }
     if (error !== '') {
       this.cancel()
 
       return error
     }
 
-    this.set_physics_process(this.task !== null)
+    this.set_physics_process(
+      this.task !== null
+      && (!(this.task instanceof _CompoundTask) || (this.child === null && this.methodStep >= this.method.size())),
+    )
 
     return ''
   }
 
   cancel(): void {
     this.set_physics_process(false)
+    this._dispose_child()
+    this.method.clear()
+    this.methodStep = 0
     this.task = null
     this.keeper = null
     this._release()
@@ -76,7 +93,78 @@ export class _TaskExecutor extends Node {
     if (failure !== '')
       return failure
 
-    return this._apply(task.resolve_action(keeper, current))
+    if (task instanceof _CompoundTask)
+      return ''
+
+    return this._apply((task as PrimitiveTask).resolve_action(keeper, current))
+  }
+
+  private _start_compound(task: CompoundTask, current: Vector2i): string {
+    const keeper = this.keeper
+    if (keeper === null || !is_instance_valid(keeper))
+      return 'Keeper was freed during task execution'
+
+    this.method = task.resolve_method(keeper, current)
+    if (this.method.is_empty())
+      return 'Compound task resolved an empty method'
+
+    return this._start_next_child()
+  }
+
+  private _start_next_child(): string {
+    const keeper = this.keeper
+    if (keeper === null || !is_instance_valid(keeper))
+      return 'Keeper was freed during task execution'
+    if (this.methodStep >= this.method.size()) {
+      const task = this.task
+      if (!(task instanceof _CompoundTask))
+        return 'TaskExecutor has no active compound task'
+
+      this.set_physics_process(true)
+
+      return this._step()
+    }
+
+    const script = this.get_script() as GDScript
+    const child = script.new() as _TaskExecutor
+    this.child = child
+    this.add_child(child)
+    child.task_completed.connect(this._child_completed)
+    child.task_failed.connect(this._child_failed)
+    const error = child.start(keeper, this.method[this.methodStep])
+    if (error === '')
+      return ''
+
+    this._dispose_child()
+
+    return error
+  }
+
+  private _child_completed(): void {
+    this._dispose_child()
+    this.methodStep += 1
+    const error = this._start_next_child()
+    if (error !== '')
+      this._finish_failed(error)
+  }
+
+  private _child_failed(reason: string): void {
+    this._dispose_child()
+    this._finish_failed(reason)
+  }
+
+  private _dispose_child(): void {
+    const child = this.child as _TaskExecutor | null
+    this.child = null
+    if (child === null)
+      return
+
+    if (child.task_completed.is_connected(this._child_completed))
+      child.task_completed.disconnect(this._child_completed)
+    if (child.task_failed.is_connected(this._child_failed))
+      child.task_failed.disconnect(this._child_failed)
+    child.cancel()
+    child.queue_free()
   }
 
   private _finish_completed(): void {

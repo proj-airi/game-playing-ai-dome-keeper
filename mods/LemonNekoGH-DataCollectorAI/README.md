@@ -33,35 +33,36 @@ without fixing the future Lower Agent interface:
 - `MovePath` is not a confirmed task. Introduce a path-consuming compound task
   only after a concrete caller and behavior require one; a future student model
   may instead act from frame history and uncertain relative target direction.
-- `Activate`, `Pickup`, and `Drop` are separate Quark Actions. They resolve the
-  configured `ui_select`, `keeper1_pickup`, and `keeper1_drop` actions
-  respectively. Their default physical bindings may overlap, but Dome Keeper
-  allows them to be rebound independently.
-- `ActivateTarget`, `PickupTarget`, and `DropCargo` own target selection,
-  one-shot timing, and completion observation. Their Quark Actions do not retain
-  state or decide whether the gameplay operation succeeded.
+- `Activate` and `Pickup` are separate stateless Quark Actions. They resolve the
+  configured `ui_select` and `keeper1_pickup` actions only while the exact
+  requested object has focus. Their default physical bindings may overlap, but
+  Dome Keeper allows them to be rebound independently.
+- `PickupTarget` moves toward one exact Drop and completes only after that Drop
+  attaches to the Keeper.
+- `ActivateGadgetChamber` is a compound task. It focuses the exact usable,
+  issues one `Activate` press and release, and then waits without input until
+  the Chamber is empty and a Gadget is carried by the Keeper.
 
 `DataCollectorAI` is an ordinary runtime node reserved for future task
 selection. It does not execute or expose concrete Keeper behavior. A
-`TaskExecutor` is a scene-tree node that owns one Keeper and one primitive task,
-drives it on physics frames, applies configured input, and emits completion or
-failure. Fixtures and tests can therefore instantiate an executor directly,
-without constructing the AI. `MoveToTask` owns the coordinate and completion
-predicate. `PickupTarget` moves toward the target's current tile, presses the
-configured pickup action only when that exact Drop is focused, and completes
-only after it attaches to the local Keeper. The initial executor deliberately
-does not provide path generation, interaction, or compound-task behavior.
+`TaskExecutor` is a scene-tree node that owns one Keeper and either a primitive
+or compound task. A compound executor resolves one ordered method once, owns
+one child executor at a time, and propagates child completion or failure. Only
+the active primitive leaf applies configured input. Fixtures and tests can
+therefore instantiate an executor directly without constructing the AI. The
+executor does not provide path generation, alternative methods, replanning, or
+backtracking.
 
 The project borrows HTN's useful hierarchical vocabulary without adopting formal
 planner completeness, search semantics, partial ordering, method-effect
 semantics, or alternative-method backtracking. The exact source-file layout and
 the TypeScript data types are not frozen yet.
 
-DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move
-and Pickup tests, controlled Dome Keeper fixture, and assertions live under
-`test/`; generated test GDScript is ignored and never installed under the
-production output root. ViKeeper supplies the shared Dome Keeper process launch
-policy.
+DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move,
+Pickup, and Gadget Chamber activation tests, controlled Dome Keeper fixtures,
+and assertions live under `test/`; generated test GDScript is ignored and never
+installed under the production output root. ViKeeper supplies the shared Dome
+Keeper process launch policy.
 
 Build the generated runtime files with:
 
@@ -69,9 +70,15 @@ Build the generated runtime files with:
 pnpm run build
 ```
 
-Run the automated MoveTo and Pickup proofs with `mise run domekeeper:vidot:test`.
-Generate `recordings/move.avi` for visual inspection with
-`mise run domekeeper:vidot:record`.
+Run only the Gadget Chamber activation proof with:
+
+```bash
+mise run domekeeper:vidot:test -- test/activate_gadget_chamber.test.ts
+```
+
+Run all automated MoveTo, Pickup, and Gadget Chamber activation proofs with
+`mise run domekeeper:vidot:test`. Generate `recordings/move.avi` for visual
+inspection with `mise run domekeeper:vidot:record`.
 
 ### Terms
 

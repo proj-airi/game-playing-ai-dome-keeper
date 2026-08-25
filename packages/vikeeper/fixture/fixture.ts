@@ -16,6 +16,11 @@ export interface FixtureDrop {
   type: typeof CONST.IRON | typeof CONST.SAND | typeof CONST.WATER | typeof CONST.RELIC
 }
 
+export interface FixtureLandmark {
+  position: Vector2i
+  type: typeof Data.TILE_GADGET
+}
+
 interface DropSpawnData {
   position: Vector2
   team: string
@@ -25,6 +30,7 @@ interface DropSpawnData {
 export interface FixtureScenario {
   drops: FixtureDrop[]
   keeper_position: Vector2i
+  landmarks: FixtureLandmark[]
   map: {
     left_top: Vector2i
     bottom_right: Vector2i
@@ -35,7 +41,9 @@ export interface FixtureScenario {
 export class _Fixture extends Node {
   fixture_ready = false
   fixture_drops: Drop[] = []
+  fixture_landmarks: Node2D[] = []
   startup_error = ''
+  test_name = ''
   test_map_selected = false
 
   private landingSkipped = false
@@ -67,8 +75,26 @@ export class _Fixture extends Node {
     editorConfig.multiplayer_mode = CONST.DEV_ENTER_MULTIPLAYER_MODE.SINGLE
     StageManager.stage_started.connect(this._load_test_map)
 
-    if (OS.has_feature('movie') && !this._write_movie_options())
-      return
+    if (OS.has_feature('movie')) {
+      if (!this._write_movie_options())
+        return
+
+      const label = new Label()
+      label.text = this.test_name
+      label.set_anchors_and_offsets_preset(
+        Control.PRESET_BOTTOM_RIGHT,
+        Control.PRESET_MODE_MINSIZE,
+        16,
+      )
+      label.add_theme_font_size_override('font_size', 24)
+      label.add_theme_color_override('font_shadow_color', Color.BLACK)
+      label.add_theme_constant_override('shadow_offset_x', 2)
+      label.add_theme_constant_override('shadow_offset_y', 2)
+      const overlay = new CanvasLayer()
+      overlay.layer = 100
+      overlay.add_child(label)
+      this.add_child(overlay)
+    }
 
     const game = this.get_tree().get_first_node_in_group('vidot-persistent-game')
     if (game === null) {
@@ -135,6 +161,9 @@ export class _Fixture extends Node {
       return
     }
 
+    if (!this._spawn_fixture_landmarks())
+      return
+
     if (!this.positioningStarted) {
       this.positioningStarted = true
       keeper.global_position = map.getTilePos(this.get_scenario().keeper_position)
@@ -170,6 +199,7 @@ export class _Fixture extends Node {
     return {
       keeper_position: Vector2i.ZERO,
       drops: [],
+      landmarks: [],
       map: {
         map_data: [],
         left_top: Vector2i.ZERO,
@@ -231,6 +261,29 @@ export class _Fixture extends Node {
       }
 
       this.fixture_drops.append(gd.as(carryable, Drop))
+    }
+
+    return true
+  }
+
+  private _spawn_fixture_landmarks(): boolean {
+    const map = Level.map
+    const landmarks = this.get_scenario().landmarks
+    if (landmarks.is_empty() || !this.fixture_landmarks.is_empty())
+      return true
+
+    for (const entry of landmarks) {
+      const scene = map.getSceneForTileType(entry.type)
+      const landmark = scene === null
+        ? null
+        : map.addChamber(Vector2(entry.position.x, entry.position.y), scene)
+      if (!(landmark instanceof Node2D)) {
+        this._fail(`Fixture could not place a landmark at ${entry.position}`)
+
+        return false
+      }
+
+      this.fixture_landmarks.append(landmark)
     }
 
     return true

@@ -3,13 +3,16 @@ import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _PickupTargetTask } from '../src/tasks/pickup_target_task.ts'
 
-test('moves to, focuses, and picks up a Drop', async (context) => {
+const testName = 'moves to, focuses, and picks up a Drop'
+
+test(testName, async (context) => {
   const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
   const fixturePath = testRoot.path_join('runtime/pickup_test.gd')
   const fixture = context.instantiate<_PickupTest>(fixturePath)
   if (fixture === null)
     return
 
+  fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(
     () => fixture.startup_error !== '' ? true : fixture.fixture_ready,

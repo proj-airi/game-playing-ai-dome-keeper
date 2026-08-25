@@ -34,3 +34,4 @@ documentation describes only the system as it currently exists.
 ## ADRs
 
 - [ADR-0001: Adopt Architecture Decision Records](0001-adopt-architecture-decision-records.md) (accepted, 2026-08-25)
+- [ADR-0002: Model Target Activation as Compound Tasks](0002-model-target-activation-as-compound-tasks.md) (accepted, 2026-08-25)

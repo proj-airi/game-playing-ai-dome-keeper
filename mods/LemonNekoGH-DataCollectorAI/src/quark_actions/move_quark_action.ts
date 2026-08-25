@@ -11,4 +11,14 @@ export class _MoveQuarkAction extends RefCounted {
 
     return ''
   }
+
+  static resolve_position(current: Vector2, target: Vector2): string {
+    const delta = Vector2(target.x - current.x, target.y - current.y)
+    if (delta.length_squared() <= 16.0)
+      return ''
+    if (absf(delta.x) > absf(delta.y))
+      return delta.x > 0.0 ? 'ui_right' : 'ui_left'
+
+    return delta.y > 0.0 ? 'ui_down' : 'ui_up'
+  }
 }
