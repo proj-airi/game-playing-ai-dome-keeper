@@ -37,11 +37,14 @@ without fixing the future Lower Agent interface:
   configured `ui_select` and `keeper1_pickup` actions only while the exact
   requested object has focus. Their default physical bindings may overlap, but
   Dome Keeper allows them to be rebound independently.
-- `PickupTarget` moves toward one exact Drop and completes only after that Drop
-  attaches to the Keeper.
+- `PickupTarget` moves toward one exact Carryable and completes only after that
+  object attaches to the Keeper, including as an additional shared carrier.
 - `ActivateGadgetChamber` is a compound task. It focuses the exact usable,
   issues one `Activate` press and release, and then waits without input until
   the Chamber is empty and a Gadget is carried by the Keeper.
+- `DropUntilTypeTask` repeats short `Drop` press/release cycles until the game
+  releases a carried object of the requested type. `DropByType` then uses the
+  existing Pickup task to recover every nonmatching object released first.
 
 `DataCollectorAI` is an ordinary runtime node reserved for future task
 selection. It does not execute or expose concrete Keeper behavior. A
@@ -59,8 +62,8 @@ semantics, or alternative-method backtracking. The exact source-file layout and
 the TypeScript data types are not frozen yet.
 
 DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move,
-Pickup, and Gadget Chamber activation tests, controlled Dome Keeper fixtures,
-and assertions live under `test/`; generated test GDScript is ignored and never
+Pickup, type-directed Drop, and Gadget Chamber activation fixtures, tests, and
+assertions live under `test/`; generated test GDScript is ignored and never
 installed under the production output root. ViKeeper supplies the shared Dome
 Keeper process launch policy.
 
@@ -76,7 +79,7 @@ Run only the Gadget Chamber activation proof with:
 mise run domekeeper:vidot:test -- test/activate_gadget_chamber.test.ts
 ```
 
-Run all automated MoveTo, Pickup, and Gadget Chamber activation proofs with
+Run all automated MoveTo, Pickup, Drop, and Gadget Chamber activation proofs with
 `mise run domekeeper:vidot:test`. Generate `recordings/move.avi` for visual
 inspection with `mise run domekeeper:vidot:record`.
 
