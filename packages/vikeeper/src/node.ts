@@ -7,28 +7,23 @@ import { vidot } from '@vidot/vitest'
 
 export interface ViKeeperOptions {
   projectPath: string
-  testRoot: string
   godotPath?: string
   movie?: string
 }
 
 export function vikeeper(options: ViKeeperOptions): PoolRunnerInitializer {
   const projectPath = path.resolve(options.projectPath)
-  const testRoot = path.resolve(options.testRoot)
   const movie = options.movie === undefined ? undefined : path.resolve(options.movie)
 
   if (!existsSync(path.join(projectPath, 'project.godot')))
     throw new Error(`Dome Keeper project does not exist: ${projectPath}`)
-  if (!existsSync(testRoot))
-    throw new Error(`Mod test root does not exist: ${testRoot}`)
 
   return vidot({
     projectPath,
     godotPath: options.godotPath,
     launch: ({ method }) => {
-      const env = { VIKEEPER_TEST_ROOT: testRoot }
       if (method === 'collect' || movie === undefined)
-        return { args: ['--headless'], env }
+        return { args: ['--headless'] }
 
       return {
         args: [
@@ -43,7 +38,6 @@ export function vikeeper(options: ViKeeperOptions): PoolRunnerInitializer {
           '--fixed-fps',
           '30',
         ],
-        env,
         before: async () => {
           await mkdir(path.dirname(movie), { recursive: true })
           await rm(movie, { force: true })

@@ -1,17 +1,12 @@
-import type { _DropByTypeTest } from './fixtures/drop_by_type_test.ts'
 import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _DropByType } from '../src/tasks/drop_by_type.ts'
+import { _DropByTypeTest } from './fixtures/drop_by_type_test.ts'
 
 const testName = 'drops one requested type and repicks every mistakenly dropped item'
 
 test(testName, async (context) => {
-  const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
-  const fixturePath = testRoot.path_join('runtime/drop_by_type_test.gd')
-  const fixture = context.instantiate<_DropByTypeTest>(fixturePath)
-  if (fixture === null)
-    return
-
+  const fixture = new _DropByTypeTest()
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(

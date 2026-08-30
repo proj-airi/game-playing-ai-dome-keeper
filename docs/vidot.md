@@ -56,7 +56,9 @@ program sets `customConditions: ["node"]` and includes the Vitest
 configuration; the Godot program sets `customConditions: ["godot"]`, includes
 tstogd's Godot typings, and includes the test sources. Both import
 `@vidot/vitest`; conditional exports select the runtime-appropriate
-implementation.
+implementation. For each test file, ViDot finds the nearest
+`tsconfig.godot.json` from its source directory and compiles the generated test
+wrapper and its value-imported modules in that TypeScript program.
 
 ## Build and Compilation
 
@@ -116,8 +118,8 @@ Godot does not implement the Vitest worker protocol.
 
 ViKeeper composes `vidot()` with Dome Keeper launch policy. ViDot remains
 game-agnostic: it neither discovers a project nor owns a Mod fixture, game setup,
-or assertion. ViKeeper receives the explicit editable project and Mod test root,
-then supplies the headless or Movie Maker process policy. Each Mod owns its
+or assertion. ViKeeper receives the explicit editable project, then supplies the
+headless or Movie Maker process policy. Each Mod owns and value-imports its
 fixtures, setup, and assertions. The ViKeeper package README owns its caller
 contract and launch-mode details.
 

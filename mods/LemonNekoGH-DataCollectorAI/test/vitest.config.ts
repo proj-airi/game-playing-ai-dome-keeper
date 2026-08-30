@@ -17,7 +17,6 @@ export default defineConfig({
     isolate: false,
     pool: vikeeper({
       projectPath: path.join(repoRoot, 'external', 'domekeeper-decompiled', version),
-      testRoot: import.meta.dirname,
       movie: process.env.VIDOT_MOVIE,
     }),
   },

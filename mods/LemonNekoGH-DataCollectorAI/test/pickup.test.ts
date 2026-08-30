@@ -1,17 +1,12 @@
-import type { _PickupTest } from './fixtures/pickup_test.ts'
 import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _PickupTargetTask } from '../src/tasks/pickup_target_task.ts'
+import { _PickupTest } from './fixtures/pickup_test.ts'
 
 const testName = 'moves to, focuses, and picks up a Drop'
 
 test(testName, async (context) => {
-  const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
-  const fixturePath = testRoot.path_join('runtime/pickup_test.gd')
-  const fixture = context.instantiate<_PickupTest>(fixturePath)
-  if (fixture === null)
-    return
-
+  const fixture = new _PickupTest()
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(
