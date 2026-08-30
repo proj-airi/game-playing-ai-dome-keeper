@@ -1,6 +1,7 @@
 interface TaskBase {
   id: string
   name: string
+  mode: 'run' | 'skip'
   type: 'suite' | 'test'
 }
 
@@ -26,9 +27,16 @@ interface LoadedScript {
   error: string
 }
 
+interface TestNamePattern extends GodotObject {
+  compile: (pattern: string) => int
+  search: (subject: string) => GodotObject | null
+}
+
 export class _Runner extends SceneTree {
   private _collect_only = false
+  private _argument_error = ''
   private _files: Array<string> = []
+  private _test_name_pattern: TestNamePattern | null = null
   private _current_file = ''
   private _current_module: RefCounted | null = null
   private _root_task!: SuiteTask
@@ -45,6 +53,13 @@ export class _Runner extends SceneTree {
   private async _run(): Promise<void> {
     this.process_frame.disconnect(this._run)
     this._read_arguments()
+    if (!this._argument_error.is_empty()) {
+      this._emit({ type: 'runner_error', message: this._argument_error })
+      this.quit()
+
+      return
+    }
+
     this._remember_baseline_nodes()
 
     for (const file of this._files) {
@@ -73,6 +88,18 @@ export class _Runner extends SceneTree {
     for (const argument of OS.get_cmdline_user_args()) {
       if (argument === '--vidot-collect') {
         this._collect_only = true
+      }
+      else if (argument.begins_with('--vidot-test-name-pattern=')) {
+        const source = argument.trim_prefix('--vidot-test-name-pattern=')
+        const pattern = ClassDB.instantiate<TestNamePattern>('RegEx')
+        const error = pattern.compile(source)
+        if (error !== Error.OK) {
+          this._argument_error = `could not compile test name pattern (error ${error})`
+
+          continue
+        }
+
+        this._test_name_pattern = pattern
       }
       else if (argument.begins_with('--vidot-test=')) {
         this._files.append(argument.trim_prefix('--vidot-test='))
@@ -105,6 +132,7 @@ export class _Runner extends SceneTree {
     }
 
     this._current_module.call('vidot_collect', this)
+    this._apply_test_name_pattern()
     this._emit_collected()
 
     return true
@@ -147,6 +175,7 @@ export class _Runner extends SceneTree {
     this._suite_stack.back().children.append({
       id: this._take_task_id(),
       name: name,
+      mode: 'run',
       type: 'test',
       callback: callback,
     })
@@ -210,12 +239,18 @@ export class _Runner extends SceneTree {
     suite: SuiteTask,
     parents: Array<SuiteTask>,
   ): Promise<void> {
+    if (suite.mode === 'skip')
+      return
+
     const lineage = parents.duplicate()
     lineage.append(suite)
 
     await this._run_file_hooks(suite.before_all)
 
     for (const child of suite.children) {
+      if (child.mode === 'skip')
+        continue
+
       if (child.type === 'suite')
         await this._run_suite(child, lineage)
       else
@@ -304,6 +339,7 @@ export class _Runner extends SceneTree {
     return {
       id: this._suite_stack.is_empty() ? '0' : this._take_task_id(),
       name: name,
+      mode: 'run',
       type: 'suite',
       children: [],
       before_all: [],
@@ -320,6 +356,47 @@ export class _Runner extends SceneTree {
     return id
   }
 
+  private _apply_test_name_pattern(): void {
+    const pattern = this._test_name_pattern
+    if (pattern === null)
+      return
+
+    let has_matching_test = false
+    for (const child of this._root_task.children) {
+      if (this._filter_task(child, PackedStringArray(), pattern))
+        has_matching_test = true
+    }
+
+    this._root_task.mode = has_matching_test ? 'run' : 'skip'
+  }
+
+  private _filter_task(
+    task: Task,
+    parent_names: PackedStringArray,
+    pattern: TestNamePattern,
+  ): boolean {
+    const names = parent_names.duplicate()
+    names.append(task.name)
+
+    if (task.type === 'test') {
+      task.mode = pattern.search(' '.join(names)) === null
+        ? 'skip'
+        : 'run'
+
+      return task.mode === 'run'
+    }
+
+    let has_matching_test = false
+    for (const child of task.children) {
+      if (this._filter_task(child, names, pattern))
+        has_matching_test = true
+    }
+
+    task.mode = has_matching_test ? 'run' : 'skip'
+
+    return has_matching_test
+  }
+
   private _emit_collected(): void {
     this._emit({
       type: 'file_collected',
@@ -332,6 +409,7 @@ export class _Runner extends SceneTree {
     const public_task: EventData = {
       id: task.id,
       name: task.name,
+      mode: task.mode,
       type: task.type,
     }
     if (task.type === 'suite') {

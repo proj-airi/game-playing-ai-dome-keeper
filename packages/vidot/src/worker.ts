@@ -48,6 +48,7 @@ export async function runViDot(
     const filesByPath = indexFiles(files)
     let finished = false
     const launch = options.launch({ method })
+    const testNamePattern = state.config.testNamePattern
 
     const args = [
       ...launch.args,
@@ -57,6 +58,9 @@ export async function runViDot(
       options.runnerPath,
       '--',
       ...(method === 'collect' ? ['--vidot-collect'] : []),
+      ...(testNamePattern
+        ? [`--vidot-test-name-pattern=${testNamePattern.source}`]
+        : []),
       ...files.map(file => `--vidot-test=${file.scriptPath}`),
     ]
     await launch.before?.()
@@ -95,6 +99,8 @@ export async function runViDot(
           finished = true
           continue
         }
+        if (event.type === 'runner_error')
+          throw new Error(event.message)
 
         const file = filesByPath.get(resolve(event.file))
         if (!file)
@@ -215,7 +221,7 @@ async function reportCollection(
   tree: ViDotSuiteNode,
 ): Promise<void> {
   const file = runFile.file
-  file.mode = 'run'
+  file.mode = tree.mode
   file.tasks = tree.children.map((node: ViDotTaskNode, index: number) => createTask(
     state,
     runFile,
@@ -227,7 +233,7 @@ async function reportCollection(
   runFile.collected = true
 
   await state.rpc.onCollected([file])
-  if (method === 'run') {
+  if (method === 'run' && file.mode === 'run') {
     file.result = { state: 'run', startTime: Date.now() }
     await state.rpc.onTaskUpdate(
       [[file.id, file.result, file.meta]],
@@ -252,7 +258,7 @@ function createTask(
     name: node.name,
     fullName: `${file.name} > ${fullTestName}`,
     fullTestName,
-    mode: 'run',
+    mode: node.mode,
     meta: {},
     file,
     suite: parent,
@@ -332,7 +338,9 @@ async function reportFileFinish(
     throw new Error(`Godot finished an uncollected file: ${file.filepath}`)
 
   file.result = {
-    state: errors?.length || hasFailedTask(file) ? 'fail' : 'pass',
+    state: errors?.length || hasFailedTask(file)
+      ? 'fail'
+      : file.mode === 'skip' ? 'skip' : 'pass',
     duration,
     errors: toTestErrors(errors),
   }

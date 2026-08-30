@@ -19,6 +19,10 @@ files and launches Godot, but does not evaluate them or construct their test
 trees. The Godot runner loads each generated module, builds the authoritative
 tree from its registration calls, and executes the files sequentially.
 
+Vitest's `-t`/`testNamePattern` filter is passed to the Godot runner before
+collection. After collection, Godot uses its PCRE2-backed `RegEx` to mark
+nonmatching tests and suites as skipped before any test or hook executes.
+
 The runner starts against the configured editable project, so the project's
 settings and Autoloads are available. It replaces the normal main-scene entry
 and begins collection after the first frame.
