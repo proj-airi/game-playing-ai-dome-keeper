@@ -28,6 +28,7 @@ export interface ViDotSuiteNode {
   type: 'suite'
   id: string
   name: string
+  mode: 'run' | 'skip'
   children: ViDotTaskNode[]
 }
 
@@ -35,6 +36,7 @@ export interface ViDotTestNode {
   type: 'test'
   id: string
   name: string
+  mode: 'run' | 'skip'
 }
 
 export type ViDotTaskNode = ViDotSuiteNode | ViDotTestNode
@@ -71,4 +73,8 @@ export type ViDotEvent
   }
   | {
     type: 'run_finish'
+  }
+  | {
+    type: 'runner_error'
+    message: string
   }
