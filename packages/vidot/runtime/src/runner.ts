@@ -27,6 +27,11 @@ interface LoadedScript {
   error: string
 }
 
+interface TestFile {
+  name: string
+  path: string
+}
+
 interface TestNamePattern extends GodotObject {
   compile: (pattern: string) => int
   search: (subject: string) => GodotObject | null
@@ -35,7 +40,7 @@ interface TestNamePattern extends GodotObject {
 export class _Runner extends SceneTree {
   private _collect_only = false
   private _argument_error = ''
-  private _files: Array<string> = []
+  private _files: Array<TestFile> = []
   private _test_name_pattern: TestNamePattern | null = null
   private _current_file = ''
   private _current_module: RefCounted | null = null
@@ -85,6 +90,8 @@ export class _Runner extends SceneTree {
   }
 
   private _read_arguments(): void {
+    let test_name = ''
+
     for (const argument of OS.get_cmdline_user_args()) {
       if (argument === '--vidot-collect') {
         this._collect_only = true
@@ -101,21 +108,34 @@ export class _Runner extends SceneTree {
 
         this._test_name_pattern = pattern
       }
+      else if (argument.begins_with('--vidot-test-name=')) {
+        test_name = argument.trim_prefix('--vidot-test-name=')
+      }
       else if (argument.begins_with('--vidot-test=')) {
-        this._files.append(argument.trim_prefix('--vidot-test='))
+        if (test_name.is_empty()) {
+          this._argument_error = '--vidot-test must follow --vidot-test-name'
+
+          continue
+        }
+
+        this._files.append({
+          name: test_name,
+          path: argument.trim_prefix('--vidot-test='),
+        })
+        test_name = ''
       }
     }
   }
 
-  private _collect(file: string): bool {
-    this._current_file = file
+  private _collect(file: TestFile): bool {
+    this._current_file = file.path
     this._file_errors = []
     this._next_task_id = 1
     this._suite_stack.clear()
-    this._root_task = this._new_suite(file.get_file())
+    this._root_task = this._new_suite(file.name)
     this._suite_stack = [this._root_task]
 
-    const loaded = this._load_test_script(file)
+    const loaded = this._load_test_script(file.path)
     if (loaded.script === null) {
       this._file_errors.append(this._error(loaded.error))
       this._emit_collected()
@@ -361,13 +381,7 @@ export class _Runner extends SceneTree {
     if (pattern === null)
       return
 
-    let has_matching_test = false
-    for (const child of this._root_task.children) {
-      if (this._filter_task(child, PackedStringArray(), pattern))
-        has_matching_test = true
-    }
-
-    this._root_task.mode = has_matching_test ? 'run' : 'skip'
+    this._filter_task(this._root_task, PackedStringArray(), pattern)
   }
 
   private _filter_task(

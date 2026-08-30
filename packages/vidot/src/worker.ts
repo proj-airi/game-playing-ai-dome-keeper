@@ -61,7 +61,10 @@ export async function runViDot(
       ...(testNamePattern
         ? [`--vidot-test-name-pattern=${testNamePattern.source}`]
         : []),
-      ...files.map(file => `--vidot-test=${file.scriptPath}`),
+      ...files.flatMap(file => [
+        `--vidot-test-name=${file.file.name}`,
+        `--vidot-test=${file.scriptPath}`,
+      ]),
     ]
     await launch.before?.()
     const child = execa(options.godotPath, args, {
