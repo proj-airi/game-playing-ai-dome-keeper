@@ -13,7 +13,6 @@ export class _PickupTest extends _Fixture {
     drops: [
       { position: this.pickup_target_position, type: CONST.IRON },
     ],
-    keeper_position: this.pickup_start,
     landmarks: [],
     map: {
       map_data: [
@@ -35,6 +34,12 @@ export class _PickupTest extends _Fixture {
 
   protected get_scenario(): FixtureScenario {
     return this.scenario
+  }
+
+  protected on_fixture_ready(keeper: Keeper): void {
+    keeper.global_position = Level.map.getTilePos(this.pickup_start)
+    keeper.move = Vector2.ZERO
+    keeper.moveDirectionInput = Vector2.ZERO
   }
 
   watch_task(executorNode: Node): void {

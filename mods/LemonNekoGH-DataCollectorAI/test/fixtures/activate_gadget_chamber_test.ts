@@ -12,7 +12,6 @@ export class _ActivateGadgetChamberTest extends _Fixture {
 
   private scenario: FixtureScenario = {
     drops: [],
-    keeper_position: this.keeper_start,
     landmarks: [
       { position: this.chamber_position, type: Data.TILE_GADGET },
     ],
@@ -46,7 +45,11 @@ export class _ActivateGadgetChamberTest extends _Fixture {
     return this.scenario
   }
 
-  protected on_fixture_ready(_keeper: Keeper): void {
+  protected on_fixture_ready(keeper: Keeper): void {
+    keeper.global_position = Level.map.getTilePos(this.keeper_start)
+    keeper.move = Vector2.ZERO
+    keeper.moveDirectionInput = Vector2.ZERO
+
     const chamber = this.fixture_landmarks[0] as Chamber
     chamber.tileRevealed(chamber.coord)
     chamber.onExcavated()

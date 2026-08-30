@@ -34,11 +34,16 @@ export class _MoveTest extends _Fixture {
       left_top: Vector2i(-2, -2),
       bottom_right: Vector2i(2, 2),
     },
-    keeper_position: this.move_start,
   }
 
   protected get_scenario(): FixtureScenario {
     return this.scenario
+  }
+
+  protected on_fixture_ready(keeper: Keeper): void {
+    keeper.global_position = Level.map.getTilePos(this.move_start)
+    keeper.move = Vector2.ZERO
+    keeper.moveDirectionInput = Vector2.ZERO
   }
 
   watch_task(executorNode: Node): void {

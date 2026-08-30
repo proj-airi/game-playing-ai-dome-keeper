@@ -29,7 +29,6 @@ interface DropSpawnData {
 
 export interface FixtureScenario {
   drops: FixtureDrop[]
-  keeper_position: Vector2i
   landmarks: FixtureLandmark[]
   map: {
     left_top: Vector2i
@@ -47,7 +46,6 @@ export class _Fixture extends Node {
   test_map_selected = false
 
   private landingSkipped = false
-  private positioningStarted = false
 
   _ready(): void {
     this.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -156,27 +154,12 @@ export class _Fixture extends Node {
 
     const keeper = Keepers.local.first()
     if (!is_instance_valid(keeper)) {
-      this._fail('The fixture could not position the local Keeper')
+      this._fail('The fixture could not find the local Keeper')
 
       return
     }
 
     if (!this._spawn_fixture_landmarks())
-      return
-
-    if (!this.positioningStarted) {
-      this.positioningStarted = true
-      keeper.global_position = map.getTilePos(this.get_scenario().keeper_position)
-      keeper.move = Vector2.ZERO
-      keeper.moveDirectionInput = Vector2.ZERO
-
-      return
-    }
-
-    const current: Vector2i = map.getTileCoord(keeper.global_position)
-    const keeperPosition = this.get_scenario().keeper_position
-    const positioned = current.x === keeperPosition.x && current.y === keeperPosition.y
-    if (!positioned)
       return
 
     if (!this._spawn_fixture_drops(keeper))
@@ -197,7 +180,6 @@ export class _Fixture extends Node {
     this._fail('The fixture must provide a scenario')
 
     return {
-      keeper_position: Vector2i.ZERO,
       drops: [],
       landmarks: [],
       map: {

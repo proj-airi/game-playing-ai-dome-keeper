@@ -17,7 +17,6 @@ export class _DropByTypeTest extends _Fixture {
       { position: this.wrong_position, type: CONST.SAND },
       { position: this.expected_position, type: CONST.IRON },
     ],
-    keeper_position: this.keeper_start,
     landmarks: [],
     map: {
       map_data: [
@@ -50,6 +49,10 @@ export class _DropByTypeTest extends _Fixture {
   }
 
   protected on_fixture_ready(keeper: Keeper): void {
+    keeper.global_position = Level.map.getTilePos(this.keeper_start)
+    keeper.move = Vector2.ZERO
+    keeper.moveDirectionInput = Vector2.ZERO
+
     for (const drop of this.fixture_drops)
       Level.drops.network_pickup(drop, keeper.playerId)
   }

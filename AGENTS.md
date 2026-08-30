@@ -122,5 +122,10 @@ This section applies only when the legacy rule teacher is explicitly re-enabled;
 ## Verification
 
 - After code changes, run `mise run check`; after documentation-only changes, run focused Markdown, link, and consistency checks.
+- Run ViDot tests that launch Godot or Dome Keeper outside the Agent sandbox,
+  including `mise run vidot:test`, `mise run domekeeper:vidot:test`, and the
+  aggregate `mise run check`. The sandbox can resolve the correct mise-managed
+  tools while still aborting the macOS Godot process, so a sandboxed run is not
+  a valid result.
 - After changing a Dome Keeper mod, the `godot:check` dependency inside `mise run check` must pass; do not rely on Godot's process exit code alone.
 - Format and validate `mise.toml` with `mise fmt` when changing it.

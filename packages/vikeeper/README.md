@@ -17,7 +17,8 @@ Tests run headlessly unless `movie` is provided. Movie mode uses a decorated
 builds its fixtures outside its production runtime and loads them through
 ViDot's `instantiate` context method.
 
-`FixtureScenario` declares the Keeper start tile, map, and physical `drops`.
-The base fixture spawns those Drops through the game's local drop system after
-the level is ready, then exposes their real instances as `fixture_drops` for
-test assertions and task setup.
+`FixtureScenario` declares the map, landmarks, and physical `drops`. The base
+fixture spawns those Drops through the game's local drop system after the level
+is ready, then exposes their real instances as `fixture_drops` for test
+assertions and task setup. Each Mod fixture owns any Keeper positioning or
+station-entry setup required by its scenario.
