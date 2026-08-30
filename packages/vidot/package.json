@@ -16,8 +16,8 @@
   "scripts": {
     "build": "cd runtime && tstogd convert --godot-path \"$GODOT_BIN\" --project-root ../../../examples/basic-vidot",
     "prepack": "pnpm run build",
-    "test": "pnpm run build && cd ../../examples/basic-vidot && tstogd convert --godot-path \"$GODOT_BIN\" --tsconfig tsconfig.json && vitest run --config vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json && tsc -p runtime/tsconfig.json && tsc -p ../../examples/basic-vidot/tsconfig.json && tsc -p ../../examples/basic-vidot/tsconfig.node.json"
+    "test": "pnpm run build && cd ../../examples/basic-vidot && tstogd convert --godot-path \"$GODOT_BIN\" --tsconfig tsconfig.godot.json && vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json && tsc -p runtime/tsconfig.json && tsc -p ../../examples/basic-vidot/tsconfig.godot.json && tsc -p ../../examples/basic-vidot/tsconfig.node.json"
   },
   "dependencies": {
     "@vitest/runner": "catalog:",

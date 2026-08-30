@@ -1,17 +1,12 @@
-import type { _ActivateGadgetChamberTest } from './fixtures/activate_gadget_chamber_test.ts'
 import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _ActivateGadgetChamber } from '../src/tasks/activate_gadget_chamber.ts'
+import { _ActivateGadgetChamberTest } from './fixtures/activate_gadget_chamber_test.ts'
 
 const testName = 'activates a Gadget Chamber and carries its new Gadget'
 
 test(testName, async (context) => {
-  const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
-  const fixturePath = testRoot.path_join('runtime/activate_gadget_chamber_test.gd')
-  const fixture = context.instantiate<_ActivateGadgetChamberTest>(fixturePath)
-  if (fixture === null)
-    return
-
+  const fixture = new _ActivateGadgetChamberTest()
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(

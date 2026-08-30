@@ -1,17 +1,12 @@
-import type { _MoveTest } from './fixtures/move_test.ts'
 import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _MoveToTask } from '../src/tasks/move_to_task.ts'
+import { _MoveTest } from './fixtures/move_test.ts'
 
 const testName = 'moves the Engineer to a non-adjacent underground tile'
 
 test(testName, async (context) => {
-  const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
-  const fixturePath = testRoot.path_join('runtime/move_test.gd')
-  const fixture = context.instantiate<_MoveTest>(fixturePath)
-  if (fixture === null)
-    return
-
+  const fixture = new _MoveTest()
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(

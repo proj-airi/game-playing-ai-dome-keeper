@@ -63,9 +63,9 @@ the TypeScript data types are not frozen yet.
 
 DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move,
 Pickup, type-directed Drop, and Gadget Chamber activation fixtures, tests, and
-assertions live under `test/`; generated test GDScript is ignored and never
-installed under the production output root. ViKeeper supplies the shared Dome
-Keeper process launch policy.
+assertions live under `test/`; tests value-import their fixtures, and ViDot
+compiles that module graph outside the production output root. ViKeeper supplies
+the shared Dome Keeper process launch policy.
 
 Build the generated runtime files with:
 

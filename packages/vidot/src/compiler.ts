@@ -40,12 +40,14 @@ export async function compileTestFile(
 
   await mkdir(outputDirectory, { recursive: true })
   await writeFile(wrapperPath, wrapper)
+  const program = createTestProgram(sourcePath, wrapperPath)
   const convertedModules = convertRuntimeModules({
     entryFiles: [wrapperPath],
     rootDir: outputDirectory,
     tsDir: outputDirectory,
     gdDir: outputDirectory,
     projectRoot: projectPath,
+    program,
   })
 
   for (const module of convertedModules) {
@@ -59,6 +61,43 @@ export async function compileTestFile(
     throw new Error(`tstogd did not compile ${sourcePath}`)
 
   return { scriptPath: wrapperModule.outputPath }
+}
+
+function createTestProgram(sourcePath: string, wrapperPath: string): ts.Program {
+  const configPath = ts.findConfigFile(
+    dirname(sourcePath),
+    ts.sys.fileExists,
+    'tsconfig.godot.json',
+  )
+  if (configPath === undefined)
+    throw new Error(`could not find tsconfig.godot.json for ${sourcePath}`)
+
+  const config = ts.readConfigFile(configPath, ts.sys.readFile)
+  if (config.error)
+    throw new Error(formatDiagnostics([config.error]))
+
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    dirname(configPath),
+    undefined,
+    configPath,
+  )
+  if (parsed.errors.length > 0)
+    throw new Error(formatDiagnostics(parsed.errors))
+
+  return ts.createProgram({
+    rootNames: [...parsed.fileNames, wrapperPath],
+    options: parsed.options,
+  })
+}
+
+function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
+  return ts.formatDiagnostics(diagnostics, {
+    getCanonicalFileName: fileName => fileName,
+    getCurrentDirectory: ts.sys.getCurrentDirectory,
+    getNewLine: () => ts.sys.newLine,
+  })
 }
 
 function assertConversionSucceeded(

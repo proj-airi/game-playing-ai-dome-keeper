@@ -1,17 +1,12 @@
-import type { _AttackMonsterTest } from './fixtures/attack_monster_test.ts'
 import { expect, test } from '@vidot/vitest'
 import { _TaskExecutor } from '../src/task_executor.ts'
 import { _AttackMonsterTask } from '../src/tasks/attack_monster_task.ts'
+import { _AttackMonsterTest } from './fixtures/attack_monster_test.ts'
 
 const testName = 'aims the Laser Dome and kills one monster'
 
 test(testName, async (context) => {
-  const testRoot = OS.get_environment('VIKEEPER_TEST_ROOT')
-  const fixturePath = testRoot.path_join('runtime/attack_monster_test.gd')
-  const fixture = context.instantiate<_AttackMonsterTest>(fixturePath)
-  if (fixture === null)
-    return
-
+  const fixture = new _AttackMonsterTest()
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const fixtureReady = await context.waitUntil(
