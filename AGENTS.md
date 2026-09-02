@@ -70,6 +70,9 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
   are the sole exception to deleting superseded design history. Consult relevant
   accepted ADRs before architectural work, and supersede an accepted ADR with a
   new linked ADR instead of rewriting or deleting its history.
+- Research notes under [`docs/research/`](docs/research/README.md) preserve
+  evidence and unresolved questions, but they are not implementation
+  requirements unless an active document or accepted ADR adopts them.
 - Update `docs/references.md` only when the external reference material changes.
 - Prefer reliable workflow automation, using manual steps only as fallback.
 
@@ -86,6 +89,8 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Detailed Mod, decompilation, tool rationale, specialized workflows, and planned layout: [`docs/development.md`](docs/development.md).
 - Status and replay producer/consumer contract: [`packages/status-dashboard/README.md`](packages/status-dashboard/README.md).
 - External sources supporting project decisions: [`docs/references.md`](docs/references.md).
+- Prior-art reviews, reproducibility findings, and research history:
+  [`docs/research/`](docs/research/README.md).
 
 ## Cross-Cutting Invariants
 

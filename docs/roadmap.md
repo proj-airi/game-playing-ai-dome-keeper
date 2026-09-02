@@ -8,6 +8,125 @@ Roadmap entries commit only to their stated outcomes. They do not select an
 implementation, interface, dataset schema, model, dependency, or training method
 unless an explicit project decision says so.
 
+## Architecture Decision Sequence
+
+This sequence preserves the decisions that must precede the next data and
+Lower-Agent implementation work. Each entry states its decision status. An open
+entry does not reserve an ADR number. It can split or change before a complete
+proposal is ready for review.
+
+### Adopt a Multi-Timescale Gameplay Agent
+
+**Accepted by
+[ADR-0004](decisions/0004-adopt-a-multi-timescale-gameplay-agent.md).** AIRI
+starts a continuous tool-calling Upper LLM Agent for a whole-run gameplay task.
+The Upper controls one asynchronous Lower task with `query` and
+replace-on-`start` operations. The Lower runs outside the game and uses
+operating-system input.
+
+ADR-0004 does not select the Upper-to-Lower command, the Lower observation,
+the learned model, the training objective, or the task boundary. The remaining
+entries define and measure those contracts.
+
+The following latency, command-representation, and Lower-contract decisions are
+coupled work that may proceed in parallel. Their experiments must use shared
+scenarios and metrics where one candidate affects another; their order below is
+not a requirement to finish one before starting the next.
+
+### Benchmark the Runtime Control Boundary
+
+**Experiment design required.** Measure rather than guess which decisions can
+wait for an LLM and which must stay inside the Lower control loop. The ADR must
+define:
+
+- what “tolerated delay” means for movement, interaction, mining, combat, and
+  recovery scenarios;
+- a controlled delay-injection method and repeatable scenarios;
+- outcome, degradation, interruption, and recovery metrics;
+- the latency distribution to report, including tail latency rather than only
+  an average; and
+- the complete LLM decision path to measure: state preparation, request,
+  structured generation, validation, tool dispatch, and the first resulting
+  game input.
+
+The resulting allocation rule must determine which timing classes belong to
+AIRI, the gameplay Upper Agent, the Lower Agent, or a small deterministic safety
+and lifecycle boundary. Task granularity must not be selected from model names
+or intuition alone.
+
+### Define Candidate Upper-to-Lower Command Representations
+
+**Experiment contract required.** Define natural-language subgoals, closed
+structured calls, and a hybrid containing both language and explicit grounding
+as candidates rather than choosing a winner before a Lower model exists. The
+ADR must define candidate envelopes and compare at least:
+
+- complete valid-command latency for candidate LLMs;
+- schema and argument validity;
+- target ambiguity and stale-reference behavior;
+- debuggability and compatibility with AIRI and gameplay memory; and
+- how reliably a Lower model can learn from each representation.
+
+This decision must cover how a transient visual target is identified without
+requiring an LLM to remember an unstable detector identifier such as
+`target=17`.
+
+### Establish the Lower v0 Training and Evaluation Contract
+
+**Research and experiment design required.** Define enough of the Lower Agent to
+train and falsify a candidate without treating that candidate as disposable or
+as the final architecture. The ADR must decide:
+
+- deployed observation, task, configured-action, timing, and outcome contracts;
+- the initial architecture and learning objective, with reasons it can be
+  extended or replaced behind those contracts;
+- collection and alignment requirements for visual, task, action, and outcome
+  streams;
+- whole-episode or whole-seed dataset splits and leakage controls;
+- success, failure, timeout, interruption, and recovery labels; and
+- a task ladder that increases duration and decision complexity independently
+  where possible.
+
+The Lower v0 is successful when it provides a valid measurement instrument for
+the task boundary. It is not required to complete a whole run independently.
+
+### Derive Capture and Human-Telemetry Requirements
+
+**Evidence work; not necessarily an ADR.** Derive training-data requirements
+from the accepted Lower observation, command, action, timing, outcome, and
+evaluation contracts. Separately describe the questions a human must answer
+when reviewing an Agent timeline in the status dashboard. Existing teacher
+fields are evidence of an old debugging workflow, not automatically future
+telemetry requirements.
+
+This work must identify required information and provenance before selecting
+runtime producers, files, clocks, sampling cadences, or shared session
+machinery. It must distinguish in-game injected actions from deployed
+operating-system input.
+
+### Separate Legacy Collector Responsibilities
+
+**Blocked on the preceding requirements.** Decide ownership and migration for
+the required training-data capture and human-facing telemetry and replay. Do
+not assume one universal schema, one producer, or one shared capture session
+before their consumers establish a need for it.
+
+The legacy rule-teacher gameplay strategy is not a migration target and will be
+deleted after retained capabilities have explicit destinations. Existing
+in-game configured-action execution may remain only where controlled tests or
+approved data generation require it; it must not become the deployed Lower
+execution path.
+
+### Select the Initial Upper-to-Lower Operating Boundary
+
+**Blocked on the preceding evidence.** Increase task duration and complexity
+until the Lower Agent's reliability fails under a predefined criterion. Select
+the initial command representation and task boundary together from the game's
+measured delay tolerance, candidate LLM tail latency, command validity and
+grounding results, and the Lower task-ladder results. Record the selection and
+failure evidence in a later ADR; expect that ADR to be superseded when measured
+capabilities materially change.
+
 ## Capability Milestones
 
 ### Implement Godot-Native ViDot Test Execution — First Editable Proof Working
@@ -26,87 +145,42 @@ unless an explicit project decision says so.
 - Use this proof before expanding `TaskExecutor` to more actions or compound
   tasks.
 
-### Replace the Existing Collector with the TypeScript AI Mod
+### Define the Lower Agent v0 Contract
 
-- Develop `LemonNekoGH-DataCollectorAI` as the TypeScript-authored Godot
-  replacement for `LemonNekoGH-YoloDataCollector`, using the planner, task, and
-  `Quark Action` executor structure described in its README.
-- Keep the legacy collector disabled in active repository workflows while its
-  source remains available for migration evidence.
-- Keep the TypeScript-to-GDScript build boundary and generated runtime files
-  explicit while the new AI takes over the existing gameplay and data-collection
-  responsibilities.
+- Define the Upper-to-Lower candidate command envelopes and the learned Lower
+  Agent's observation, action, timing, training, and evaluation contracts before
+  implementing new multimodal capture.
+- Account for the control-relevant distinctions demonstrated by Laser defense:
+  exact selected-target ray acquisition, runtime damage eligibility, and
+  intentional-target eligibility, including the `WORM_ROCK` exclusion. Decide
+  their frame-derived representation rather than exposing privileged teacher
+  runtime fields.
+- Define a task ladder that can vary duration and decision complexity and expose
+  where each Lower candidate fails. Do not require whole-run independence.
 
-### Use Revealed Natural Cave Rewards
+### Derive Training-Data and Human-Telemetry Requirements
 
-- `ScannerCave`, `DroneCave`, `IronTreeCave`, `WaterCave`, `MushroomCave`,
-  `PortalCave`, and `HelmetCave` are implemented and validated in the supported
-  rule-teacher loop. The Scanner task spends two physical iron Drops and
-  incorporates reveal distance two into fishbone branch spacing. The Drone task
-  spends one physical water Drop and confirms the exact owned Squidley after
-  asynchronous opening. The three resource Cave tasks use one exact
-  initial-snapshot lifecycle; Iron Tree and Water have representative runtime
-  recordings. Mushroom observes a movement-speed increase, Portal observes a
-  passive ore delivery and inventory increase, and Helmet observes a mine-camera
-  zoom change. Their shared behavior belongs in [`interaction.md`](interaction.md); current
-  controller details belong in [`teacher-controller.md`](teacher-controller.md).
-- `CobaltCave` shares the implemented initial-snapshot path but remains
-  provisional because fresh test maps did not expose its deep, rare Cave before
-  the run ended. Validate it in a representative recording and add the
-  already-specified opportunistic renewable revisit for Iron Tree and Water.
-  Validate only the behavior needed to demonstrate its player-visible result.
-- Leave `BombCave` and `SeedCave` outside the teacher allowlist. A Cave Bomb
-  requires selecting a safe, useful blast location before its release commits
-  the explosion. A mineral-tree seed requires selecting a planting site with
-  sufficient space plus persistent memory, revisit, and harvest behavior. Do
-  not claim or interact with either excluded Cave, and do not add either
-  location policy or recurring task solely to support its reward.
-- Treat a revealed allowlisted Cave found by the shared radius-ten scan as a short
-  deviation from an ordinary path, not as a Cave-search objective. Share
-  discovery, A*-versus-direct routing, decision recording, activation, outcome
-  recording, and task resumption. Keep only required preparation and one
-  player-visible success observation in each Cave-specific branch.
-- After the initial Cave-specific task completes, never retain a recurring Cave
-  task, estimate or poll its cooldown, add a Cave waypoint, or change a later
-  route solely to collect a renewable reward. If an already-selected ordinary
-  task path later enters the validated interaction area of `MushroomCave`,
-  `IronTreeCave`, or `WaterCave`, snapshot the exact rewards authoritatively
-  available at that moment, handle each snapshot member at most once with
-  bounded local positioning, and immediately resume the same task. Do not wait
-  for another reward or infer availability from elapsed time. A pushed defense
-  or resource-acquisition task suspends the exact interaction snapshot; it does
-  not create a recurring Cave task. If no later ordinary path encounters the
-  Cave, leave its renewed rewards unused.
-- For `IronTreeCave`, enter fruit activation without unrelated cargo. After each
-  currently available fruit spawns an attached iron Drop, issue the normal
-  configured drop action and confirm the new iron is loose before activating
-  another fruit. Record the released physical iron Drops together as one
-  ordinary cache site, then resume ordinary work after the bounded harvest.
-  Post-wave cache quantity may later push cleanup, with no Iron Tree
-  direct-return path. An interruption suspends the local snapshot; a later
-  ordinary encounter after completion starts a fresh bounded snapshot.
-- Do not inspect or persist receiver internals unless a runtime failure proves
-  that the shared observation cannot diagnose or resume the interaction. Add
-  only the narrow state required by that demonstrated failure.
+- Derive required training observations, targets, outcomes, provenance, and
+  timing from the Lower v0 and command experiment contracts.
+- Define status-dashboard review scenarios as human questions about what the
+  Agent observed, was asked to do, attempted, and achieved. Do not preserve old
+  teacher fields merely because the existing dashboard can display them.
+- Keep requirements independent of a particular file layout, shared session
+  object, or producer until synchronization and consumer needs justify one.
 
-### Validate Complete Relic Hunt
+### Retire the Existing Collector Boundary
 
-- The manually started, single-player Engineer and Laser Dome teacher now
-  discovers and activates revealed relic switches, remembers and revisits one
-  excavated Relic Chamber, carries the final relic to the dome through normal
-  configured inputs, and lets the game-created final wave use ordinary defense.
-  It still confirms overall success only when `game.over == won`.
-- Prove the complete chain in a fresh runtime recording. Cover both discovery
-  orders for the chamber and a switch, confirm exact artifact pickup and
-  delivery, and observe the automatically scheduled final defense through its
-  terminal outcome. Keep the revealed-information and realizable-action
-  boundaries described in [`interaction.md`](interaction.md).
-- Keep Gadget artifacts and their choice flow distinct from the final Relic Hunt
-  relic. Extend either allowlist only after validating any newly required
-  artifact's complete runtime semantics.
-- Decide the minimum Vision classes needed for relic switches, the chamber, the
-  carried relic, the dome drop point, and terminal win/loss state before adding
-  them to the current ore/enemy dataset.
+- Use `LemonNekoGH-DataCollectorAI` and its task and `Quark Action` tests as
+  migration evidence, not as a predetermined owner of every legacy
+  responsibility or as the future operating-system input path.
+- Keep the legacy collector disabled while its source remains available until
+  the required data capture and telemetry and replay capabilities have explicit
+  destinations. Delete its rule-teacher gameplay strategy rather than migrating
+  it.
+- Complete the collector-responsibility ADR before assigning long-term
+  ownership or deleting the legacy implementation. Preserve the
+  TypeScript-to-GDScript build boundary only for capabilities that remain in a
+  Godot Mod after that decision.
 
 ### Expand the YOLO Dataset
 
@@ -116,25 +190,19 @@ unless an explicit project decision says so.
   dataset contract; current detector and collection decisions remain in
   [`vision.md`](vision.md).
 
-### Collect Configured Keyboard-Action Data
+### Implement Required Lower-Agent Data Capture
 
-- Add time-aligned collection of configured in-process actions from proven
-  teacher runs so later Lower-Agent experiments can relate realizable control to
-  frames, Vision output, and teacher context. Decide schema, sampling cadence,
-  synchronization, and intended learning use before implementation; replay
-  events and YOLO image-label pairs are not an action dataset.
+- Implement only the visual, command, action, timing, outcome, and provenance
+  streams required by the accepted Lower and experiment contracts. Keep
+  in-game-injected and operating-system-injected action sources distinguishable.
+- Decide eligible data sources, schema, sampling cadence, synchronization, and
+  intended learning use before collection. Replay events and YOLO image-label
+  pairs are not automatically a Lower action dataset.
 
-### Design the Lower Agent and Candidate Student Model
+### Train and Evaluate the Lower Agent v0
 
-- Derive the Upper-to-Lower task contract and the Lower Agent's observation,
-  action, timing, and evaluation contracts from proven teacher and Vision
-  evidence.
-- Account for the control-relevant distinctions demonstrated by Laser defense:
-  exact selected-target ray acquisition, runtime damage eligibility, and
-  intentional-target eligibility, including the `WORM_ROCK` exclusion. Decide
-  their frame-derived representation during contract design rather than
-  exposing privileged teacher runtime fields.
-- Design and evaluate a student model as one candidate Lower-Agent
-  implementation. This milestone does not preselect imitation learning or
-  require the deployed Lower Agent to be learned; rule-based, learned, hybrid,
-  and other implementations remain open until a separate decision selects one.
+- Train and evaluate the initial learned Lower-Agent candidates behind the
+  accepted contracts. Compare candidate command representations and progress
+  through the task ladder without preselecting the final task granularity.
+- Use the results together with measured game delay tolerance and LLM tail
+  latency to propose the initial Upper-to-Lower operating boundary.
