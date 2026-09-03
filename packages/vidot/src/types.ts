@@ -41,7 +41,7 @@ export interface ViDotTestNode {
 
 export type ViDotTaskNode = ViDotSuiteNode | ViDotTestNode
 
-export interface ViDotError {
+export interface ViDotError extends Record<string, unknown> {
   name?: string
   message: string
 }

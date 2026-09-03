@@ -11,10 +11,6 @@ export interface CompileTestFileOptions {
   projectPath: string
 }
 
-export interface CompiledTestFile {
-  scriptPath: string
-}
-
 const TEST_FILE_EXTENSION = /\.[cm]?tsx?$/
 const TEST_API_MODULE = '@vidot/vitest'
 const REGISTRATION_API_NAMES: readonly string[] = [
@@ -29,7 +25,7 @@ const TEST_API_NAMES = [...REGISTRATION_API_NAMES, 'expect']
 
 export async function compileTestFile(
   options: CompileTestFileOptions,
-): Promise<CompiledTestFile> {
+): Promise<string> {
   const sourcePath = resolve(options.sourcePath)
   const outputDirectory = resolve(options.outputDirectory)
   const projectPath = resolve(options.projectPath)
@@ -60,7 +56,7 @@ export async function compileTestFile(
   if (!wrapperModule)
     throw new Error(`tstogd did not compile ${sourcePath}`)
 
-  return { scriptPath: wrapperModule.outputPath }
+  return wrapperModule.outputPath
 }
 
 function createTestProgram(sourcePath: string, wrapperPath: string): ts.Program {

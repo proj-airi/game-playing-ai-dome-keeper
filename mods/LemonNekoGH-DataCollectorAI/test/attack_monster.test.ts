@@ -10,7 +10,7 @@ test(testName, async (context) => {
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const fixtureReady = await context.waitUntil(
-    () => fixture.startup_error !== '' ? true : fixture.fixture_ready,
+    () => fixture.startup_error !== '' || fixture.fixture_ready,
     60_000,
   )
   if (!expect(fixtureReady).toBe(true))

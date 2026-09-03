@@ -38,6 +38,7 @@ interface TestNamePattern extends GodotObject {
 }
 
 export class _Runner extends SceneTree {
+  tree!: SceneTree
   private _collect_only = false
   private _argument_error = ''
   private _files: Array<TestFile> = []
@@ -52,6 +53,7 @@ export class _Runner extends SceneTree {
   private _baseline_nodes: Dictionary<int, bool> = {}
 
   _initialize(): void {
+    this.tree = this
     this.process_frame.connect(this._run)
   }
 
@@ -287,16 +289,14 @@ export class _Runner extends SceneTree {
     const started_at = Time.get_ticks_msec()
     this._active_errors = []
     this._emit({ type: 'test_start', file: this._current_file, id: task.id })
-    const context = this._test_context()
-
     for (const suite of lineage)
-      await this._run_callbacks(suite.before_each, context)
+      await this._run_callbacks(suite.before_each)
 
     if (this._active_errors.is_empty())
-      await this._run_callback(task.callback, context)
+      await this._run_callback(task.callback)
 
     for (const index of range(lineage.size() - 1, -1, -1))
-      await this._run_callbacks(lineage[index].after_each, context)
+      await this._run_callbacks(lineage[index].after_each)
 
     await this._cleanup_test_nodes()
     const event: EventData = {
@@ -312,29 +312,25 @@ export class _Runner extends SceneTree {
     this._emit(event)
   }
 
-  private async _run_callbacks(callbacks: Array<Callable>, context: _Runner.Context): Promise<void> {
+  private async _run_callbacks(callbacks: Array<Callable>): Promise<void> {
     for (const callback of callbacks)
-      await this._run_callback(callback, context)
+      await this._run_callback(callback)
   }
 
-  private async _run_callback(callback: Callable, context: _Runner.Context): Promise<void> {
+  private async _run_callback(callback: Callable): Promise<void> {
     if (callback.get_argument_count() === 0) {
       await callback.call()
 
       return
     }
 
-    await callback.call(context)
+    await callback.call(this)
   }
 
   private async _run_file_hooks(callbacks: Array<Callable>): Promise<void> {
     this._active_errors = []
-    await this._run_callbacks(callbacks, this._test_context())
+    await this._run_callbacks(callbacks)
     this._file_errors.append_array(this._active_errors)
-  }
-
-  private _test_context(): _Runner.Context {
-    return _Runner.Context.create(this)
   }
 
   private async _cleanup_test_nodes(): Promise<void> {
@@ -381,19 +377,20 @@ export class _Runner extends SceneTree {
     if (pattern === null)
       return
 
-    this._filter_task(this._root_task, PackedStringArray(), pattern)
+    this._filter_task(this._root_task, '', pattern)
   }
 
   private _filter_task(
     task: Task,
-    parent_names: PackedStringArray,
+    parent_name: string,
     pattern: TestNamePattern,
   ): boolean {
-    const names = parent_names.duplicate()
-    names.append(task.name)
+    const name = parent_name.is_empty()
+      ? task.name
+      : `${parent_name} ${task.name}`
 
     if (task.type === 'test') {
-      task.mode = pattern.search(' '.join(names)) === null
+      task.mode = pattern.search(name) === null
         ? 'skip'
         : 'run'
 
@@ -402,7 +399,7 @@ export class _Runner extends SceneTree {
 
     let has_matching_test = false
     for (const child of task.children) {
-      if (this._filter_task(child, names, pattern))
+      if (this._filter_task(child, name, pattern))
         has_matching_test = true
     }
 
@@ -461,27 +458,6 @@ export class _Runner extends SceneTree {
 // eslint-disable-next-line ts/no-namespace
 export namespace _Runner {
   export const EVENT_PREFIX = 'VIDOT '
-
-  export class Context extends RefCounted {
-    tree!: SceneTree
-    private _runner!: TSOnly<_Runner>
-
-    static create(runner: TSOnly<_Runner>): Context {
-      const context = new Context()
-      context.tree = runner
-      context._runner = runner
-
-      return context
-    }
-
-    instantiate(path: string): unknown {
-      return this._runner.instantiate(path)
-    }
-
-    async waitUntil(predicate: Callable, timeoutMs: int): Promise<bool> {
-      return await this._runner.waitUntil(predicate, timeoutMs)
-    }
-  }
 
   export class Expectation extends RefCounted {
     private _runner!: TSOnly<_Runner>

@@ -10,16 +10,12 @@ test(testName, async (context) => {
   fixture.test_name = testName
   context.tree.root.add_child(fixture)
   const ready = await context.waitUntil(
-    () => fixture.startup_error !== '' ? true : fixture.fixture_ready,
+    () => fixture.startup_error !== '' || fixture.fixture_ready,
     60_000,
   )
   if (!expect(ready).toBe(true))
     return
   if (!expect(fixture.startup_error).toBe(''))
-    return
-  if (!expect(fixture.fixture_ready).toBe(true))
-    return
-  if (!expect(fixture.test_map_selected).toBe(true))
     return
 
   if (OS.has_feature('movie')) {

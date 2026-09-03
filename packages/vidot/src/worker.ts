@@ -2,7 +2,6 @@ import type {
   RunnerTestFile as File,
   RunnerTestSuite as Suite,
   RunnerTask as Task,
-  RunnerTaskResult as TaskResult,
   RunnerTestCase as Test,
   WorkerGlobalState,
 } from 'vitest'
@@ -18,7 +17,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
-import { createFileTask } from '@vitest/runner/utils'
+import { createFileTask, hasFailed } from '@vitest/runner/utils'
 
 import { execa } from 'execa'
 import { compileTestFile } from './compiler.ts'
@@ -28,7 +27,6 @@ const activeCancellations = new Set<() => void>()
 let cancellationHandlerRegistered = false
 
 interface RunFile {
-  specification: WorkerGlobalState['ctx']['files'][number]
   scriptPath: string
   file: File
   tasks: Map<string, Task>
@@ -123,7 +121,7 @@ export async function runViDot(
       ))
       if (incomplete.length > 0) {
         throw new Error(
-          `Godot did not finish: ${incomplete.map(file => file.specification.filepath).join(', ')}`,
+          `Godot did not finish: ${incomplete.map(file => file.file.filepath).join(', ')}`,
         )
       }
 
@@ -150,7 +148,7 @@ async function compileFiles(
   for (const [index, specification] of state.ctx.files.entries()) {
     const outputDirectory = join(outputRoot, String(index))
 
-    const { scriptPath } = await compileTestFile({
+    const scriptPath = await compileTestFile({
       sourcePath: specification.filepath,
       outputDirectory,
       projectPath,
@@ -170,7 +168,6 @@ async function compileFiles(
       state.config.name,
     ))
     files.push({
-      specification,
       scriptPath: resolve(scriptPath),
       file,
       tasks: new Map(),
@@ -322,7 +319,7 @@ async function reportTestFinish(
     state: event.state,
     startTime: test.result?.startTime,
     duration: event.duration,
-    errors: toTestErrors(event.errors),
+    errors: event.errors,
   }
   await state.rpc.onTaskUpdate(
     [[test.id, test.result, test.meta]],
@@ -341,11 +338,11 @@ async function reportFileFinish(
     throw new Error(`Godot finished an uncollected file: ${file.filepath}`)
 
   file.result = {
-    state: errors?.length || hasFailedTask(file)
+    state: errors?.length || hasFailed(file)
       ? 'fail'
       : file.mode === 'skip' ? 'skip' : 'pass',
     duration,
-    errors: toTestErrors(errors),
+    errors,
   }
   await state.rpc.onTaskUpdate(
     [[file.id, file.result, file.meta]],
@@ -359,18 +356,4 @@ function getTest(runFile: RunFile, id: string): Test {
   if (task?.type !== 'test')
     throw new Error(`Godot reported an unknown test: ${id}`)
   return task
-}
-
-function hasFailedTask(suite: Suite): boolean {
-  return suite.tasks.some(task => (
-    task.result?.state === 'fail'
-    || (task.type === 'suite' && hasFailedTask(task))
-  ))
-}
-
-function toTestErrors(errors?: ViDotError[]): TaskResult['errors'] {
-  return errors?.map(error => ({
-    name: error.name,
-    message: error.message,
-  }))
 }

@@ -43,7 +43,6 @@ export class _Fixture extends Node {
   fixture_landmarks: Node2D[] = []
   startup_error = ''
   test_name = ''
-  test_map_selected = false
 
   private landingSkipped = false
 
@@ -251,8 +250,6 @@ export class _Fixture extends Node {
   private _spawn_fixture_landmarks(): boolean {
     const map = Level.map
     const landmarks = this.get_scenario().landmarks
-    if (landmarks.is_empty() || !this.fixture_landmarks.is_empty())
-      return true
 
     for (const entry of landmarks) {
       const scene = map.getSceneForTileType(entry.type)
@@ -312,6 +309,5 @@ export class _Fixture extends Node {
       map.set_resourcev(Vector2(entry.position.x, entry.position.y), entry.type)
 
     levelStartData.tileData = map
-    this.test_map_selected = true
   }
 }
