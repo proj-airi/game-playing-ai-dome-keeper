@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-08-30
+amended: 2026-09-03
 decision-makers: LemonNeko
 ---
 
@@ -11,6 +12,10 @@ decision-makers: LemonNeko
 The integration combines long-term planning with real-time keyboard and mouse
 control. The selected large language model (LLM) cannot provide both time
 scales.
+
+The game is the ongoing environment input. The gameplay task does not wait for
+user input after AIRI starts it. The project has no evidence that it needs
+event-driven inference cancellation.
 
 The project needs stable boundaries between AIRI, the Upper Agent, and the
 Lower Agent.
@@ -28,7 +33,10 @@ The runtime obeys these rules:
 - The Upper Agent uses structured state, not screenshots, in its normal path.
   Only the Upper Agent can replace a Lower task.
 - The Upper Agent runs a continuous tool loop without a timer or completion
-  event. A state change does not restart an active inference.
+  event. When the current iteration ends, the runtime starts the next iteration.
+  Each iteration queries the latest available state.
+- A state update during play does not restart active Upper inference. The next
+  iteration observes the latest state.
 - The Lower Agent executes one bounded task during Upper inference. One game
   has no more than one active Lower task.
 - `start` replaces the active task without a queue or separate cancel operation.
@@ -50,64 +58,47 @@ supplies all vision roles and configured recording.
 sequenceDiagram
   autonumber
   actor AIRI
-  participant K as Keeper runtime
-  participant G as Game
-  participant V as Vision runtime
   participant U as Keeper Upper LLM
   participant L as Lower visual actor
-  participant I as Input injector
 
-  AIRI->>K: Start whole-run task with intent and context
-  K->>G: Launch game
-  K->>V: Start capture, recording, YOLO, and tracking
-  K->>L: Load actor with no active task
-  K->>I: Start injector and release all input
-  G-->>V: Continuous rendered frames
-  V-->>K: Ready at observed frame
-  K->>U: Start Upper with whole-run context
+  AIRI->>U: Start whole-run task with intent and context
+  U->>L: Initialize with no active task
+  Note over U,L: State updates do not interrupt active Upper inference
 
   par Lower control loop
     loop Whenever a Lower task is active
-      V-->>L: Recent frame history
-      L->>I: Action(task instance, decision frame)
-      I->>G: Keyboard and mouse input
+      L->>L: Observe recent frame history
+      L->>L: Apply action(task instance, decision frame)
     end
   and Upper reasoning loop
     loop While the whole-run task is active
-      U->>V: Query current world state
-      V-->>U: Structured snapshot(observed frame)
+      U->>U: Observe structured world state
       U->>L: Query current Lower task state
       L-->>U: Active task and execution state
       opt A Lower task is active
-        U->>V: Query task status(task instance)
-        V-->>U: Status, evidence, task instance, observed frame
+        U->>U: Observe task status and frame-derived evidence
       end
       U->>U: Reconcile state, history, and whole-run goal
       alt Keep current task
         U-->>L: Keep current task
       else Start or replace task
         U->>L: Start(new task instance, bounded task)
-        L->>I: Reject old output, release input, clear pending actions
-        Note over L,I: Already-applied input remains in game state
+        L->>L: Reject old output, release input, clear pending actions
+        Note over L: Already-applied input remains in world state
         L-->>U: Replacement accepted
       end
     end
   and AIRI supervision
     loop On demand
-      AIRI->>K: Query status or update whole-run context
-      K->>U: Forward provided context updates
-      K-->>AIRI: World summary, current task, history, progress
+      AIRI->>U: Query status or update whole-run context
+      U-->>AIRI: World summary, current task, history, progress
     end
   end
 
   alt AIRI stop, terminal game state, or fatal failure
-    K->>U: Stop Upper loop and reject new output
-    K->>L: Stop Lower actor
-    L->>I: Release all input and clear pending actions
-    K->>V: Stop capture and finalize recording
-    K->>I: Stop injector
-    K->>G: Close game
-    K-->>AIRI: Report final status
+    U->>U: Stop Upper loop and reject new output
+    U->>L: Stop actor, release input, clear pending actions
+    U-->>AIRI: Report final status
   end
 ```
 
@@ -117,7 +108,12 @@ The participants are logical roles. They do not require separate processes.
 
 - Lower control continues during Upper inference.
 - Fresh world state helps the Upper Agent correct long-term drift.
-- Upper reaction time is no shorter than one Upper iteration.
+- A state update can occur after an iteration reads state. The Upper Agent then
+  reacts after the current iteration and its next inference.
+- The Upper Agent consumes inference capacity for the whole-run task. This use
+  continues while the Lower task remains active.
+- The latency benchmark determines whether the runtime needs event-driven
+  inference cancellation.
 - Applied input cannot be reversed after task replacement.
 - Vision results can be missing, stale, or uncertain. The interfaces preserve
   `unknown`, observed-frame identifiers, and task-instance identifiers.
@@ -128,7 +124,8 @@ The participants are logical roles. They do not require separate processes.
 | --- | --- |
 | One model for both time scales | LLM latency blocks real-time control. |
 | Synchronous Upper and Lower execution | Upper reasoning stops during Lower control. |
-| Completion-event Upper loop | Event lifecycle rules make the Upper Agent a dispatcher. |
+| Completion-event Upper loop | The Upper Agent cannot reason proactively while the Lower task runs. |
+| Mandatory event-driven inference cancellation | It adds cancellation machinery before latency measurements show that continuous inference is too slow. |
 | Queued Lower tasks | The queue can run decisions from stale state. |
 
 ## References
@@ -138,6 +135,7 @@ The participants are logical roles. They do not require separate processes.
 - [RT-H: Action Hierarchies Using Language](https://rt-hierarchy.github.io/)
 - [SayCan](https://say-can.github.io/)
 
-If Lower tasks cannot isolate real-time control from Upper inference, revisit
-this decision. If AIRI cannot host continuous tool calling, revisit this
-decision.
+If measured Upper latency misses gameplay requirements, revisit event-driven
+inference cancellation. If Lower tasks cannot isolate real-time control from
+Upper inference, revisit this decision. If AIRI cannot host continuous tool
+calling, revisit this decision.

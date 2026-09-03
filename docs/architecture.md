@@ -48,7 +48,9 @@ The Keeper runtime executes lifecycle requests, reports status to AIRI, and
 runs a continuous tool-calling Upper LLM Agent. Each Upper iteration queries
 the current game and Lower state, performs inference, and can replace the
 current Lower task. The next iteration starts without a separate polling
-interval or a Lower completion wake-up.
+interval or a Lower completion wake-up. A state update does not cancel active
+Upper inference. The next iteration queries the latest state. The latency
+benchmark determines whether event-driven inference cancellation is necessary.
 
 Each game instance has at most one active Lower task. A replacement invalidates
 the old task-instance identifier, releases its held input, and clears unapplied

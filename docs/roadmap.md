@@ -22,7 +22,8 @@ proposal is ready for review.
 starts a continuous tool-calling Upper LLM Agent for a whole-run gameplay task.
 The Upper controls one asynchronous Lower task with `query` and
 replace-on-`start` operations. The Lower runs outside the game and uses
-operating-system input.
+operating-system input. The Upper does not wait for Lower completion. Each
+Upper iteration queries the latest Lower state.
 
 ADR-0004 does not select the Upper-to-Lower command, the Lower observation,
 the learned model, the training objective, or the task boundary. The remaining
@@ -35,19 +36,19 @@ not a requirement to finish one before starting the next.
 
 ### Benchmark the Runtime Control Boundary
 
-**Experiment design required.** Measure rather than guess which decisions can
-wait for an LLM and which must stay inside the Lower control loop. The ADR must
-define:
+**Experiment design required.** Measure which decisions can wait for an LLM.
+Keep the other decisions inside the Lower control loop. The ADR must define
+these items:
 
-- what “tolerated delay” means for movement, interaction, mining, combat, and
-  recovery scenarios;
-- a controlled delay-injection method and repeatable scenarios;
-- outcome, degradation, interruption, and recovery metrics;
-- the latency distribution to report, including tail latency rather than only
-  an average; and
-- the complete LLM decision path to measure: state preparation, request,
-  structured generation, validation, tool dispatch, and the first resulting
-  game input.
+- The meaning of “tolerated delay” for movement, interaction, mining, combat,
+  and recovery scenarios
+- A controlled delay-injection method and repeatable scenarios
+- Outcome, degradation, interruption, and recovery metrics
+- The reported latency distribution, with tail latency and the average
+- Whether continuous Upper iterations meet reaction requirements without
+  event-driven inference cancellation
+- The complete LLM decision path: state preparation, request, structured
+  generation, validation, tool dispatch, and the first resulting game input
 
 The resulting allocation rule must determine which timing classes belong to
 AIRI, the gameplay Upper Agent, the Lower Agent, or a small deterministic safety
