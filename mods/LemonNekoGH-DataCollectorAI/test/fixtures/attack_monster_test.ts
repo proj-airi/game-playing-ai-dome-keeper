@@ -8,6 +8,8 @@ export class _AttackMonsterTest extends _Fixture {
   monster_exited = false
   monster_killed = false
   station: DomeStation | null = null
+  task_failure = ''
+  task_finished = false
 
   private battleStarted = false
   private manager: Monsters | null = null
@@ -142,6 +144,15 @@ export class _AttackMonsterTest extends _Fixture {
 
     this.attack_ready = true
     this.set_physics_process(false)
+  }
+
+  _task_completed(): void {
+    this.task_finished = true
+  }
+
+  _task_failed(reason: string): void {
+    this.task_failure = reason
+    this.task_finished = true
   }
 
   private _monster_exited(): void {

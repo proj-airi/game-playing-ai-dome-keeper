@@ -15,6 +15,10 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Game AI Architecture
 
+- [Behavior Cloning](https://imitation.readthedocs.io/en/latest/algorithms/bc.html) — The imitation library documentation explains supervised learning from observation-action demonstrations. It supports the first Pickup training proposal without selecting a library dependency.
+- [Torchvision ResNet-18](https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html) — The official reference specifies ImageNet weights and RGB normalization. ADR-0005 uses those weights without the default center crop.
+- [PyTorch Transfer Learning Tutorial](https://docs.pytorch.org/tutorials/beginner/transfer_learning_tutorial.html) — The tutorial replaces a pretrained classifier's final layer and fine-tunes the network. It supports joint training of the Pickup visual network and action predictor.
+- [PyTorch CrossEntropyLoss](https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html) — The loss accepts class scores and target class indices. It supports the six-class supervised action objective in ADR-0005.
 - [The AI Systems of Left 4 Dead](https://steamcdn-a.akamaihd.net/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) — Michael Booth's Valve presentation describing the `Continue`, `ChangeTo`, `SuspendFor`, and `Done` Action transitions, including suspended Action resumption and reason strings for runtime debugging; it is the design reference for the teacher's interruptible task stack.
 - [Source SDK 2013: `NextBotBehavior.h`](https://github.com/ValveSoftware/source-sdk-2013/blob/master/src/game/server/NextBot/NextBotBehavior.h) — Valve's public NextBot Action and Behavior implementation, used as the upstream code reference for stack-based task suspension, completion, and resumption without retaining a separate top-level state machine.
 - [SHOP / SHOP2](https://www.cs.umd.edu/projects/shop/description.html) — The University of Maryland description of ordered Hierarchical Task Network planning, where methods decompose nonprimitive tasks into subtasks when their preconditions are satisfied; this is a conceptual reference for the recursive `TaskExecutor`, not a claim that the project implements formal HTN planning.
@@ -39,6 +43,8 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Godot Testing and Automation
 
+- [Godot 4.3: Physics Tick Rate](https://docs.godotengine.org/en/4.3/classes/class_engine.html#class-engine-property-physics-ticks-per-second) — The engine defaults to 60 physics updates per second. This supports the six-physics-frame TaskExecutor cadence experiment at 10 Hz.
+- [Godot 4.3: Input Event Buffering](https://github.com/godotengine/godot/blob/4.3/core/input/input.cpp#L920-L955) — `parse_input_event` can queue events for later delivery. The laser task test waits for input release after completion instead of requiring synchronous delivery.
 - [Vitest](https://vitest.dev/) — The outer runner used for candidate-file discovery and reporting while Godot collects and executes tests.
 - [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter, which forwards a file batch to one Godot runner instead of evaluating the tests in Node.js.
 - [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration used as a semantic reference for ViDot's Godot-side collector and compatibility fixtures, not as a Node-side collector in ViDot's runtime.

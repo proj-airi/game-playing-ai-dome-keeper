@@ -47,13 +47,29 @@ test(testName, async (context) => {
 
   const executor = new _TaskExecutor()
   fixture.add_child(executor)
+  executor.task_completed.connect(fixture._task_completed)
+  executor.task_failed.connect(fixture._task_failed)
   const task = new _AttackMonsterTask()
   task.initialize(laser, monster)
   if (!expect(executor.start(keeper, task)).toBe(''))
     return
 
-  const killed = await context.waitUntil(() => fixture.monster_killed, 30_000)
-  if (!expect(killed).toBe(true))
+  const finished = await context.waitUntil(() => fixture.task_finished, 30_000)
+  if (!expect(finished).toBe(true))
+    return
+  if (!expect(fixture.task_failure).toBe(''))
+    return
+  if (!expect(fixture.monster_killed).toBe(true))
+    return
+
+  // Godot can deliver buffered release events after the completion signal.
+  const released = await context.waitUntil(
+    () => !Input.is_action_pressed('ui_left')
+      && !Input.is_action_pressed('ui_right')
+      && !Input.is_action_pressed('dome1_fire'),
+    1_000,
+  )
+  if (!expect(released).toBe(true))
     return
 
   if (OS.has_feature('movie')) {

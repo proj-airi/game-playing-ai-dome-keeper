@@ -42,3 +42,4 @@ documentation describes only the system as it currently exists.
 - [ADR-0002: Model Target Activation as Compound Tasks](0002-model-target-activation-as-compound-tasks.md) (accepted, 2026-08-25)
 - [ADR-0003: Model Type-Directed Drop as Compound Tasks](0003-model-type-directed-drop-as-compound-tasks.md) (accepted, 2026-08-26)
 - [ADR-0004: Adopt a Multi-Timescale Gameplay Agent](0004-adopt-a-multi-timescale-gameplay-agent.md) (accepted 2026-08-30, amended 2026-09-03)
+- [ADR-0005: Start Lower-Agent Training with Pickup](0005-start-lower-agent-training-with-pickup.md) (proposed, 2026-09-05, updated 2026-09-06)

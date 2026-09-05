@@ -90,6 +90,59 @@ as the final architecture. The ADR must decide:
 
 The Lower v0 is successful when it provides a valid measurement instrument for
 the task boundary. It is not required to complete a whole run independently.
+The first offline Pickup experiment has its own bounded contract in ADR-0005.
+It does not wait for the general deployment and game-execution evaluation design.
+
+### Start Lower-Agent Training with Pickup
+
+**Proposed in
+[ADR-0005](decisions/0005-start-lower-agent-training-with-pickup.md).** The first
+experiment uses automatic `PickupTargetTask` demonstrations for behavior
+cloning. Its initial scenario contains one visible iron Drop in an open area.
+The proposal fixes the observation window, past-action input, action classes,
+pretrained visual model, and supervised objective. The ADR owns these data
+semantics. The first deliverable is an offline checkpoint and held-out report,
+not a model connected to the game.
+
+The six-physics-frame TaskExecutor cadence is implemented. Verification on
+2026-09-05 passed `mise run check`, including all five Dome Keeper task tests
+and both basic ViDot tests. MoveTo, Pickup, laser attack, type-directed Drop,
+and Gadget Chamber activation complete in their existing controlled scenarios.
+The laser test also waits for task completion and delivery of input release.
+The separate `mise run godot:check` passes. These results do not establish
+reliability across other maps, upgrades, or monsters.
+
+The follow-up work for this proposal is:
+
+- Define the capture entry point, ownership, and dataset container before capture implementation.
+  Keep offline training independent of game processes and teacher execution.
+- Generate varied demonstrations with `PickupTargetTask` and TaskExecutor.
+  Record scenarios, outcomes, observations, decisions, and applied input as required by ADR-0005.
+- Implement the window loader and end-to-end classifier from the ADR.
+  Keep experiment configuration and dataset splits reproducible with each checkpoint.
+- Check a small set of real demonstrations before a larger training run.
+  Measure memory use and training speed on the available hardware.
+- Select dataset size, split proportions, and training configuration from those measurements.
+  Report held-out prediction results without a claim of gameplay success.
+
+The initial verification covers:
+
+- [ ] Each target action follows its input observation. No input contains the target action or future outcome.
+- [ ] The loader reconstructs held input, repeated actions, releases, and the initial window without crossing episode boundaries.
+- [ ] Successful terminal releases supply no-input targets. Failure and cancellation cleanup do not supply success labels.
+- [ ] Repeated scenarios and all windows from an episode remain in one dataset split.
+- [ ] A training step updates both the CNN and MLP parameters. Validation does not update parameters or model statistics.
+- [ ] A saved checkpoint reproduces predictions with its recorded preprocessing and class order.
+- [ ] The report includes held-out loss, accuracy, per-class results, class counts, and a common-action baseline.
+
+Live model control, ViDot model integration, and game-execution evaluation are
+deferred. They require a separate runtime-boundary decision, not an inference
+RPC or asynchronous model task added to the teacher for this experiment.
+
+The relevant source lives in
+`mods/LemonNekoGH-DataCollectorAI/src/tasks/pickup_target_task.ts`,
+`src/task_executor.ts`, `test/fixtures/pickup_test.ts`, and `test/pickup.test.ts`
+under that Mod. Model and capture locations remain undecided.
 
 ### Derive Capture and Human-Telemetry Requirements
 

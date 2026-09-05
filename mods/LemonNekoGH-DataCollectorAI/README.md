@@ -22,12 +22,20 @@ Each executor owns its current method and method step. A parent advances only
 after its child reports a result, so a method step may itself be a compound task.
 Only the active primitive-task executor owns gameplay input.
 
+Task startup and compound child transitions execute immediately. During active
+execution, each executor checks completion and failure and updates input every
+six physics frames. At the game's default 60 Hz physics rate, this cadence is
+10 Hz. Held input persists between checks. Cancellation and scene removal
+submit release events immediately and reset the frame counter. Godot delivers
+those events through its normal input processing. This experiment supports
+[ADR-0005](../../docs/decisions/0005-start-lower-agent-training-with-pickup.md).
+
 The current action hierarchy keeps frame control separate from task state
 without fixing the future Lower Agent interface:
 
 - `Move` is a stateless Quark Action that returns the directional input for the
   current frame. The current `MoveTo` task may own an arbitrary map coordinate
-  and resolve `Move` each frame until the target is reached. Coordinates are
+  and resolve `Move` at each task check until the target is reached. Coordinates are
   useful for the privileged runtime and controlled tests but are not a promised
   student-model input.
 - `MovePath` is not a confirmed task. Introduce a path-consuming compound task

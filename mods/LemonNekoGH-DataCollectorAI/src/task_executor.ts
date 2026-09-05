@@ -11,6 +11,7 @@ export class _TaskExecutor extends Node {
   private keeper: Keeper | null = null
   private method: Task[] = []
   private methodStep = 0
+  private physicsFrames = 0
   private task: Task | null = null
 
   _ready(): void {
@@ -19,6 +20,12 @@ export class _TaskExecutor extends Node {
   }
 
   _physics_process(_delta: float): void {
+    // ADR-0005: Check tasks every six physics frames (10 Hz at 60 physics FPS).
+    this.physicsFrames += 1
+    if (this.physicsFrames < 6)
+      return
+
+    this.physicsFrames = 0
     const error = this._step()
     if (error !== '')
       this._finish_failed(error)
@@ -67,6 +74,7 @@ export class _TaskExecutor extends Node {
     this._dispose_child()
     this.method.clear()
     this.methodStep = 0
+    this.physicsFrames = 0
     this.task = null
     this.keeper = null
     this._release()

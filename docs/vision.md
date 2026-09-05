@@ -25,6 +25,14 @@ an MVP plan, a published artifact, a future target, or historical context.
 - Keep TechTree frames excluded from the ore/enemy YOLO dataset even while the
   teacher operates the upgrade popup.
 
+## Lower-Agent Pickup Training
+
+[ADR-0005](decisions/0005-start-lower-agent-training-with-pickup.md) owns the
+proposed offline Pickup classifier, demonstration data, and supervised objective.
+Its action dataset is separate from YOLO detection labels.
+The [roadmap](roadmap.md#start-lower-agent-training-with-pickup) owns implementation and verification.
+This experiment does not select a live inference host or extend ViDot to run the model.
+
 ## Dataset Versioning
 
 - For Hugging Face datasets, use `main` for ongoing work and use git tags for released dataset versions; create branches only for long-lived variants.
