@@ -25,13 +25,18 @@ an MVP plan, a published artifact, a future target, or historical context.
 - Keep TechTree frames excluded from the ore/enemy YOLO dataset even while the
   teacher operates the upgrade popup.
 
-## Lower-Agent Pickup Training
+## Lower v0 Training
 
-[ADR-0005](decisions/0005-start-lower-agent-training-with-pickup.md) owns the
-proposed offline Pickup classifier, demonstration data, and supervised objective.
-Its action dataset is separate from YOLO detection labels.
-The [roadmap](roadmap.md#start-lower-agent-training-with-pickup) owns implementation and verification.
-This experiment does not select a live inference host or extend ViDot to run the model.
+[ADR-0005](decisions/0005-train-lower-v0-with-automated-multitask-demonstrations.md)
+owns the accepted Lower v0 classifier, automated Session data, and supervised
+objective. One instruction-conditioned model learns Pickup and type-directed
+Drop for iron, cobalt, and water; Gadget Chamber activation; and Laser attack.
+Its action dataset under `data/lower-v0/` is separate from YOLO detection labels.
+`LemonNekoGH-DataCollectorAI` owns collection, while the Python training
+subproject lives under `models/lower-v0/`. The
+[roadmap](roadmap.md#train-lower-v0-with-automated-multitask-demonstrations)
+owns implementation and verification. This work does not select a live
+inference host or extend ViDot to run the model.
 
 ## Dataset Versioning
 

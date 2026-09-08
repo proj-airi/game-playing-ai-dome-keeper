@@ -27,8 +27,8 @@ execution, each executor checks completion and failure and updates input every
 six physics frames. At the game's default 60 Hz physics rate, this cadence is
 10 Hz. Held input persists between checks. Cancellation and scene removal
 submit release events immediately and reset the frame counter. Godot delivers
-those events through its normal input processing. This experiment supports
-[ADR-0005](../../docs/decisions/0005-start-lower-agent-training-with-pickup.md).
+those events through its normal input processing. This runtime supports
+[ADR-0005](../../docs/decisions/0005-train-lower-v0-with-automated-multitask-demonstrations.md).
 
 The current action hierarchy keeps frame control separate from task state
 without fixing the future Lower Agent interface:
@@ -54,9 +54,10 @@ without fixing the future Lower Agent interface:
   releases a carried object of the requested type. `DropByType` then uses the
   existing Pickup task to recover every nonmatching object released first.
 
-`DataCollectorAI` is an ordinary runtime node reserved for future task
-selection. It does not execute or expose concrete Keeper behavior. A
-`TaskExecutor` is a scene-tree node that owns one Keeper and either a primitive
+`DataCollectorAI` is the selected owner for Lower v0 scenario construction,
+task selection, and Session recording. Those collection capabilities are not
+implemented yet. A `TaskExecutor` is a scene-tree node that owns one Keeper and
+either a primitive
 or compound task. A compound executor resolves one ordered method once, owns
 one child executor at a time, and propagates child completion or failure. Only
 the active primitive leaf applies configured input. Fixtures and tests can
@@ -70,10 +71,10 @@ semantics, or alternative-method backtracking. The exact source-file layout and
 the TypeScript data types are not frozen yet.
 
 DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move,
-Pickup, type-directed Drop, and Gadget Chamber activation fixtures, tests, and
-assertions live under `test/`; tests value-import their fixtures, and ViDot
-compiles that module graph outside the production output root. ViKeeper supplies
-the shared Dome Keeper process launch policy.
+Pickup, type-directed Drop, Gadget Chamber activation, and Laser attack
+fixtures, tests, and assertions live under `test/`; tests value-import their
+fixtures, and ViDot compiles that module graph outside the production output
+root. ViKeeper supplies the shared Dome Keeper process launch policy.
 
 Build the generated runtime files with:
 
@@ -87,7 +88,8 @@ Run only the Gadget Chamber activation proof with:
 mise run domekeeper:vidot:test -- test/activate_gadget_chamber.test.ts
 ```
 
-Run all automated MoveTo, Pickup, Drop, and Gadget Chamber activation proofs with
+Run all automated MoveTo, Pickup, Drop, Gadget Chamber activation, and Laser
+attack proofs with
 `mise run domekeeper:vidot:test`. Generate `recordings/move.avi` for visual
 inspection with `mise run domekeeper:vidot:record`.
 

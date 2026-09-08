@@ -26,8 +26,9 @@ operating-system input. The Upper does not wait for Lower completion. Each
 Upper iteration queries the latest Lower state.
 
 ADR-0004 does not select the Upper-to-Lower command, the Lower observation,
-the learned model, the training objective, or the task boundary. The remaining
-entries define and measure those contracts.
+the learned model, the training objective, or the task boundary. ADR-0005 now
+selects one bounded Lower v0 training contract; the remaining entries measure
+the eventual deployed boundary and alternatives beyond that first model.
 
 The following latency, command-representation, and Lower-contract decisions are
 coupled work that may proceed in parallel. Their experiments must use shared
@@ -57,10 +58,11 @@ or intuition alone.
 
 ### Define Candidate Upper-to-Lower Command Representations
 
-**Experiment contract required.** Define natural-language subgoals, closed
-structured calls, and a hybrid containing both language and explicit grounding
-as candidates rather than choosing a winner before a Lower model exists. The
-ADR must define candidate envelopes and compare at least:
+**Experiment contract required beyond Lower v0.** ADR-0005 selects a closed
+structured instruction for the initial model without selecting the final
+Upper-to-Lower command. Compare natural-language subgoals, closed structured
+calls, and a hybrid containing both language and explicit grounding before
+changing that deployed boundary. The experiment must compare at least:
 
 - complete valid-command latency for candidate LLMs;
 - schema and argument validity;
@@ -74,35 +76,24 @@ requiring an LLM to remember an unstable detector identifier such as
 
 ### Establish the Lower v0 Training and Evaluation Contract
 
-**Research and experiment design required.** Define enough of the Lower Agent to
-train and falsify a candidate without treating that candidate as disposable or
-as the final architecture. The ADR must decide:
+**Accepted by
+[ADR-0005](decisions/0005-train-lower-v0-with-automated-multitask-demonstrations.md).**
+Lower v0 is one instruction-conditioned ResNet-18 and MLP action classifier.
+Its fixed input, action, timing, Session, collection, storage, split, and offline
+evaluation contracts are ready for implementation. It is a bounded measurement
+instrument for the task boundary, not the final Lower architecture or a whole-run
+Agent.
 
-- deployed observation, task, configured-action, timing, and outcome contracts;
-- the initial architecture and learning objective, with reasons it can be
-  extended or replaced behind those contracts;
-- collection and alignment requirements for visual, task, action, and outcome
-  streams;
-- whole-episode or whole-seed dataset splits and leakage controls;
-- success, failure, timeout, interruption, and recovery labels; and
-- a task ladder that increases duration and decision complexity independently
-  where possible.
+### Train Lower v0 with Automated Multitask Demonstrations
 
-The Lower v0 is successful when it provides a valid measurement instrument for
-the task boundary. It is not required to complete a whole run independently.
-The first offline Pickup experiment has its own bounded contract in ADR-0005.
-It does not wait for the general deployment and game-execution evaluation design.
-
-### Start Lower-Agent Training with Pickup
-
-**Proposed in
-[ADR-0005](decisions/0005-start-lower-agent-training-with-pickup.md).** The first
-experiment uses automatic `PickupTargetTask` demonstrations for behavior
-cloning. Its initial scenario contains one visible iron Drop in an open area.
-The proposal fixes the observation window, past-action input, action classes,
-pretrained visual model, and supervised objective. The ADR owns these data
-semantics. The first deliverable is an offline checkpoint and held-out report,
-not a model connected to the game.
+**Accepted in
+[ADR-0005](decisions/0005-train-lower-v0-with-automated-multitask-demonstrations.md).**
+The first model learns automatic demonstrations for Pickup and type-directed
+Drop of iron, cobalt, and water; Gadget Chamber activation; and Laser attack.
+The ADR fixes the structured instruction, observation window, past-action input,
+nine action classes, pretrained visual model, supervised objective, Session
+schema, capture owner, and repository locations. The first deliverable is an
+offline checkpoint and held-out report, not a model connected to the game.
 
 The six-physics-frame TaskExecutor cadence is implemented. Verification on
 2026-09-05 passed `mise run check`, including all five Dome Keeper task tests
@@ -112,14 +103,19 @@ The laser test also waits for task completion and delivery of input release.
 The separate `mise run godot:check` passes. These results do not establish
 reliability across other maps, upgrades, or monsters.
 
-The follow-up work for this proposal is:
+The follow-up work for this decision is:
 
-- Define the capture entry point, ownership, and dataset container before capture implementation.
-  Keep offline training independent of game processes and teacher execution.
-- Generate varied demonstrations with `PickupTargetTask` and TaskExecutor.
-  Record scenarios, outcomes, observations, decisions, and applied input as required by ADR-0005.
-- Implement the window loader and end-to-end classifier from the ADR.
-  Keep experiment configuration and dataset splits reproducible with each checkpoint.
+- Extend `LemonNekoGH-DataCollectorAI` with reproducible scenario construction
+  and atomic Session recording under `data/lower-v0/`. Generate all eight valid
+  `(task, target)` combinations through `TaskExecutor`.
+- Add the mise- and uv-managed Python training subproject under
+  `models/lower-v0/`. Implement the causal window loader and the jointly trained
+  ResNet-18 and MLP classifier from ADR-0005.
+- Declare `torch>=2.14,<2.15` and `torchvision>=0.29,<0.30` in the model
+  subproject, register it in the root uv workspace, and record the resolved
+  cross-platform artifacts in the root `uv.lock`.
+- Keep experiment configuration, schema version, preprocessing, class order,
+  dataset splits, and checkpoint metadata reproducible.
 - Check a small set of real demonstrations before a larger training run.
   Measure memory use and training speed on the available hardware.
 - Select dataset size, split proportions, and training configuration from those measurements.
@@ -128,42 +124,41 @@ The follow-up work for this proposal is:
 The initial verification covers:
 
 - [ ] Each target action follows its input observation. No input contains the target action or future outcome.
-- [ ] The loader reconstructs held input, repeated actions, releases, and the initial window without crossing episode boundaries.
+- [ ] All eight valid `(task, target)` combinations produce complete automated Sessions with 384-by-216 RGB PNG frames and ordered JSON metadata.
+- [ ] Failed, interrupted, timed-out, and invalid temporary Sessions do not enter `data/lower-v0/`.
+- [ ] The loader reconstructs held input, repeated actions, releases, and the initial window without crossing Session boundaries.
 - [ ] Successful terminal releases supply no-input targets. Failure and cancellation cleanup do not supply success labels.
-- [ ] Repeated scenarios and all windows from an episode remain in one dataset split.
+- [ ] Repeated scenarios and all windows from a Session remain in one dataset split.
+- [ ] Model inputs have shapes `[10, 3, 216, 384]`, `[10, 9]`, and `[9]`; the classifier produces nine scores in the ADR-defined order.
 - [ ] A training step updates both the CNN and MLP parameters. Validation does not update parameters or model statistics.
 - [ ] A saved checkpoint reproduces predictions with its recorded preprocessing and class order.
-- [ ] The report includes held-out loss, accuracy, per-class results, class counts, and a common-action baseline.
+- [ ] The report includes held-out loss, accuracy, per-class and `(task, target)` results, class counts, and a common-action baseline.
 
 Live model control, ViDot model integration, and game-execution evaluation are
 deferred. They require a separate runtime-boundary decision, not an inference
 RPC or asynchronous model task added to the teacher for this experiment.
 
-The relevant source lives in
-`mods/LemonNekoGH-DataCollectorAI/src/tasks/pickup_target_task.ts`,
-`src/task_executor.ts`, `test/fixtures/pickup_test.ts`, and `test/pickup.test.ts`
-under that Mod. Model and capture locations remain undecided.
+The teacher source lives under
+`mods/LemonNekoGH-DataCollectorAI/src/tasks/` and `src/task_executor.ts`; its
+fixtures and integration tests live under that Mod's `test/`. Lower collection
+will be implemented in the same Mod, training code in `models/lower-v0/`, and
+local Session data in `data/lower-v0/`.
 
 ### Derive Capture and Human-Telemetry Requirements
 
-**Evidence work; not necessarily an ADR.** Derive training-data requirements
-from the accepted Lower observation, command, action, timing, outcome, and
-evaluation contracts. Separately describe the questions a human must answer
+**Lower v0 requirements accepted; human telemetry remains open.** ADR-0005
+defines the training-data producer, files, clocks, cadence, alignment, and
+provenance for Lower v0. Separately describe the questions a human must answer
 when reviewing an Agent timeline in the status dashboard. Existing teacher
 fields are evidence of an old debugging workflow, not automatically future
 telemetry requirements.
 
-This work must identify required information and provenance before selecting
-runtime producers, files, clocks, sampling cadences, or shared session
-machinery. It must distinguish in-game injected actions from deployed
-operating-system input.
-
 ### Separate Legacy Collector Responsibilities
 
-**Blocked on the preceding requirements.** Decide ownership and migration for
-the required training-data capture and human-facing telemetry and replay. Do
-not assume one universal schema, one producer, or one shared capture session
-before their consumers establish a need for it.
+**Lower v0 ownership resolved; other responsibilities remain open.**
+`LemonNekoGH-DataCollectorAI` owns Lower v0 Session capture. Human-facing
+telemetry, replay, and YOLO-label capture still require explicit destinations;
+the Lower decision does not imply one universal schema or producer for them.
 
 The legacy rule-teacher gameplay strategy is not a migration target and will be
 deleted after retained capabilities have explicit destinations. Existing
@@ -199,11 +194,10 @@ capabilities materially change.
 - Use this proof before expanding `TaskExecutor` to more actions or compound
   tasks.
 
-### Define the Lower Agent v0 Contract
+### Implement the Accepted Lower Agent v0 Contract
 
-- Define the Upper-to-Lower candidate command envelopes and the learned Lower
-  Agent's observation, action, timing, training, and evaluation contracts before
-  implementing new multimodal capture.
+- Implement ADR-0005's closed structured instruction and learned Lower Agent
+  observation, action, timing, training, and offline evaluation contracts.
 - Account for the control-relevant distinctions demonstrated by Laser defense:
   exact selected-target ray acquisition, runtime damage eligibility, and
   intentional-target eligibility, including the `WORM_ROCK` exclusion. Decide
@@ -219,22 +213,21 @@ capabilities materially change.
 - Define status-dashboard review scenarios as human questions about what the
   Agent observed, was asked to do, attempted, and achieved. Do not preserve old
   teacher fields merely because the existing dashboard can display them.
-- Keep requirements independent of a particular file layout, shared session
-  object, or producer until synchronization and consumer needs justify one.
+- Keep human telemetry requirements independent of the Lower v0 Session layout
+  until the dashboard establishes a shared need.
 
 ### Retire the Existing Collector Boundary
 
-- Use `LemonNekoGH-DataCollectorAI` and its task and `Quark Action` tests as
-  migration evidence, not as a predetermined owner of every legacy
-  responsibility or as the future operating-system input path.
+- Use `LemonNekoGH-DataCollectorAI` for Lower v0 Session capture and its task and
+  `Quark Action` tests as migration evidence. Do not infer ownership of every
+  legacy responsibility or the future operating-system input path.
 - Keep the legacy collector disabled while its source remains available until
   the required data capture and telemetry and replay capabilities have explicit
   destinations. Delete its rule-teacher gameplay strategy rather than migrating
   it.
-- Complete the collector-responsibility ADR before assigning long-term
-  ownership or deleting the legacy implementation. Preserve the
-  TypeScript-to-GDScript build boundary only for capabilities that remain in a
-  Godot Mod after that decision.
+- Decide the remaining human telemetry, replay, and YOLO capture ownership
+  before deleting the legacy implementation. Preserve the TypeScript-to-GDScript
+  build boundary only for capabilities that remain in a Godot Mod.
 
 ### Expand the YOLO Dataset
 
@@ -246,17 +239,16 @@ capabilities materially change.
 
 ### Implement Required Lower-Agent Data Capture
 
-- Implement only the visual, command, action, timing, outcome, and provenance
-  streams required by the accepted Lower and experiment contracts. Keep
-  in-game-injected and operating-system-injected action sources distinguishable.
-- Decide eligible data sources, schema, sampling cadence, synchronization, and
-  intended learning use before collection. Replay events and YOLO image-label
-  pairs are not automatically a Lower action dataset.
+- Implement ADR-0005's visual, instruction, action, timing, outcome, and
+  provenance streams in `LemonNekoGH-DataCollectorAI`. Keep in-game-injected
+  and operating-system-injected action sources distinguishable.
+- Write only finalized successful Sessions to `data/lower-v0/`. Replay events
+  and YOLO image-label pairs are not Lower action data.
 
 ### Train and Evaluate the Lower Agent v0
 
-- Train and evaluate the initial learned Lower-Agent candidates behind the
-  accepted contracts. Compare candidate command representations and progress
-  through the task ladder without preselecting the final task granularity.
+- Train and evaluate the accepted instruction-conditioned classifier in
+  `models/lower-v0/`. Report offline results by action class and `(task, target)`
+  without claiming gameplay success.
 - Use the results together with measured game delay tolerance and LLM tail
   latency to propose the initial Upper-to-Lower operating boundary.
