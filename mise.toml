@@ -46,7 +46,35 @@ run = "pnpm run typecheck"
 
 [tasks.check]
 description = "Run repository checks"
-depends = ["domekeeper:vidot:test", "lint", "typecheck", "vidot:test"]
+depends = [
+  "domekeeper:vidot:test",
+  "godot:check",
+  "lint",
+  "lower-v0:test",
+  "typecheck",
+  "vidot:test",
+]
+
+[tasks."lower-v0:collect"]
+description = "Collect seeded random Lower v0 task Sessions"
+depends = ["vidot:build"]
+env = { LOWER_V0_DATASET_DIR = "{{ config_root }}/data/lower-v0", LOWER_V0_COUNT = "8", LOWER_V0_SEED = "20260909", VIDOT_MOVIE = "{{ config_root }}/recordings/lower-v0.avi" }
+run = [
+  "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test",
+  'uv run --locked --package lower-v0 lower-v0 extract --data "$LOWER_V0_DATASET_DIR" --movie "$VIDOT_MOVIE"',
+]
+
+[tasks."lower-v0:test"]
+run = "uv run --locked --package lower-v0 python -m unittest discover -s models/lower-v0 -p 'test_*.py'"
+
+[tasks."lower-v0:check-dataset"]
+run = "uv run --locked --package lower-v0 lower-v0 check"
+
+[tasks."lower-v0:train"]
+run = "uv run --locked --package lower-v0 lower-v0 train"
+
+[tasks."lower-v0:evaluate"]
+run = "uv run --locked --package lower-v0 lower-v0 evaluate"
 
 [tasks."vidot:build"]
 description = "Build the Godot-native ViDot runner"

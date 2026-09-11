@@ -1,7 +1,10 @@
 import type { CompoundTask, PrimitiveTask, Task } from './tasks/task.ts'
+// eslint-disable-next-line ts/consistent-type-imports -- GDScript needs the class preload for this property type.
+import { _LowerSession } from './lower_session.ts'
 import { _CompoundTask } from './tasks/task.ts'
 
 export class _TaskExecutor extends Node {
+  recorder: _LowerSession | null = null
   task_completed = gd.signal()
   task_failed = gd.signal<[reason: string]>()
 
@@ -45,6 +48,8 @@ export class _TaskExecutor extends Node {
 
     this.task = task
     this.keeper = keeper
+    if (this.recorder !== null)
+      this.recorder.event('task_start', this.recorder.held)
     let error = ''
     if (task instanceof _CompoundTask) {
       const current: Vector2i = Level.map.getTileCoord(keeper.global_position)
@@ -52,7 +57,7 @@ export class _TaskExecutor extends Node {
       if (error === '')
         error = this._start_compound(task, current)
     }
-    else {
+    else if (this.recorder === null) {
       error = this._step()
     }
     if (error !== '') {
@@ -92,6 +97,11 @@ export class _TaskExecutor extends Node {
 
     const current: Vector2i = Level.map.getTileCoord(keeper.global_position)
     if (task.is_complete(keeper, current)) {
+      if (this.recorder !== null) {
+        const error = this.recorder.decision('none')
+        if (error !== '')
+          return error
+      }
       this._finish_completed()
 
       return ''
@@ -104,7 +114,13 @@ export class _TaskExecutor extends Node {
     if (task instanceof _CompoundTask)
       return ''
 
-    return this._apply((task as PrimitiveTask).resolve_action(keeper, current))
+    const action = (task as PrimitiveTask).resolve_action(keeper, current)
+    if (this.recorder !== null) {
+      const error = this.recorder.decision(action === '' ? 'none' : action)
+      if (error !== '')
+        return error
+    }
+    return this._apply(action)
   }
 
   private _start_compound(task: CompoundTask, current: Vector2i): string {
@@ -135,6 +151,7 @@ export class _TaskExecutor extends Node {
 
     const script = this.get_script() as GDScript
     const child = script.new() as _TaskExecutor
+    child.recorder = this.recorder
     this.child = child
     this.add_child(child)
     child.task_completed.connect(this._child_completed)
@@ -176,6 +193,8 @@ export class _TaskExecutor extends Node {
   }
 
   private _finish_completed(): void {
+    if (this.recorder !== null)
+      this.recorder.event('task_complete', this.recorder.held)
     this.cancel()
     this.task_completed.emit()
   }
@@ -200,6 +219,8 @@ export class _TaskExecutor extends Node {
     this.binding = binding
     this.heldAction = action
     this._dispatch(binding, true)
+    if (this.recorder !== null)
+      this.recorder.event('input', action)
 
     return ''
   }
@@ -212,6 +233,8 @@ export class _TaskExecutor extends Node {
       return
 
     this._dispatch(binding, false)
+    if (this.recorder !== null)
+      this.recorder.event('input', 'none')
   }
 
   private _dispatch(binding: InputEventKey, pressed: boolean): void {
@@ -219,6 +242,7 @@ export class _TaskExecutor extends Node {
     event.pressed = pressed
     InputSystem.game_not_in_focus = false
     Input.parse_input_event(event)
+    Input.flush_buffered_events()
     InputSystem.game_not_in_focus = !DisplayServer.window_is_focused()
   }
 

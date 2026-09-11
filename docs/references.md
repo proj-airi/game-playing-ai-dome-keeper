@@ -15,6 +15,8 @@ This page collects external resources useful for understanding and maintaining t
 
 ## Game AI Architecture
 
+- [Pydantic Strict Mode](https://docs.pydantic.dev/latest/concepts/strict_mode/) — Lower v0 uses strict schema validation to reject incorrect Session field types without coercion.
+- [Pydantic Model Validators](https://docs.pydantic.dev/latest/concepts/validators/#model-validators) — Lower v0 uses model validators for capture causality, decision cadence, and input transitions.
 - [Behavior Cloning](https://imitation.readthedocs.io/en/latest/algorithms/bc.html) — The imitation library documentation explains supervised learning from observation-action demonstrations. It supports the Lower v0 training decision without selecting a library dependency.
 - [PyTorch 2.14 Release](https://pytorch.org/blog/pytorch-2-14-release-blog/) — The official release identifies PyTorch 2.14 and Torchvision 0.29 as the current compatible stable pair selected for the Lower v0 subproject.
 - [Torchvision ResNet-18](https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html) — The official reference specifies ImageNet weights and RGB normalization. ADR-0005 uses those weights without the default center crop.
@@ -47,6 +49,10 @@ This page collects external resources useful for understanding and maintaining t
 
 - [Godot 4.3: Physics Tick Rate](https://docs.godotengine.org/en/4.3/classes/class_engine.html#class-engine-property-physics-ticks-per-second) — The engine defaults to 60 physics updates per second. This supports the six-physics-frame TaskExecutor cadence experiment at 10 Hz.
 - [Godot 4.3: Input Event Buffering](https://github.com/godotengine/godot/blob/4.3/core/input/input.cpp#L920-L955) — `parse_input_event` can queue events for later delivery. The laser task test waits for input release after completion instead of requiring synchronous delivery.
+- [Godot 4.3: Flush Buffered Events](https://docs.godotengine.org/en/4.3/classes/class_input.html#class-input-method-flush-buffered-events) — TaskExecutor delivers buffered input before it restores the game's focus guard.
+- [Godot 4.3: Window Focus](https://docs.godotengine.org/en/4.3/classes/class_window.html#class-window-property-unfocusable) — Lower collection prevents its window from taking focus with `unfocusable`.
+- [Godot 4.3: Rendering Completion](https://github.com/godotengine/godot/blob/4.3-stable/servers/rendering/rendering_server_default.cpp#L96-L100) — With ViKeeper's safe render thread, `frame_post_draw` identifies a completed render before the process counter increments. Lower collection stores this counter as the zero-based video frame index.
+- [Godot 4.3: Main Loop](https://github.com/godotengine/godot/blob/4.3/main/main.cpp#L3856-L3914) — The loop can skip drawing for an occluded window while Movie Maker still writes frames.
 - [Vitest](https://vitest.dev/) — The outer runner used for candidate-file discovery and reporting while Godot collects and executes tests.
 - [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter, which forwards a file batch to one Godot runner instead of evaluating the tests in Node.js.
 - [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration used as a semantic reference for ViDot's Godot-side collector and compatibility fixtures, not as a Node-side collector in ViDot's runtime.

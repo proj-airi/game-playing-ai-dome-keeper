@@ -10,27 +10,25 @@ if (!process.argv[2])
 
 const gameRoot = path.resolve(process.argv[2]!)
 const outputFile = path.resolve(import.meta.dirname, '../packages/vikeeper/fixture/_typings/domekeeper.generated.d.ts')
+const classNamePattern = /^\s*class_name\s+[A-Za-z_]\w*/m
 
-const gdFiles: string[] = []
+const targets = new Map<string, string | undefined>()
 function walk(dir: string) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const filePath = path.join(dir, entry.name)
-    if (entry.isDirectory())
+    if (entry.isDirectory()) {
       walk(filePath)
-    else if (entry.name.endsWith('.gd'))
-      gdFiles.push(filePath)
+    }
+    else if (entry.name.endsWith('.gd')) {
+      const source = readFileSync(filePath, 'utf8')
+      if (classNamePattern.test(source))
+        targets.set(filePath, undefined)
+    }
   }
 }
 
 walk(gameRoot)
 const registry = resolveRegistry()
-const targets = new Map<string, string | undefined>()
-
-for (const filePath of gdFiles) {
-  const source = readFileSync(filePath, 'utf8')
-  if (/^\s*class_name\s+[A-Za-z_]\w*/m.test(source))
-    targets.set(filePath, undefined)
-}
 
 const project = readFileSync(path.join(gameRoot, 'project.godot'), 'utf8')
 for (const match of project.matchAll(/^([A-Za-z_]\w*)="\*?res:\/\/([^"]+)"$/gm)) {

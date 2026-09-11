@@ -67,7 +67,8 @@ export class _Runner extends SceneTree {
       return
     }
 
-    this._remember_baseline_nodes()
+    for (const child of this.root.get_children())
+      this._baseline_nodes[child.get_instance_id()] = true
 
     for (const file of this._files) {
       const started_at = Time.get_ticks_msec()
@@ -154,7 +155,9 @@ export class _Runner extends SceneTree {
     }
 
     this._current_module.call('vidot_collect', this)
-    this._apply_test_name_pattern()
+    if (this._test_name_pattern !== null)
+      this._filter_task(this._root_task, '', this._test_name_pattern)
+
     this._emit_collected()
 
     return true
@@ -346,11 +349,6 @@ export class _Runner extends SceneTree {
       await this.process_frame
   }
 
-  private _remember_baseline_nodes(): void {
-    for (const child of this.root.get_children())
-      this._baseline_nodes[child.get_instance_id()] = true
-  }
-
   private _new_suite(name: string): SuiteTask {
     return {
       id: this._suite_stack.is_empty() ? '0' : this._take_task_id(),
@@ -370,14 +368,6 @@ export class _Runner extends SceneTree {
     this._next_task_id += 1
 
     return id
-  }
-
-  private _apply_test_name_pattern(): void {
-    const pattern = this._test_name_pattern
-    if (pattern === null)
-      return
-
-    this._filter_task(this._root_task, '', pattern)
   }
 
   private _filter_task(

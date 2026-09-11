@@ -12,13 +12,13 @@ import { runViDot } from './worker.ts'
 
 type MessageListener = (message: unknown) => void
 
-export class ViDotPoolWorker implements PoolWorker {
+export class ViDotPoolWorker extends EventEmitter implements PoolWorker {
   readonly name = 'vidot'
 
-  private readonly events = new EventEmitter()
   private readonly requestListeners = new Set<MessageListener>()
 
   constructor(options: ResolvedViDotOptions) {
+    super()
     init({
       on: (listener) => {
         this.requestListeners.add(listener)
@@ -26,18 +26,10 @@ export class ViDotPoolWorker implements PoolWorker {
       off: (listener) => {
         this.requestListeners.delete(listener)
       },
-      post: message => this.events.emit('message', message),
+      post: message => this.emit('message', message),
       runTests: (state: WorkerGlobalState) => runViDot('run', state, options),
       collectTests: (state: WorkerGlobalState) => runViDot('collect', state, options),
     })
-  }
-
-  on(event: string, callback: MessageListener): void {
-    this.events.on(event, callback)
-  }
-
-  off(event: string, callback: MessageListener): void {
-    this.events.off(event, callback)
   }
 
   send(message: WorkerRequest): void {

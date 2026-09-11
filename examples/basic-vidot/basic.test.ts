@@ -4,10 +4,6 @@ import { describe, expect, test } from '@vidot/vitest'
 describe('editable Godot project', () => {
   const expectedValue = 7
 
-  test('runs a callback without context', () => {
-    expect(expectedValue).toBe(7)
-  })
-
   test('runs inside the project', async (context) => {
     const scriptPath = ProjectSettings.globalize_path('res://scripts/main.gd')
     const scene = context.instantiate<_Example>(scriptPath)

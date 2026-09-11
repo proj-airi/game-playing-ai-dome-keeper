@@ -75,7 +75,9 @@ export class _Fixture extends Node {
     if (OS.has_feature('movie')) {
       if (!this._write_movie_options())
         return
+    }
 
+    if (OS.has_feature('movie') && this.test_name !== '') {
       const label = new Label()
       label.text = this.test_name
       label.set_anchors_and_offsets_preset(
@@ -113,8 +115,6 @@ export class _Fixture extends Node {
       const window = this.get_window()
       if (window.mode !== Window.MODE_WINDOWED || window.borderless)
         this._fail('Movie mode requires a decorated window')
-
-      DisplayServer.window_move_to_foreground()
     }
   }
 
@@ -215,6 +215,7 @@ export class _Fixture extends Node {
       vsync: false,
     }))
     options.close()
+    Options.pauseWhenOutOfFocus = false
 
     return true
   }

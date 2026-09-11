@@ -103,36 +103,30 @@ The laser test also waits for task completion and delivery of input release.
 The separate `mise run godot:check` passes. These results do not establish
 reliability across other maps, upgrades, or monsters.
 
-The follow-up work for this decision is:
+Automated collection and the first offline model are implemented as of 2026-09-09.
+Collection uses the existing ViKeeper Movie Maker flow without taking window focus.
+The recorder redraws before capture, including when another application covers the window.
+Scenarios use bounded fixtures and seeded two-dimensional positions.
 
-- Extend `LemonNekoGH-DataCollectorAI` with reproducible scenario construction
-  and atomic Session recording under `data/lower-v0/`. Generate all eight valid
-  `(task, target)` combinations through `TaskExecutor`.
-- Add the mise- and uv-managed Python training subproject under
-  `models/lower-v0/`. Implement the causal window loader and the jointly trained
-  ResNet-18 and MLP classifier from ADR-0005.
-- Declare `torch>=2.14,<2.15` and `torchvision>=0.29,<0.30` in the model
-  subproject, register it in the root uv workspace, and record the resolved
-  cross-platform artifacts in the root `uv.lock`.
-- Keep experiment configuration, schema version, preprocessing, class order,
-  dataset splits, and checkpoint metadata reproducible.
-- Check a small set of real demonstrations before a larger training run.
-  Measure memory use and training speed on the available hardware.
-- Select dataset size, split proportions, and training configuration from those measurements.
-  Report held-out prediction results without a claim of gameplay success.
+The first dataset contains 61 successful Sessions and 988 RGB frames.
+Both splits contain all nine actions. The root uv workspace manages the
+PyTorch 2.14 and Torchvision 0.29 training subproject.
+The first checkpoint scores 65.65% held-out action accuracy against an 18.32% common-action baseline.
+The [training README](../models/lower-v0/README.md#first-model-2026-09-09)
+records the configuration, timing, memory measurement, class limitations, and reproduction commands.
 
 The initial verification covers:
 
-- [ ] Each target action follows its input observation. No input contains the target action or future outcome.
-- [ ] All eight valid `(task, target)` combinations produce complete automated Sessions with 384-by-216 RGB PNG frames and ordered JSON metadata.
-- [ ] Failed, interrupted, timed-out, and invalid temporary Sessions do not enter `data/lower-v0/`.
-- [ ] The loader reconstructs held input, repeated actions, releases, and the initial window without crossing Session boundaries.
-- [ ] Successful terminal releases supply no-input targets. Failure and cancellation cleanup do not supply success labels.
-- [ ] Repeated scenarios and all windows from a Session remain in one dataset split.
-- [ ] Model inputs have shapes `[10, 3, 216, 384]`, `[10, 9]`, and `[9]`; the classifier produces nine scores in the ADR-defined order.
-- [ ] A training step updates both the CNN and MLP parameters. Validation does not update parameters or model statistics.
-- [ ] A saved checkpoint reproduces predictions with its recorded preprocessing and class order.
-- [ ] The report includes held-out loss, accuracy, per-class and `(task, target)` results, class counts, and a common-action baseline.
+- [x] Each target action follows its input observation. No input contains the target action or future outcome.
+- [x] All eight valid `(task, target)` combinations produce complete automated Sessions with 384-by-216 RGB PNG frames and ordered JSON metadata.
+- [x] Failed, interrupted, timed-out, and invalid temporary Sessions do not enter the promoted training dataset.
+- [x] The loader reconstructs held input, repeated actions, releases, and the initial window without crossing Session boundaries.
+- [x] Successful terminal releases supply no-input targets. Failure and cancellation cleanup do not supply success labels.
+- [x] Repeated scenarios and all windows from a Session remain in one dataset split.
+- [x] Model inputs have shapes `[10, 3, 216, 384]`, `[10, 9]`, and `[9]`; the classifier produces nine scores in the ADR-defined order.
+- [x] A training step updates both the CNN and MLP parameters. Validation does not update parameters or model statistics.
+- [x] A saved checkpoint reproduces predictions with its recorded preprocessing and class order.
+- [x] The report includes held-out loss, accuracy, per-class and `(task, target)` results, class counts, and a common-action baseline.
 
 Live model control, ViDot model integration, and game-execution evaluation are
 deferred. They require a separate runtime-boundary decision, not an inference

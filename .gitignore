@@ -17,6 +17,9 @@ node_modules/
 packages/status-dashboard/dist/
 .venv/
 runs/
+models/lower-v0/artifacts/
+__pycache__/
+*.egg-info/
 
 *.local.code-workspace
 *.uid

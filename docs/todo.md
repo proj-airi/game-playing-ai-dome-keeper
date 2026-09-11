@@ -5,6 +5,21 @@ This document owns confirmed maintenance, cleanup, and behavior-correction work.
 Items about the rule teacher, YOLO collection, replay producer, or live status
 producer are dormant while `LemonNekoGH-YoloDataCollector` is disabled.
 
+## DataCollectorAI Drop Regression
+
+- Investigate the intermittent exact-cargo failure in `test/drop_by_type.test.ts`.
+  One aggregate check failed during concurrent MPS training on 2026-09-09.
+  The unchanged isolated test passed. The cause remains unconfirmed.
+  Reproduce the cargo transition before changing the task or input timing.
+
+## Collection Opening Animation
+
+- Defer optimization of opening-animation time during repeated ViKeeper collection scenarios until the user resumes this task.
+  The fixture sends Enter when `LandingStage.allClientsReady()` becomes true, not after a fixed delay.
+  This does not directly skip the subsequent `Impact` animation.
+  Reduce this startup overhead while preserving level initialization and input readiness.
+  Keep the existing camera placement at the Keeper's scenario position.
+
 ## Teacher Controller Cleanup
 
 - After a fresh gameplay recording and teacher log confirm the current shaft-shift and descent-backtracking behavior, schedule a dedicated teacher cleanup before further controller expansion without turning it into a blanket gate on urgent fixes. Establish explicit expected observable outcomes for the representative lifecycle scenarios in scope rather than preserving one recording's exact action trace. Audit the current code and state-machine logic for dead or duplicated paths, unreachable transitions, unclear state ownership, accidental coupling, and contradictory invariants; identify responsibility boundaries without presuming that every large function or file must be split. Keep each batch independently reviewable and verifiable. Pure refactors must preserve the declared outcomes, while defect or policy corrections must declare the corrected expectation and receive targeted runtime validation.

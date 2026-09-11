@@ -49,10 +49,7 @@ export async function createGodotProjectSandbox(
       await copyFile(source, destination)
     }))
 
-    await writeFile(
-      path.join(sandbox.path, 'project.godot'),
-      await readFile(path.join(projectPath, 'project.godot')),
-    )
+    await copyFile(path.join(projectPath, 'project.godot'), path.join(sandbox.path, 'project.godot'))
     const sourceOverride = path.join(projectPath, 'override.cfg')
     const override = existsSync(sourceOverride) ? await readFile(sourceOverride, 'utf8') : ''
     await writeFile(path.join(sandbox.path, 'override.cfg'), setUserDataSettings(override, customUserDir))

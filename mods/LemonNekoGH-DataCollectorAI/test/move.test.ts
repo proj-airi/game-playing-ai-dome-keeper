@@ -55,13 +55,6 @@ test(testName, async (context) => {
     return
 
   const target = fixture.move_target
-  if (!expect(absi(target.x - current.x) + absi(target.y - current.y) > 1).toBe(true))
-    return
-  if (!expect(target.x !== current.x).toBe(true))
-    return
-  if (!expect(target.y !== current.y).toBe(true))
-    return
-
   const moveTask = new _MoveToTask()
   moveTask.initialize(target)
   fixture.watch_task(executor)

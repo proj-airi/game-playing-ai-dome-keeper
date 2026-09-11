@@ -22,7 +22,7 @@ Each executor owns its current method and method step. A parent advances only
 after its child reports a result, so a method step may itself be a compound task.
 Only the active primitive-task executor owns gameplay input.
 
-Task startup and compound child transitions execute immediately. During active
+Unrecorded task startup and compound child transitions execute immediately. During active
 execution, each executor checks completion and failure and updates input every
 six physics frames. At the game's default 60 Hz physics rate, this cadence is
 10 Hz. Held input persists between checks. Cancellation and scene removal
@@ -54,10 +54,9 @@ without fixing the future Lower Agent interface:
   releases a carried object of the requested type. `DropByType` then uses the
   existing Pickup task to recover every nonmatching object released first.
 
-`DataCollectorAI` is the selected owner for Lower v0 scenario construction,
-task selection, and Session recording. Those collection capabilities are not
-implemented yet. A `TaskExecutor` is a scene-tree node that owns one Keeper and
-either a primitive
+`DataCollectorAI` owns Lower v0 scenario construction, task selection, and
+Session recording. Its automated collection uses the existing ViKeeper fixtures.
+A `TaskExecutor` is a scene-tree node that owns one Keeper and a primitive
 or compound task. A compound executor resolves one ordered method once, owns
 one child executor at a time, and propagates child completion or failure. Only
 the active primitive leaf applies configured input. Fixtures and tests can
@@ -92,6 +91,41 @@ Run all automated MoveTo, Pickup, Drop, Gadget Chamber activation, and Laser
 attack proofs with
 `mise run domekeeper:vidot:test`. Generate `recordings/move.avi` for visual
 inspection with `mise run domekeeper:vidot:record`.
+
+## Lower v0 collection
+
+`mise run lower-v0:collect` runs eight seeded scenarios for each ADR-0005
+instruction. Targets and independent starts are sampled in x=-2..2, y=0..2,
+at least two tiles apart. The map uses the existing Move fixture as its base.
+Each mineral spawn has a dirt tile directly below it. An extra dirt row supports
+the lowest spawn positions without replacing the outer boundary.
+Pickup collection waits for the mineral to settle and checks that it stays in its spawn cell.
+Laser scenarios use the
+game's seeded monster wave.
+Gadget Chamber anchors use x=-2..1, y=0..1 so their 2-by-2 footprint fits inside the map.
+
+Drop scenarios start with 3–8 carried minerals near the Keeper.
+The seed determines the mineral types, count, and carrying order.
+Each load contains the requested type and at least one other type, with repeated types permitted.
+The task releases one mineral of the requested type and retains every other original object.
+Session metadata includes the ordered mineral definitions. Pickup scenarios still start with a distant loose mineral.
+
+The recorder stores completed video frame indices, held actions, and input and task transitions.
+It does not capture screenshots or force rendering. After recording, the offline extractor
+creates RGB PNG files and validates frame/action alignment before it promotes successful Sessions.
+Successful Sessions enter `data/lower-v0/sessions`; failed attempts remain under `.incomplete`.
+Collection uses ViKeeper's Movie
+Maker flow and writes `recordings/lower-v0.avi`. It leaves `test_name` empty
+to omit the debug overlay, and requires one Dome.
+The collection window cannot take focus. Movie fixtures disable automatic pause
+on focus loss. TaskExecutor flushes configured input events before it restores
+the game's focus guard.
+Each decision uses the last completed render before its input change.
+Missing or stale renders fail collection instead of entering the dataset.
+
+Map entry count determines how many loadout Domes are instantiated. The sampling
+region stays below the Dome cellar collision shapes. See the
+[training subproject](../../models/lower-v0/README.md) for model commands.
 
 ### Terms
 

@@ -29,7 +29,7 @@ let cancellationHandlerRegistered = false
 interface RunFile {
   scriptPath: string
   file: File
-  tasks: Map<string, Task>
+  tests: Map<string, Test>
   collected: boolean
   finished: boolean
 }
@@ -43,7 +43,7 @@ export async function runViDot(
 
   try {
     const files = await compileFiles(state, outputRoot, options.projectPath)
-    const filesByPath = indexFiles(files)
+    const filesByPath = new Map(files.map(file => [file.scriptPath, file]))
     let finished = false
     const launch = options.launch({ method })
     const testNamePattern = state.config.testNamePattern
@@ -170,7 +170,7 @@ async function compileFiles(
     files.push({
       scriptPath: resolve(scriptPath),
       file,
-      tasks: new Map(),
+      tests: new Map(),
       collected: false,
       finished: false,
     })
@@ -181,16 +181,6 @@ async function compileFiles(
 
 function createFile(filepath: string, root: string, projectName?: string): File {
   return createFileTask(filepath, root, projectName, 'vidot', 'ssr') as File
-}
-
-function indexFiles(files: RunFile[]): Map<string, RunFile> {
-  const index = new Map<string, RunFile>()
-
-  for (const file of files) {
-    index.set(resolve(file.scriptPath), file)
-  }
-
-  return index
 }
 
 async function applyEvent(
@@ -204,10 +194,8 @@ async function applyEvent(
       await reportCollection(method, state, runFile, event.tree)
       return
     case 'test_start':
-      await reportTestStart(state, runFile, event.id)
-      return
     case 'test_finish':
-      await reportTestFinish(state, runFile, event)
+      await reportTestEvent(state, runFile, event)
       return
     case 'file_finish':
       await reportFileFinish(state, runFile, event.duration, event.errors)
@@ -270,7 +258,6 @@ function createTask(
       type: 'suite',
       tasks: [],
     }
-    runFile.tasks.set(node.id, suite)
     suite.tasks = node.children.map((child: ViDotTaskNode, childIndex: number) => createTask(
       state,
       runFile,
@@ -289,41 +276,30 @@ function createTask(
     annotations: [],
     artifacts: [],
   }
-  runFile.tasks.set(node.id, test)
+  runFile.tests.set(node.id, test)
   return test
 }
 
-async function reportTestStart(
+async function reportTestEvent(
   state: WorkerGlobalState,
   runFile: RunFile,
-  id: string,
+  event: Extract<ViDotEvent, { type: 'test_start' | 'test_finish' }>,
 ): Promise<void> {
-  const test = getTest(runFile, id)
-  test.result = {
-    state: 'run',
-    startTime: Date.now(),
-  }
-  await state.rpc.onTaskUpdate(
-    [[test.id, test.result, test.meta]],
-    [[test.id, 'test-prepare', undefined]],
-  )
-}
+  const test = runFile.tests.get(event.id)
+  if (!test)
+    throw new Error(`Godot reported an unknown test: ${event.id}`)
 
-async function reportTestFinish(
-  state: WorkerGlobalState,
-  runFile: RunFile,
-  event: Extract<ViDotEvent, { type: 'test_finish' }>,
-): Promise<void> {
-  const test = getTest(runFile, event.id)
-  test.result = {
-    state: event.state,
-    startTime: test.result?.startTime,
-    duration: event.duration,
-    errors: event.errors,
-  }
+  test.result = event.type === 'test_start'
+    ? { state: 'run', startTime: Date.now() }
+    : {
+        state: event.state,
+        startTime: test.result?.startTime,
+        duration: event.duration,
+        errors: event.errors,
+      }
   await state.rpc.onTaskUpdate(
     [[test.id, test.result, test.meta]],
-    [[test.id, 'test-finished', undefined]],
+    [[test.id, event.type === 'test_start' ? 'test-prepare' : 'test-finished', undefined]],
   )
 }
 
@@ -349,11 +325,4 @@ async function reportFileFinish(
     [[file.id, 'suite-finished', undefined]],
   )
   runFile.finished = true
-}
-
-function getTest(runFile: RunFile, id: string): Test {
-  const task = runFile.tasks.get(id)
-  if (task?.type !== 'test')
-    throw new Error(`Godot reported an unknown test: ${id}`)
-  return task
 }
