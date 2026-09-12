@@ -1,4 +1,4 @@
-"""ADR-0005 causal behavior cloning; run `lower-v0 --help`."""
+"""ADR-0006 causal behavior cloning; run `lower-v0 --help`."""
 
 import argparse
 from collections import Counter, defaultdict
@@ -19,7 +19,7 @@ from torchvision.transforms.functional import pil_to_tensor
 
 from session_schema import ACTIONS, PAIRS, TARGETS, TASKS, Session
 
-CONTRACT = dict(schema_version=1, tasks=TASKS, targets=TARGETS, actions=ACTIONS,
+CONTRACT = dict(schema_version=2, tasks=TASKS, targets=TARGETS, actions=ACTIONS,
                 window=10, size=[384, 216], mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225], weights="IMAGENET1K_V1")
 
@@ -81,7 +81,7 @@ def split_sessions(sessions, fraction, seed):
     groups = defaultdict(set)
     for session in sessions:
         groups[session["pair"]].add(session["scenario_id"])
-    require(set(groups) == set(PAIRS), "Dataset must cover all eight task/target pairs")
+    require(set(groups) == set(PAIRS), "Dataset must cover every task/target pair")
     validation = set()
     rng = random.Random(seed)
     for pair, ids in sorted(groups.items()):
@@ -110,14 +110,14 @@ class Windows(Dataset):
             step = session["steps"][max(0, i)]
             with Image.open(session["path"] / "frames" / f'{step["frame_id"]}.png') as image:
                 frames.append(pil_to_tensor(image).float() / 255)
-            held.append(ACTIONS.index(step["held_action"]) if i >= 0 else 8)
+            held.append(ACTIONS.index(step["held_action"]) if i >= 0 else ACTIONS.index("none"))
         rgb = torch.stack(frames)
         rgb = (rgb - torch.tensor(CONTRACT["mean"])[None, :, None, None]) / torch.tensor(
             CONTRACT["std"])[None, :, None, None]
         task, target = session["pair"]
-        instruction = torch.cat((F.one_hot(torch.tensor(TASKS.index(task)), 4),
-                                 F.one_hot(torch.tensor(TARGETS.index(target)), 5))).float()
-        return rgb, F.one_hot(torch.tensor(held), 9).float(), instruction, ACTIONS.index(
+        instruction = torch.cat((F.one_hot(torch.tensor(TASKS.index(task)), len(TASKS)),
+                                 F.one_hot(torch.tensor(TARGETS.index(target)), len(TARGETS)))).float()
+        return rgb, F.one_hot(torch.tensor(held), len(ACTIONS)).float(), instruction, ACTIONS.index(
             session["steps"][end]["next_action"])
 
 
@@ -126,7 +126,8 @@ class Policy(nn.Module):
         super().__init__()
         self.cnn = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
         self.cnn.fc = nn.Identity()
-        widths, layers = [5219, *hidden, 9], []
+        input_width = 512 * CONTRACT["window"] + len(ACTIONS) * CONTRACT["window"] + len(TASKS) + len(TARGETS)
+        widths, layers = [input_width, *hidden, len(ACTIONS)], []
         for i, (before, after) in enumerate(zip(widths, widths[1:])):
             layers.append(nn.Linear(before, after))
             if i < len(widths) - 2:
@@ -184,6 +185,39 @@ def fingerprint(sessions):
     return digest.hexdigest()
 
 
+def export_model(output):
+    checkpoint_path = Path(output) / "checkpoint.pt"
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    require(checkpoint["contract"] == CONTRACT, "Checkpoint contract mismatch")
+
+    model = Policy(checkpoint["config"]["hidden"], pretrained=False)
+    model.load_state_dict(checkpoint["state_dict"])
+    model.eval()
+
+    frames = torch.zeros(1, 10, 3, 216, 384)
+    held = torch.zeros(1, CONTRACT["window"], len(ACTIONS))
+    instruction = torch.zeros(1, len(TASKS) + len(TARGETS))
+    onnx_path = Path(output) / "model.onnx"
+    torch.onnx.export(
+        model,
+        (frames, held, instruction),
+        onnx_path,
+        input_names=["frames", "held", "instruction"],
+        output_names=["logits"],
+        opset_version=18,
+        dynamo=True,
+        external_data=False,
+    )
+
+    import onnx
+    exported = onnx.load(onnx_path)
+    onnx.checker.check_model(exported, full_check=True)
+    print(json.dumps({
+        "onnx": str(onnx_path),
+        "sha256": hashlib.sha256(onnx_path.read_bytes()).hexdigest(),
+    }))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["check", "train", "evaluate", "extract"])
@@ -216,8 +250,8 @@ def main():
     train_sessions, valid_sessions = split_sessions(sessions, args.validation, args.seed)
     train, valid = Windows(train_sessions), Windows(valid_sessions)
     summary = dict(sessions=len(sessions), train_windows=len(train), validation_windows=len(valid),
-                   train_counts={ACTIONS[i]: counts(train)[i] for i in range(9)},
-                   validation_counts={ACTIONS[i]: counts(valid)[i] for i in range(9)})
+                   train_counts={action: counts(train)[i] for i, action in enumerate(ACTIONS)},
+                   validation_counts={action: counts(valid)[i] for i, action in enumerate(ACTIONS)})
     summary["missing_actions"] = {name: [action for action, count in summary[f"{name}_counts"].items()
                                         if count == 0] for name in ("train", "validation")}
     print(json.dumps(summary, indent=2))
@@ -255,6 +289,8 @@ def main():
     report = dict(**summary, device=device, validation=evaluate(model, valid, device, args.batch_size, baseline))
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
+    if checkpoint is None:
+        export_model(args.output)
 
 
 if __name__ == "__main__":

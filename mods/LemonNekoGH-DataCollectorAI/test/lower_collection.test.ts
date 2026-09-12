@@ -8,18 +8,37 @@ import { _AttackMonsterTest } from './fixtures/attack_monster_test.ts'
 import { _LowerScenario } from './fixtures/lower_scenario.ts'
 
 test('collects seeded Lower v0 Sessions', async (context) => {
-  context.tree.root.unfocusable = true
   const count = int(OS.get_environment('LOWER_V0_COUNT'))
   const firstSeed = int(OS.get_environment('LOWER_V0_SEED'))
-  const names = ['iron', 'cobalt', 'water', 'gadget_chamber', 'monster']
+  const pairs = [
+    'pickup:iron',
+    'pickup:cobalt',
+    'pickup:water',
+    'drop:iron',
+    'drop:cobalt',
+    'drop:water',
+    'activate:gadget_chamber',
+    'attack:monster',
+    'enter:mine',
+  ]
+  const requestedPair = OS.get_environment('LOWER_V0_PAIR')
+  const requestedInstruction = pairs.find(requestedPair)
+  if (requestedPair !== '' && requestedInstruction < 0) {
+    push_error(`Unsupported LOWER_V0_PAIR: ${requestedPair}`)
+    return
+  }
+  const firstInstruction = requestedPair === '' ? 0 : requestedInstruction
+  const instructionCount = requestedPair === '' ? pairs.size() : 1
+  const names = ['iron', 'cobalt', 'water', 'gadget_chamber', 'monster', 'mine']
   const types: FixtureDrop['type'][] = [CONST.IRON, CONST.SAND, CONST.WATER]
   for (let run = 0; run < count; run += 1) {
-    for (let instruction = 0; instruction < 8; instruction += 1) {
-      const seed = firstSeed + run * 8 + instruction
+    for (let slot = 0; slot < instructionCount; slot += 1) {
+      const instruction = firstInstruction + slot
+      const seed = firstSeed + run * 9 + instruction
       const state = GameWorld.devState as Dictionary<string, unknown>
       state.lockedSeed = seed
-      const taskName = instruction < 3 ? 'pickup' : instruction < 6 ? 'drop' : instruction === 6 ? 'activate' : 'attack'
-      const target = names[instruction < 6 ? instruction % 3 : instruction - 3]
+      const taskName = instruction < 3 ? 'pickup' : instruction < 6 ? 'drop' : instruction === 6 ? 'activate' : instruction === 7 ? 'attack' : 'enter'
+      const target = instruction === 8 ? names[5] : names[instruction < 6 ? instruction % 3 : instruction - 3]
       const fixture = new _LowerScenario()
       const attack = new _AttackMonsterTest()
       const node = instruction === 7 ? attack : fixture
@@ -41,6 +60,16 @@ test('collects seeded Lower v0 Sessions', async (context) => {
         }
       }
       const keeper = Keepers.local.first()
+      if (instruction === 8) {
+        const camera = Level.viewports.getPlayerCam(keeper.playerId) as KeeperCamera
+        const cameraSettled = await context.waitUntil(
+          () => camera.getCamDelta().length_squared() <= 1.0,
+          5_000,
+        )
+        if (!expect(cameraSettled).toBe(true) || !expect(keeper.isInsideDome).toBe(true))
+          return
+      }
+
       const laserTask = new _AttackMonsterTask()
       if (attack.laser !== null && attack.monster !== null)
         laserTask.initialize(attack.laser, attack.monster)
@@ -49,12 +78,14 @@ test('collects seeded Lower v0 Sessions', async (context) => {
       node.add_child(recorder)
       const scenario = {
         seed: seed,
-        map_fixture: instruction === 7 ? 'attack' : 'move-supported-mixed-cargo',
+        map_fixture: instruction === 7 ? 'attack' : instruction === 8 ? 'central-shaft-entry' : 'move-supported-mixed-cargo',
         drops: fixture.scenario.drops,
         task: taskName,
         target: target,
-        start: { x: fixture.start.x, y: fixture.start.y },
-        position: { x: fixture.target.x, y: fixture.target.y },
+        start: instruction === 8
+          ? { x: fixture.enterStart.x, y: fixture.enterStart.y }
+          : { x: fixture.start.x, y: fixture.start.y },
+        position: instruction === 8 ? 'mine' : { x: fixture.target.x, y: fixture.target.y },
       }
       if (!expect(recorder.begin(OS.get_environment('LOWER_V0_DATASET_DIR'), taskName, target, scenario)).toBe(''))
         return
@@ -77,7 +108,8 @@ test('collects seeded Lower v0 Sessions', async (context) => {
       const promotion = recorder.finish(success)
       if (!expect(attack.task_failure).toBe('') || !expect(finished).toBe(true) || !expect(promotion).toBe(''))
         return
-      print(`Lower Session: ${taskName}/${target} seed=${seed} ${fixture.start} -> ${fixture.target}`)
+      const start = instruction === 8 ? fixture.enterStart : fixture.start
+      print(`Lower Session: ${taskName}/${target} seed=${seed} ${start} -> ${fixture.target}`)
       node.queue_free()
       await node.tree_exited
       if (instruction !== 7)

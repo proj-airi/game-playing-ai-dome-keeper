@@ -1,4 +1,4 @@
-"""Session metadata and the causal recording contract from ADR-0005."""
+"""Session metadata and the causal recording contract from ADR-0006."""
 
 from pathlib import Path
 from typing import Annotated, Any, Literal, Self, get_args
@@ -6,15 +6,15 @@ from typing import Annotated, Any, Literal, Self, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-Task = Literal["pickup", "drop", "activate", "attack"]
-Target = Literal["iron", "cobalt", "water", "gadget_chamber", "monster"]
+Task = Literal["pickup", "drop", "activate", "attack", "enter"]
+Target = Literal["iron", "cobalt", "water", "gadget_chamber", "monster", "mine"]
 Action = Literal["ui_up", "ui_down", "ui_left", "ui_right", "ui_select",
                  "keeper1_pickup", "keeper1_drop", "dome1_fire", "none"]
 TASKS = list(get_args(Task))
 TARGETS = list(get_args(Target))
 ACTIONS = list(get_args(Action))
 PAIRS = [(task, target) for task in TASKS[:2] for target in TARGETS[:3]] + [
-    ("activate", "gadget_chamber"), ("attack", "monster")]
+    ("activate", "gadget_chamber"), ("attack", "monster"), ("enter", "mine")]
 NonNegativeInt = Annotated[int, Field(ge=0)]
 NonEmptyString = Annotated[str, Field(min_length=1)]
 Metadata = Annotated[dict[str, Any], Field(min_length=1)]

@@ -1,13 +1,16 @@
 import type { FixtureDrop, FixtureScenario } from '@vikeeper/vitest'
+import type { _TaskExecutor } from '../../src/task_executor.ts'
 import type { Task } from '../../src/tasks/task.ts'
 import { _Fixture } from '@vikeeper/vitest'
 import { _ActivateGadgetChamber } from '../../src/tasks/activate_gadget_chamber.ts'
 import { _DropByType } from '../../src/tasks/drop_by_type.ts'
+import { _EnterMineTask } from '../../src/tasks/enter_mine_task.ts'
 import { _PickupTargetTask } from '../../src/tasks/pickup_target_task.ts'
 
 export class _LowerScenario extends _Fixture {
   instruction = 'pickup'
   resource = CONST.IRON
+  enterStart = Vector2(-22, -35)
   start = Vector2i(-1, 0)
   target = Vector2i(1, 0)
   scenario: FixtureScenario = {
@@ -15,6 +18,7 @@ export class _LowerScenario extends _Fixture {
     landmarks: [],
     map: {
       map_data: [
+        { type: Data.TILE_EMPTY, position: Vector2i(0, -3) },
         { type: Data.TILE_EMPTY, position: Vector2i(0, -2) },
         { type: Data.TILE_EMPTY, position: Vector2i(0, -1) },
         { type: Data.TILE_EMPTY, position: Vector2i(-2, 0) },
@@ -38,11 +42,25 @@ export class _LowerScenario extends _Fixture {
     },
   }
 
+  task_failure = ''
+  task_finished = false
+
   configure(instruction: string, resource: FixtureDrop['type'], seed: int): void {
     this.instruction = instruction
     this.resource = resource
     const random = new RandomNumberGenerator()
     random.seed = seed
+    if (instruction === 'enter') {
+      // Stay inside Dome 1's open interior while varying both alignment and
+      // descent distance. The camera keeps its native in-dome rest position.
+      this.enterStart = Vector2(
+        random.randi_range(-36, 36),
+        random.randi_range(-40, -8),
+      )
+
+      return
+    }
+
     // Gadget Chamber anchors must leave room for their 2-by-2 footprint.
     const targetMax = instruction === 'activate' ? 1 : 2
     this.target = Vector2i(random.randi_range(-2, targetMax), random.randi_range(0, targetMax))
@@ -86,6 +104,18 @@ export class _LowerScenario extends _Fixture {
   }
 
   protected on_fixture_ready(keeper: Keeper): void {
+    if (this.instruction === 'enter') {
+      const dome = Level.getDome(keeper.teamId)
+      keeper.global_position = Vector2(
+        dome.global_position.x + this.enterStart.x,
+        dome.global_position.y + this.enterStart.y,
+      )
+      keeper.move = Vector2.ZERO
+      keeper.moveDirectionInput = Vector2.ZERO
+
+      return
+    }
+
     keeper.global_position = Level.map.getTilePos(this.start)
     Level.viewports.getPlayerCam(keeper.playerId).global_position = keeper.global_position
     keeper.move = Vector2.ZERO
@@ -115,7 +145,17 @@ export class _LowerScenario extends _Fixture {
     return true
   }
 
+  watch_task(executorNode: Node): void {
+    const executor = executorNode as _TaskExecutor
+    this.task_failure = ''
+    this.task_finished = false
+    executor.task_completed.connect(this._task_completed)
+    executor.task_failed.connect(this._task_failed)
+  }
+
   task(): Task {
+    if (this.instruction === 'enter')
+      return new _EnterMineTask()
     if (this.instruction === 'activate') {
       const task = new _ActivateGadgetChamber()
       task.initialize(this.fixture_landmarks[0] as Chamber)
@@ -129,5 +169,14 @@ export class _LowerScenario extends _Fixture {
     const task = new _PickupTargetTask()
     task.initialize(this.fixture_drops[0])
     return task
+  }
+
+  private _task_completed(): void {
+    this.task_finished = true
+  }
+
+  private _task_failed(reason: string): void {
+    this.task_failure = reason
+    this.task_finished = true
   }
 }

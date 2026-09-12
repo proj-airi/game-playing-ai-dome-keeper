@@ -7,6 +7,8 @@ dependencies = [
   "torchvision>=0.29,<0.30",
   "pillow>=12,<13",
   "pydantic>=2,<3",
+  "onnx>=1.22,<1.23",
+  "onnxscript>=0.7.2,<0.8",
 ]
 
 [project.scripts]

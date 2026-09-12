@@ -7,7 +7,8 @@ import unittest
 from PIL import Image
 import torch
 
-from lower_v0 import PAIRS, Windows, extract_sessions, read_sessions, split_sessions
+from lower_v0 import PAIRS, Policy, Windows, extract_sessions, read_sessions, split_sessions
+from session_schema import Instruction
 
 
 class DataTests(unittest.TestCase):
@@ -43,7 +44,7 @@ class DataTests(unittest.TestCase):
         self.assertTrue(torch.equal(frames[0], frames[8]))
         self.assertFalse(torch.equal(frames[8], frames[9]))
         self.assertEqual(held.argmax(1).tolist(), [8] * 9 + [2])
-        self.assertEqual(instruction.tolist(), [1, 0, 0, 0, 1, 0, 0, 0, 0])
+        self.assertEqual(instruction.tolist(), [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0])
         self.assertEqual(label, 8)
         self.assertEqual(windows[0][1].argmax(1).tolist(), [8] * 10)
 
@@ -53,7 +54,19 @@ class DataTests(unittest.TestCase):
         train, valid = split_sessions(sessions, 0.25, 4)
         self.assertFalse({s["scenario_id"] for s in train} & {s["scenario_id"] for s in valid})
         self.assertEqual({s["pair"] for s in valid}, set(PAIRS))
-        self.assertEqual(len(valid), 16)
+        self.assertEqual(len(valid), 18)
+
+    def test_enter_mine_extends_only_the_instruction(self):
+        self.assertEqual(Instruction(task="enter", target="mine").model_dump(),
+                         {"task": "enter", "target": "mine"})
+        with self.assertRaises(ValueError):
+            Instruction(task="enter", target="iron")
+        with self.assertRaises(ValueError):
+            Instruction(task="pickup", target="mine")
+        model = Policy([16], pretrained=False)
+        logits = model(torch.zeros(1, 10, 3, 216, 384), torch.zeros(1, 10, 9),
+                       torch.zeros(1, 11))
+        self.assertEqual(tuple(logits.shape), (1, 9))
 
     def test_extract_recorded_video_indices_before_promotion(self):
         movie = self.root / "test.mkv"

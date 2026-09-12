@@ -293,7 +293,6 @@ export class _Fixture extends Node {
           || mapX === scenarioMap.bottom_right.x + 1
           || mapY === scenarioMap.left_top.y - 1
           || mapY === scenarioMap.bottom_right.y + 1
-
         map.set_biomev(cell, 0)
         if (isBoundary) {
           map.set_hardnessv(position, Data.HARDNESS_INDESTRUCTIBLE)
@@ -306,8 +305,18 @@ export class _Fixture extends Node {
       }
     }
 
-    for (const entry of scenarioMap.map_data)
-      map.set_resourcev(Vector2(entry.position.x, entry.position.y), entry.type)
+    for (const entry of scenarioMap.map_data) {
+      const position = Vector2(entry.position.x, entry.position.y)
+      const isOutsideMap = entry.position.x < scenarioMap.left_top.x
+        || entry.position.x > scenarioMap.bottom_right.x
+        || entry.position.y < scenarioMap.left_top.y
+        || entry.position.y > scenarioMap.bottom_right.y
+      if (entry.type === Data.TILE_EMPTY && isOutsideMap) {
+        map.set_biomev(entry.position, -1)
+        map.set_hardnessv(position, -1)
+      }
+      map.set_resourcev(position, entry.type)
+    }
 
     levelStartData.tileData = map
   }
