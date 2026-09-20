@@ -94,7 +94,7 @@ importers:
         version: 5.9.3
       typescript-to-gdscript:
         specifier: 'catalog:'
-        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4(typescript@5.9.3)
+        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
@@ -115,7 +115,7 @@ importers:
         version: 5.9.3
       typescript-to-gdscript:
         specifier: 'catalog:'
-        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4(typescript@5.9.3)
+        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
@@ -158,7 +158,7 @@ importers:
         version: 5.9.3
       typescript-to-gdscript:
         specifier: 'catalog:'
-        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4(typescript@5.9.3)
+        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
@@ -177,7 +177,7 @@ importers:
         version: 5.9.3
       typescript-to-gdscript:
         specifier: 'catalog:'
-        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4(typescript@5.9.3)
+        version: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc(typescript@5.9.3)
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
@@ -2912,8 +2912,8 @@ packages:
   type-level-regexp@0.1.17:
     resolution: {integrity: sha512-wTk4DH3cxwk196uGLK/E9pE45aLfeKJacKmcEgEOA/q5dnPGNxXt0cfYdFxb57L+sEpf1oJH4Dnx/pnRcku9jg==}
 
-  typescript-to-gdscript@https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4:
-    resolution: {gitHosted: true, integrity: sha512-+Wk6p9/7f8VL+oDd2zDw5ncUk3QLdr//H7e+yqutOV6c08YIj2ma/DX10D1FWk0vNXZRJA9iGM3dHvchfkS9Uw==, tarball: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4}
+  typescript-to-gdscript@https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc}
     version: 0.1.2
     engines: {node: '>=22'}
     hasBin: true
@@ -6256,7 +6256,7 @@ snapshots:
 
   type-level-regexp@0.1.17: {}
 
-  typescript-to-gdscript@https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/3890f83f1070e9087c071df1a502d11a9ceface4(typescript@5.9.3):
+  typescript-to-gdscript@https://codeload.github.com/LemonNekoGH/typescript-to-gdscript/tar.gz/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc(typescript@5.9.3):
     dependencies:
       chokidar: 4.0.3
       commander: 13.1.0

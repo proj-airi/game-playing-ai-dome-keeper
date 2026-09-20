@@ -6,7 +6,8 @@
   "module": "index.ts",
   "scripts": {
     "build": "tstogd convert --tsconfig tsconfig.godot.json",
-    "test": "vitest run --config test/vitest.config.ts",
+    "build:test-fixtures": "cd test && tstogd convert --tsconfig tsconfig.godot.json",
+    "test": "pnpm --dir ../../packages/vikeeper run build && pnpm run build && pnpm run build:test-fixtures && vitest run --config test/vitest.config.ts",
     "typecheck": "tsc -p tsconfig.godot.json && tsc -p test/tsconfig.godot.json && tsc -p tsconfig.node.json"
   },
   "devDependencies": {

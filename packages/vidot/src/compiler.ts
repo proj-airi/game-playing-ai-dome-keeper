@@ -1,9 +1,9 @@
-import type { TransformResult } from 'typescript-to-gdscript'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { execa } from 'execa'
 import ts from 'typescript'
-import { convertRuntimeModules } from 'typescript-to-gdscript'
 
 export interface CompileTestFileOptions {
   sourcePath: string
@@ -13,6 +13,7 @@ export interface CompileTestFileOptions {
 
 const TEST_FILE_EXTENSION = /\.[cm]?tsx?$/
 const TEST_API_MODULE = '@vidot/vitest'
+const TSTOGD_CONFIG = 'tstogd.json'
 const REGISTRATION_API_NAMES: readonly string[] = [
   'afterAll',
   'afterEach',
@@ -36,30 +37,42 @@ export async function compileTestFile(
 
   await mkdir(outputDirectory, { recursive: true })
   await writeFile(wrapperPath, wrapper)
-  const program = createTestProgram(sourcePath, wrapperPath)
-  const convertedModules = convertRuntimeModules({
-    entryFiles: [wrapperPath],
-    rootDir: outputDirectory,
-    tsDir: outputDirectory,
-    gdDir: outputDirectory,
-    projectRoot: projectPath,
-    program,
-  })
+  const testProgram = createTestProgram(sourcePath, wrapperPath)
+  const externalPackages = readTestLibraries(sourcePath)
+  const generatedConfigPath = resolve(outputDirectory, 'tsconfig.vidot.json')
 
-  for (const module of convertedModules) {
-    assertConversionSucceeded(module.sourcePath, module.result)
-    await mkdir(dirname(module.outputPath), { recursive: true })
-    await writeFile(module.outputPath, module.result.code)
-  }
+  await writeFile(generatedConfigPath, `${JSON.stringify({
+    extends: testProgram.configPath,
+    files: testProgram.program.getRootFileNames(),
+  }, null, 2)}\n`)
+  await writeFile(resolve(outputDirectory, TSTOGD_CONFIG), `${JSON.stringify({
+    tsDir: '.',
+    gdDir: '.',
+    typingsDir: '_typings',
+    disableGodotLint: true,
+    externalPackages,
+  }, null, 2)}\n`)
+  await execa('tstogd', [
+    'convert',
+    wrapperPath,
+    '--project-root',
+    projectPath,
+    '--tsconfig',
+    generatedConfigPath,
+    '--no-check',
+  ], { cwd: outputDirectory })
 
-  const wrapperModule = convertedModules.find(module => module.sourcePath === wrapperPath)
-  if (!wrapperModule)
+  const outputPath = wrapperPath.replace(TEST_FILE_EXTENSION, '.gd')
+  if (!existsSync(outputPath))
     throw new Error(`tstogd did not compile ${sourcePath}`)
 
-  return wrapperModule.outputPath
+  return outputPath
 }
 
-function createTestProgram(sourcePath: string, wrapperPath: string): ts.Program {
+function createTestProgram(
+  sourcePath: string,
+  wrapperPath: string,
+): { configPath: string, program: ts.Program } {
   const configPath = ts.findConfigFile(
     dirname(sourcePath),
     ts.sys.fileExists,
@@ -82,10 +95,13 @@ function createTestProgram(sourcePath: string, wrapperPath: string): ts.Program 
   if (parsed.errors.length > 0)
     throw new Error(formatDiagnostics(parsed.errors))
 
-  return ts.createProgram({
-    rootNames: [...parsed.fileNames, wrapperPath],
-    options: parsed.options,
-  })
+  return {
+    configPath,
+    program: ts.createProgram({
+      rootNames: [...parsed.fileNames, wrapperPath],
+      options: parsed.options,
+    }),
+  }
 }
 
 function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
@@ -96,23 +112,37 @@ function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
   })
 }
 
-function assertConversionSucceeded(
+function readTestLibraries(
   sourcePath: string,
-  result: TransformResult,
-): void {
-  const errors = result.diagnostics.filter(diagnostic =>
-    diagnostic.severity === 'error' || diagnostic.severity === 'type-error',
-  )
+): Array<{ from: string, to?: string }> {
+  let directory = dirname(sourcePath)
 
-  if (errors.length === 0)
-    return
+  for (;;) {
+    const configPath = resolve(directory, TSTOGD_CONFIG)
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+        lib?: boolean
+        externalPackages?: Array<{ from: string, to?: string }>
+      }
+      if (!config.lib)
+        throw new Error(`ViDot test package must set "lib": true: ${directory}`)
 
-  const details = errors
-    .map(diagnostic =>
-      `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}: ${diagnostic.message}`,
-    )
-    .join('\n')
-  throw new Error(`tstogd could not compile ${sourcePath}:\n${details}`)
+      return [
+        { from: realpathSync(directory) },
+        ...(config.externalPackages ?? []).map(item => ({
+          ...item,
+          from: isAbsolute(item.from) || !item.from.startsWith('.')
+            ? item.from
+            : resolve(directory, item.from),
+        })),
+      ]
+    }
+
+    const parent = dirname(directory)
+    if (parent === directory)
+      throw new Error(`could not find tstogd.json for ${sourcePath}`)
+    directory = parent
+  }
 }
 
 function transformTestModule(sourcePath: string, source: string): string {

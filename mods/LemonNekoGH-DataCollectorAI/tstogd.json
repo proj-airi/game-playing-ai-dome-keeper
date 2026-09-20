@@ -1,4 +1,5 @@
 {
+  "lib": true,
   "tsDir": "src",
   "gdDir": "mods-unpacked/LemonNekoGH-DataCollectorAI",
   "typingsDir": "src/_typings",

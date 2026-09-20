@@ -1,0 +1,10 @@
+{
+  "name": "@vikeeper/data-collector-ai-tests",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@vikeeper/vitest": "workspace:*",
+    "lemonnekogh-ai": "workspace:*"
+  }
+}

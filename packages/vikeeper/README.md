@@ -13,10 +13,14 @@ pool: vikeeper({
 
 Tests run headlessly unless `movie` is provided. Movie mode uses a decorated
 960×540 window at 30 FPS and requires Godot to produce a non-empty AVI. Each Mod
-value-imports its fixtures from its tests; ViDot compiles that runtime module
-graph without installing fixtures under the production Mod root.
+value-imports its fixtures from its tests. ViKeeper and each Mod fixture package
+build as tstogd libraries. ViDot mounts the libraries under `tstogd_modules`
+before Godot loads the tests.
 The fixture adds a debug label only when `test_name` is nonempty.
 Movie fixtures disable automatic pause on focus loss without activating the window.
+
+Run `pnpm run build` to emit ViKeeper's fixture GDScript into the ignored
+`dist/godot/` directory.
 
 `FixtureScenario` declares the map, landmarks, and physical `drops`. The base
 fixture spawns those Drops through the game's local drop system after the level

@@ -72,8 +72,10 @@ the TypeScript data types are not frozen yet.
 DataCollectorAI does not depend on or register APIs with ViDot. The Mod's Move,
 Pickup, type-directed Drop, Gadget Chamber activation, and Laser attack
 fixtures, tests, and assertions live under `test/`; tests value-import their
-fixtures, and ViDot compiles that module graph outside the production output
-root. ViKeeper supplies the shared Dome Keeper process launch policy.
+fixtures. The Mod, ViKeeper fixture, and Mod test fixtures are separate tstogd
+libraries that build their own GDScript before Vitest starts. ViDot compiles the
+generated test wrapper and mounts those libraries in the editable project.
+ViKeeper supplies the shared Dome Keeper process launch policy.
 
 Build the generated runtime files with:
 
