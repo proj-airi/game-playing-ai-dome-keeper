@@ -11,10 +11,13 @@ external/domekeeper-decompiled/
 .envrc
 
 node_modules/
+tstogd_modules/
 .pnpm-store/
 .alintcache
 **/.godot/
 packages/status-dashboard/dist/
+packages/vikeeper/dist/
+mods/LemonNekoGH-DataCollectorAI/test/dist/
 .venv/
 runs/
 models/lower-v0/artifacts/

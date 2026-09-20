@@ -71,6 +71,13 @@ converts it to the ignored `runtime/runner.gd`; `prepack` rebuilds that artifact
 and includes it in the package. Tests use the packaged GDScript runner rather
 than compiling it during a run.
 
+Godot-facing dependencies are tstogd libraries. Each library sets `lib: true`
+and builds its own GDScript before Vitest starts. ViDot writes one temporary
+class-shaped wrapper for each test module and runs `tstogd convert` on that
+wrapper. tstogd links every runtime-imported library into the editable Godot
+project under `tstogd_modules`, so wrapper preloads and library-to-library
+preloads resolve through the same package layout.
+
 A test module is adapted only where tstogd requires it:
 
 - module-level executable statements are placed in a generated
@@ -78,7 +85,7 @@ A test module is adapted only where tstogd requires it:
 - every name from `@vidot/vitest` is bound to a Godot Callable while
   the original calls remain unchanged;
 - a block-bodied arrow passed directly to a standalone registration call is
-  first stored in an adjacent local variable because tstogd 0.1.3 does not emit
+  first stored in an adjacent local variable because tstogd does not emit
   that block correctly in argument position.
 
 The retained authoring import emits no GDScript. All other supported syntax and

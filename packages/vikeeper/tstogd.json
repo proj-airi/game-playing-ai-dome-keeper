@@ -1,0 +1,7 @@
+{
+  "lib": true,
+  "tsDir": "fixture",
+  "gdDir": "dist/godot",
+  "typingsDir": "fixture/_typings",
+  "disableGodotLint": true
+}

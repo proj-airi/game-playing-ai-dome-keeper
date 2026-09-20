@@ -10,10 +10,12 @@
     }
   },
   "files": [
+    "dist/godot",
     "fixture",
     "src"
   ],
   "scripts": {
+    "build": "tstogd convert --tsconfig tsconfig.godot.json",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.godot.json"
   },
   "dependencies": {
