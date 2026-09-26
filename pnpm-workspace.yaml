@@ -16,13 +16,13 @@ catalog:
   '@proj-airi/ui': ^0.11.3
   '@types/node': ^24.13.3
   '@unocss/reset': ^66.7.5
+  '@vidot/vitest': 0.1.0
   '@vitejs/plugin-vue': ^6.0.8
-  '@vitest/runner': 4.1.10
   eslint: ^10.0.0
   execa: ^10.0.1
   nanoid: ^6.0.0
   typescript: ^5.9.3
-  typescript-to-gdscript: github:LemonNekoGH/typescript-to-gdscript#demo/external-package-sources
+  typescript-to-gdscript: 0.1.6
   unocss: ^66.7.5
   vite: ^8.1.5
   vitest: 4.1.10

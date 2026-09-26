@@ -4,10 +4,9 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 
 ## Development Quick Start
 
-- Run `mise install`, then `mise run setup`, to install pinned tools and locked dependencies.
-- Run `apm install` to install repository-managed Agent skills from the locked APM dependencies.
+- Run `mise install`, then `mise run setup`, to install pinned tools, locked dependencies, and repository-managed Agent skills.
 - Use `mise.toml` as the executable source of truth and `mise tasks` to discover repository commands. Use mise tasks and pinned tools instead of ambient substitutes.
-- After code changes, run `mise run check`; it covers the Godot mod load check, the basic ViDot integration proof, ESLint, and TypeScript/Vue typechecking.
+- After code changes, run `mise run check`; it covers Agent skill integrity, the Godot mod load check, Dome Keeper integration tests, ESLint, and TypeScript/Vue typechecking.
 - Before decompiling, launching, or testing Dome Keeper, read [`docs/development.md`](docs/development.md). Decompilation requires an owned local game and configured machine-local inputs; it is not part of unconditional setup.
 
 ## Tool Ownership
@@ -16,7 +15,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Pin tool versions in `mise.toml`. When tool configuration changes, update and commit `mise.toml` and `mise.lock` together.
 - pnpm owns JavaScript and TypeScript dependencies and `pnpm-lock.yaml`; install with pnpm and run TypeScript scripts with Node.js.
 - uv owns Python dependencies, `uv.lock`, and `.venv`; invoke Python tools through uv or mise tasks, not bare `python`, `pip`, or `yolo`. Do not add a second overlapping Python environment manager.
-- apm owns repository-managed Agent skills, `apm.yml`, and `apm.lock.yaml`; install them with `apm install` and do not commit deployed skill contents.
+- apm owns repository-managed Agent skills, `apm.yml`, and `apm.lock.yaml`; `mise run setup` installs the locked skills, and deployed skill contents stay uncommitted.
 - ESLint uses `@antfu/eslint-config` with the flat `eslint.config.mjs`; treat `mise.toml` as mise-owned configuration and format it with `mise fmt`, not ESLint.
 - Use `execa` directly for TypeScript process execution and prefer its built-in output and termination behavior over local process wrappers.
 
@@ -28,7 +27,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Return promises directly instead of using `return await` when no adaptation or error-boundary behavior is needed.
 - Prefer eta reduction when a wrapper does not adapt arguments, bind context, add control flow, or improve readability.
 - Represent state machines with enums instead of string-literal union types.
-- In tstogd source, prefer ordinary TypeScript imports, construction, property access, method calls, operators, and type declarations. Mark reusable Godot packages with `lib: true`. Build their GDScript before consumption, and let tstogd mount them through `tstogd_modules`. Use `gd.eval` only when tstogd cannot represent the required construct. Keep the injected expression or statement as narrow as possible.
+- In tstogd source, prefer ordinary TypeScript imports, construction, property access, method calls, operators, and type declarations. Mark reusable Godot packages with `lib: true`, declare their shared-package dependencies in `package.json`, and build their GDScript before consumption so tstogd mounts each package through `tstogd_modules/<package-name>`. Use `gd.eval` only when tstogd cannot represent the required construct. Keep the injected expression or statement as narrow as possible.
 
 ### General
 
@@ -85,7 +84,7 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Confirmed maintenance and behavior-correction tasks: [`docs/todo.md`](docs/todo.md).
 - Capability milestones, sequencing, and open design decisions: [`docs/roadmap.md`](docs/roadmap.md).
 - Detection, datasets, training, inference, playground, and Electron vision integration: [`docs/vision.md`](docs/vision.md).
-- ViDot Godot automation and Vitest integration design: [`docs/vidot.md`](docs/vidot.md).
+- Dome Keeper test integration: [`packages/vikeeper/README.md`](packages/vikeeper/README.md). Generic ViDot development lives in [`LemonNekoGH/vidot`](https://github.com/LemonNekoGH/vidot).
 - Detailed Mod, decompilation, tool rationale, specialized workflows, and planned layout: [`docs/development.md`](docs/development.md).
 - Status and replay producer/consumer contract: [`packages/status-dashboard/README.md`](packages/status-dashboard/README.md).
 - External sources supporting project decisions: [`docs/references.md`](docs/references.md).
@@ -97,13 +96,6 @@ This repository builds the Dome Keeper game-playing integration for Project AIRI
 - Use the confirmed two-Agent plugin topology beneath AIRI, with Vision feeding both Agents; the Lower Agent implementation remains open.
 - Deployed control must use frame-derived information and normal configured game inputs. Privileged teacher state may provide evidence and labels but never authorizes direct game-state mutation.
 - In Chinese-facing discussion, translate upstream `Gadget` as “装备” and `Gadget Chamber` as “装备室”; reserve “遗物” and “遗物室” for `Relic` and `Relic Chamber`. Preserve upstream English identifiers in source code and runtime logs.
-
-## Current Priority
-
-- Keep the legacy `LemonNekoGH-YoloDataCollector` Mod disabled. Maintain the
-  editable-project ViDot proof through `mise run vidot:test`, reconnect the
-  ViKeeper fixture next, and use `mise run godot:check` for the current
-  DataCollectorAI Mod-load validation.
 
 ## Unattended Long-Run Optimization
 
@@ -127,10 +119,9 @@ This section applies only when the legacy rule teacher is explicitly re-enabled;
 ## Verification
 
 - After code changes, run `mise run check`; after documentation-only changes, run focused Markdown, link, and consistency checks.
-- Run ViDot tests that launch Godot or Dome Keeper outside the Agent sandbox,
-  including `mise run vidot:test`, `mise run domekeeper:vidot:test`, and the
-  aggregate `mise run check`. The sandbox can resolve the correct mise-managed
-  tools while still aborting the macOS Godot process, so a sandboxed run is not
-  a valid result.
+- Run tests that launch Godot or Dome Keeper outside the Agent sandbox,
+  including `mise run domekeeper:vidot:test` and the aggregate `mise run check`.
+  The sandbox can resolve the correct mise-managed tools while still aborting
+  the macOS Godot process, so a sandboxed run is not a valid result.
 - After changing a Dome Keeper mod, the `godot:check` dependency inside `mise run check` must pass; do not rely on Godot's process exit code alone.
 - Format and validate `mise.toml` with `mise fmt` when changing it.

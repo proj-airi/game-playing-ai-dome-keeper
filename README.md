@@ -76,8 +76,10 @@ task, and `Quark Action` structure.
 mise run godot:open
 ```
 
-The basic editable-project ViDot proof runs with `mise run vidot:test`. Use
-`mise run godot:check` for the current DataCollectorAI Mod-load validation.
+ViDot's editable-project proof lives in the separate
+[ViDot repository](https://github.com/LemonNekoGH/vidot). Run
+`mise run domekeeper:vidot:test` for this project's Dome Keeper tests and
+`mise run godot:check` for DataCollectorAI Mod-load validation.
 
 ### 2. Train a Baseline (Ultralytics)
 
@@ -108,6 +110,12 @@ mise run check
 release asset in `mise.toml`, run `mise lock` and commit both files together.
 The Dome Keeper Editor assets are pinned to the SHA-256 digests published by the
 official GitHub release; review URL, digest, and asset-size changes together.
+
+`mise run setup` also installs the locked repository Agent skills from
+`apm.yml` and `apm.lock.yaml`. The root `AGENTS.md` gives coding agents their
+project instructions; reusable local skills live under `.agents/skills/`.
+`mise run agents:check` verifies the installed skill files against the lockfile
+and is part of `mise run check`.
 
 mise owns development-tool versions, including Node.js and pnpm, and
 repository-level tasks. pnpm owns JavaScript and TypeScript workspace

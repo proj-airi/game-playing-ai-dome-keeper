@@ -1,7 +1,0 @@
-{
-  "references": [
-    { "path": "./tsconfig.godot.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
-  "files": []
-}

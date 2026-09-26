@@ -1,6 +1,6 @@
 # ViKeeper
 
-ViKeeper wraps ViDot for Dome Keeper Mod tests. The caller supplies an editable
+ViKeeper wraps the external [ViDot package](https://github.com/LemonNekoGH/vidot) for Dome Keeper Mod tests. The caller supplies an editable
 Dome Keeper project; ViKeeper does not locate projects, inspect manifests, or
 contain Mod-specific fixtures.
 

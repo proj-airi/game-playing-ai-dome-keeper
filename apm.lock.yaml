@@ -1,13 +1,13 @@
 lockfile_version: '1'
-generated_at: '2026-08-24T13:20:36.107008+00:00'
-apm_version: 0.28.0
+generated_at: '2026-09-24T12:41:05.201529+00:00'
+apm_version: 0.31.0
 dependencies:
 - repo_url: skillrecordings/adr-skill
   name: adr-skill
   host: github.com
   resolved_commit: 2fc2269f83b0d17b2a134ae644a8c0a08cb19e07
   resolved_ref: 2fc2269f83b0d17b2a134ae644a8c0a08cb19e07
-  version: 0.0.0
+  version: unknown
   package_type: skill_bundle
   deployed_files:
   - .agents/skills/adr-skill

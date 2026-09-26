@@ -172,10 +172,11 @@ capabilities materially change.
 
 ## Capability Milestones
 
-### Implement Godot-Native ViDot Test Execution — First Editable Proof Working
+### Implement Godot-Native ViDot Test Execution — Moved to ViDot Repository
 
-- Keep the editable-project proof passing through `mise run vidot:test`.
-- Extend the test API only when a concrete test requires it.
+- Maintain the editable-project proof and generic test API in the
+  [ViDot repository](https://github.com/LemonNekoGH/vidot).
+- Keep Dome Keeper-specific coverage in `mise run domekeeper:vidot:test`.
 
 ### Connect the First Dome Keeper ViKeeper Test — Complete
 

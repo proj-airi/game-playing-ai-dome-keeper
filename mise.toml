@@ -8,6 +8,7 @@ lockfile = true
 node = "24.18.0"
 pnpm = "11.21.0"
 python = "3.12.13"
+"github:microsoft/apm" = "0.31.0"
 "aqua:astral-sh/uv" = "0.11.32"
 
 [tool_alias]
@@ -29,8 +30,12 @@ linux-x64 = { asset_pattern = "linux.zip", bin_path = "linux", checksum = "sha25
 windows-x64 = { asset_pattern = "windows.zip", bin_path = "windows", checksum = "sha256:d446c93864d03275f370e06ab83d3b9082ecc8e1710c32aaf42f307e7b4c5f98", size = "65248131" }
 
 [tasks.setup]
-description = "Install locked JavaScript and Python dependencies"
-run = ["pnpm install --frozen-lockfile", "uv sync --locked"]
+description = "Install locked project dependencies and Agent skills"
+run = [
+  "pnpm install --frozen-lockfile",
+  "uv sync --locked",
+  "apm install --frozen",
+]
 
 [tasks.lint]
 description = "Lint the repository"
@@ -40,6 +45,10 @@ run = "pnpm run lint"
 description = "Run model-assisted JavaScript and TypeScript review"
 run = "pnpm run alint"
 
+[tasks."agents:check"]
+description = "Verify locked Agent skills and deployed files"
+run = "apm audit --ci"
+
 [tasks.typecheck]
 description = "Type-check the repository"
 run = "pnpm run typecheck"
@@ -47,17 +56,16 @@ run = "pnpm run typecheck"
 [tasks.check]
 description = "Run repository checks"
 depends = [
+  "agents:check",
   "domekeeper:vidot:test",
   "godot:check",
   "lint",
   "lower-v0:test",
   "typecheck",
-  "vidot:test",
 ]
 
 [tasks."lower-v0:collect"]
 description = "Collect seeded random Lower v0 task Sessions"
-depends = ["vidot:build"]
 env = { LOWER_V0_DATASET_DIR = "{{ config_root }}/data/lower-v0", LOWER_V0_COUNT = "8", LOWER_V0_SEED = "20260909", VIDOT_MOVIE = "{{ config_root }}/recordings/lower-v0.avi" }
 run = [
   "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test",
@@ -76,26 +84,16 @@ run = "uv run --locked --package lower-v0 lower-v0 train"
 [tasks."lower-v0:evaluate"]
 run = "uv run --locked --package lower-v0 lower-v0 evaluate"
 
-[tasks."vidot:build"]
-description = "Build the Godot-native ViDot runner"
-run = "pnpm --dir packages/vidot run build"
-
-[tasks."vidot:test"]
-description = "Run the basic Godot-native ViDot integration test"
-run = "pnpm --dir packages/vidot run test"
-
 [tasks."data-collector-ai:build"]
 description = "Build the TypeScript-authored DataCollectorAI Mod"
 run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run build"
 
 [tasks."domekeeper:vidot:test"]
 description = "Run the DataCollectorAI Move test inside Dome Keeper"
-depends = ["vidot:build"]
 run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test"
 
 [tasks."domekeeper:vidot:record"]
 description = "Record the DataCollectorAI Move test with Godot Movie Maker"
-depends = ["vidot:build"]
 env = { VIDOT_MOVIE = "{{ config_root }}/recordings/move.avi" }
 run = "pnpm --dir mods/LemonNekoGH-DataCollectorAI run test"
 

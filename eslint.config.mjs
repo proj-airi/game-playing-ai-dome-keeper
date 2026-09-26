@@ -4,7 +4,6 @@ export default antfu({
   ignores: ['mise.toml', 'apm.lock.yaml', '**/_typings/**'],
 }, {
   files: [
-    'packages/vidot/runtime/src/**/*.ts',
     'packages/vikeeper/runtime/src/**/*.ts',
   ],
   rules: {

@@ -53,20 +53,6 @@ This page collects external resources useful for understanding and maintaining t
 - [Godot 4.3: Window Focus](https://docs.godotengine.org/en/4.3/classes/class_window.html#class-window-property-unfocusable) — Lower collection prevents its window from taking focus with `unfocusable`.
 - [Godot 4.3: Rendering Completion](https://github.com/godotengine/godot/blob/4.3-stable/servers/rendering/rendering_server_default.cpp#L96-L100) — With ViKeeper's safe render thread, `frame_post_draw` identifies a completed render before the process counter increments. Lower collection stores this counter as the zero-based video frame index.
 - [Godot 4.3: Main Loop](https://github.com/godotengine/godot/blob/4.3/main/main.cpp#L3856-L3914) — The loop can skip drawing for an occluded window while Movie Maker still writes frames.
-- [Vitest](https://vitest.dev/) — The outer runner used for candidate-file discovery and reporting while Godot collects and executes tests.
-- [Vitest 4.1.10: Custom Pool API](https://github.com/vitest-dev/vitest/blob/v4.1.10/docs/guide/advanced/pool.md#api) — The advanced, experimental `PoolRunnerInitializer` and worker boundary selected for ViDot's thin Node.js adapter, which forwards a file batch to one Godot runner instead of evaluating the tests in Node.js.
-- [Vitest 4.1.10: Test Collection](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/collect.ts) — The upstream collection orchestration used as a semantic reference for ViDot's Godot-side collector and compatibility fixtures, not as a Node-side collector in ViDot's runtime.
-- [Vitest 4.1.10: Task Utilities](https://github.com/vitest-dev/vitest/blob/v4.1.10/packages/runner/src/utils/tasks.ts) — The upstream recursive failure check reused when ViDot derives a file result from its reported task tree.
-- [Godot 4.3: RegEx](https://docs.godotengine.org/en/4.3/classes/class_regex.html) — The PCRE2-backed regular-expression API used by ViDot to apply Vitest test-name patterns inside the Godot runner before execution.
-- [Vitest: Expect](https://vitest.dev/api/expect) — The matcher contract used for ViDot's initial `toBe` and `toEqual` assertions; ViDot records matcher failures while test authors write any desired fail-fast return explicitly.
-- [Vitest: Setup and Teardown](https://vitest.dev/guide/learn/setup-teardown) — The lifecycle contract requiring `afterEach` cleanup even when a test fails.
-- [Vitest: Test Run Lifecycle](https://vitest.dev/guide/lifecycle) — The collection, hook, test, and reporting order mirrored by the Godot-side runner.
-- [Vitest: Test Context](https://vitest.dev/guide/test-context) — The callback-context model followed by ViDot's Godot-native `tree` context.
-- [Vitest: Reporters](https://vitest.dev/guide/reporters) — The native result and reporting system populated by ViDot's custom-pool adapter.
-- [Godot 4.3: Command-Line Tutorial](https://docs.godotengine.org/en/4.3/tutorials/editor/command_line_tutorial.html) — The `--path` and `--script` launch boundaries used by the editable-project runner.
-- [Godot 4.3: GDScript Lambda Functions](https://docs.godotengine.org/en/4.3/tutorials/scripting/gdscript/gdscript_basics.html#lambda-functions) — The capture boundary inherited by ViDot's local test callbacks: scalar locals are captured by value, while Array, Dictionary, and Object contents remain shared by reference.
-- [Godot 4.3: GDScript Classes as Resources](https://docs.godotengine.org/en/4.3/tutorials/scripting/gdscript/gdscript_basics.html#classes-as-resources) — The script loading and instantiation model used by ViDot's external fixture helper.
-- [Godot 4.3 source: Scripted `SceneTree` Startup](https://github.com/godotengine/godot/blob/4.3-stable/main/main.cpp#L3505-L3704) — The startup path showing that an external runner script replaces the default main-scene entry while the target's configured Autoloads are still instantiated.
 
 ## Mod Development and Godot 4.3
 
@@ -132,25 +118,31 @@ This page collects external resources useful for understanding and maintaining t
 - [mise Tasks](https://mise.jdx.dev/tasks/) — Documentation for defining and running mise tasks, which expose the project's checks, training, and automation entry points.
 - [mise Aggressive Activation](https://mise.jdx.dev/configuration/settings.html#activate-aggressive) — Documentation for mise path precedence, used to ensure child-process shebangs resolve to pinned tools.
 - [mise Lockfiles](https://mise.jdx.dev/dev-tools/mise-lock.html) — Documentation for `mise.lock`, which the project commits to preserve tool URLs and checksums reproducibly.
-- [mise GitHub Backend](https://mise.jdx.dev/dev-tools/backends/github.html) — Documentation for installing assets from GitHub Releases, used to manage the required Dome Keeper Editor build.
+- [mise GitHub Backend](https://mise.jdx.dev/dev-tools/backends/github.html) — Documentation for installing GitHub Release assets, used to manage the Dome Keeper Editor and APM.
 - [mise Aqua Backend](https://mise.jdx.dev/dev-tools/backends/aqua.html) — Documentation for mise's Aqua backend, explicitly used to keep uv resolution reproducible.
 - [mise Backend Architecture](https://mise.jdx.dev/dev-tools/backend_architecture) — An explanation of mise backend resolution and responsibilities, supporting the project's explicit uv backend choice.
 - [mise Environments](https://mise.jdx.dev/environments/) — Documentation for mise-managed environment variables, used for project versions and machine-local decompilation inputs.
 - [mise Python](https://mise.jdx.dev/lang/python.html) — Documentation for Python installation and version management through mise, which owns the project interpreter.
 - [mise Format Command](https://mise.jdx.dev/cli/fmt.html) — Documentation for `mise fmt`, used to format and validate the project's `mise.toml`.
+- [APM Installation](https://microsoft.github.io/apm/getting-started/installation/) — Official installation options for the Agent Package Manager pinned by mise.
+- [APM Frozen Install](https://microsoft.github.io/apm/reference/cli/install/) — The lockfile-only Agent skill installation used by repository setup.
+- [APM Audit](https://microsoft.github.io/apm/reference/cli/audit/) — The locked Agent skill integrity and drift check included in repository checks.
+- [Codex AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md) — Codex's project instruction discovery behavior used by this repository.
+- [Codex Skills](https://learn.chatgpt.com/docs/build-skills) — Codex's repository skill discovery under `.agents/skills/`.
 - [Node.js TypeScript Modules](https://nodejs.org/api/typescript.html) — The native erasable-TypeScript execution boundary used by repository automation under `scripts/`.
 - [Node.js ECMAScript Modules](https://nodejs.org/api/esm.html#importmetadirname) — The `import.meta.dirname` and ESM resolution behavior used by the project's TypeScript scripts.
 - [Node.js Environment Variables](https://nodejs.org/api/environment_variables.html#processenv) — The `process.env` API used to read machine-local script inputs.
 - [pnpm Workspaces](https://pnpm.io/workspaces) — The workspace and `workspace:` protocol contract defined by `pnpm-workspace.yaml`.
+- [pnpm Package Sources](https://pnpm.io/package-sources#git-repository) — The Git commit dependency form used to consume the standalone ViDot package.
 - [pnpm Install](https://pnpm.io/cli/install) — The installation and frozen-lockfile behavior used by repository setup.
 - [pnpm Run](https://pnpm.io/cli/run) — Package-script executable resolution and workspace-root binary behavior used by package scripts.
 - [pnpm Build Settings](https://pnpm.io/settings/build#allowbuilds) — The explicit dependency build-script allowlist used for reviewed native bindings.
 - [pnpm Dependency Trust Policy](https://pnpm.io/settings/dependency-resolution#trustpolicyexclude) — The version-specific trust-policy exclusion used for the reviewed `chokidar@4.0.3` artifact while retaining downgrade checks for every other dependency.
 - [LemonNekoGH/typescript-to-gdscript](https://github.com/LemonNekoGH/typescript-to-gdscript) — The fork used by `LemonNekoGH-DataCollectorAI` and ViDot to author Godot-compatible code in TypeScript and emit runtime GDScript.
-- [typescript-to-gdscript commit 575b2cd: Shared Packages](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc/docs/configuration.md#shared-packages) — The `lib: true`, prebuilt output, and `tstogd_modules` linking contract used by the Mod, ViKeeper, and ViDot test fixtures.
-- [typescript-to-gdscript commit 575b2cd: Programmatic Converter](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc/src/converter/ts-to-gd/index.ts) — The public per-file conversion seam used by tstogd's CLI after ViDot generates a class-shaped TypeScript wrapper.
-- [typescript-to-gdscript commit 575b2cd: Import Transformation](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc/src/converter/ts-to-gd/imports.ts) — The relative library import and linked-package preload mapping used by generated runtime code.
-- [typescript-to-gdscript commit 575b2cd: Transform Rules](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/575b2cda09d5e4b1129a4a0cf9cd18d381b280bc/docs/transform-rules.md#restrictions--unsupported-typescript-features) — The documented TypeScript-to-GDScript language boundary inherited by ViDot, including unsupported exception constructs.
+- [LemonNekoGH/vidot](https://github.com/LemonNekoGH/vidot) — The standalone Godot test runner consumed by ViKeeper and DataCollectorAI tests.
+- [typescript-to-gdscript commit 78058f1: Shared Packages](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/78058f173ef8d38949532037998b3c86407eec7d/docs/configuration.md#shared-packages) — The `lib: true`, prebuilt output, and `tstogd_modules` linking contract used by the Mod, ViKeeper, and ViDot test fixtures.
+- [typescript-to-gdscript commit 78058f1: Import Transformation](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/78058f173ef8d38949532037998b3c86407eec7d/src/converter/ts-to-gd/imports.ts) — The relative library import and linked-package preload mapping used by generated runtime code.
+- [typescript-to-gdscript commit 78058f1: Transform Rules](https://github.com/LemonNekoGH/typescript-to-gdscript/blob/78058f173ef8d38949532037998b3c86407eec7d/docs/transform-rules.md#restrictions--unsupported-typescript-features) — The documented TypeScript-to-GDScript language boundary used by this project.
 - [Node.js Release Schedule](https://nodejs.org/en/about/previous-releases) — The Node.js release and LTS schedule used to select the pinned runtime for npm package executables.
 - [Node.js File-System Promises API](https://nodejs.org/api/fs.html#promises-api) — The asynchronous file-system API used by the status dashboard development server to read live snapshots.
 - [Node.js OS Temporary Directory](https://nodejs.org/api/os.html#ostmpdir) — Documentation for `os.tmpdir()`, used to align the Godot snapshot location with the Node.js reader.
@@ -160,8 +152,7 @@ This page collects external resources useful for understanding and maintaining t
 - [ESLint Flat Configuration Files](https://eslint.org/docs/latest/use/configure/configuration-files) — The official flat-config reference followed by the project's `eslint.config.mjs`.
 - [alint 0.4.0](https://github.com/moeru-ai/alint/tree/v0.4.0) — The model-backed code-analysis tool used alongside ESLint for optional JavaScript and TypeScript design review; the version is pinned because the upstream API remains early.
 - [alint JavaScript Plugin 0.4.0](https://github.com/moeru-ai/alint/tree/v0.4.0/packages/plugin-js) — The official JavaScript and TypeScript plugin whose `js/recommended` preset defines the repository's model-assisted ruleset.
-- [Execa](https://github.com/sindresorhus/execa) — The process execution library used by the project's TypeScript automation and ViDot process lifecycle.
-- [Execa Termination](https://github.com/sindresorhus/execa/blob/v10.0.1/docs/termination.md) — The graceful and forceful termination behavior used to bound ViDot process cleanup.
+- [Execa](https://github.com/sindresorhus/execa) — The process execution library used by this project's TypeScript automation.
 
 ## Web UI and Inference Runtime
 

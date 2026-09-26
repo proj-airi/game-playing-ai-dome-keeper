@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@vidot/vitest": "workspace:*",
+    "@vidot/vitest": "catalog:",
     "@vikeeper/vitest": "workspace:*",
     "typescript": "catalog:",
     "typescript-to-gdscript": "catalog:",

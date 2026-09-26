@@ -1,4 +1,4 @@
 interface:
   display_name: Lint
-  short_description: Run eslint --fix and typecheck after edits
-  default_prompt: 'After modifying files, run eslint --fix and typecheck using pnpm before responding.'
+  short_description: Run pinned ESLint fixes and TypeScript checks
+  default_prompt: "Use $lint to run the repository's pinned lint and typecheck commands after code edits."

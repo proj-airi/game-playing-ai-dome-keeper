@@ -19,7 +19,7 @@
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.godot.json"
   },
   "dependencies": {
-    "@vidot/vitest": "workspace:*"
+    "@vidot/vitest": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

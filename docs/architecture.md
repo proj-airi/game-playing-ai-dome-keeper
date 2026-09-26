@@ -18,13 +18,13 @@ flowchart LR
 | --- | --- | --- |
 | `mods/LemonNekoGH-DataCollectorAI` | Active TypeScript-authored Dome Keeper Mod. | Generates the GDScript loaded by an editable Dome Keeper project. Its tests use ViKeeper. |
 | `packages/vikeeper` | Dome Keeper-specific ViDot integration. | Supplies project launch policy to Mod-owned tests and composes ViDot. |
-| `packages/vidot` | Generic Godot test runner. | Runs tests inside the explicitly configured editable Godot project. |
+| [`LemonNekoGH/vidot`](https://github.com/LemonNekoGH/vidot) | External generic Godot test runner. | Runs tests inside the explicitly configured editable Godot project. |
 | `packages/status-dashboard` | Local observer for existing status and replay artifacts. | Has no active live or replay producer while the legacy collector is disabled. |
 | `mods/LemonNekoGH-YoloDataCollector` | Retained legacy collector and rule teacher source. | Is not linked into current editable projects or workflows. |
 
 The DataCollectorAI Mod owns its runtime design in its
 [README](../mods/LemonNekoGH-DataCollectorAI/README.md). ViDot and ViKeeper own
-their testing contracts in [ViDot](vidot.md) and their package READMEs.
+their testing contracts in the [ViDot guide](https://github.com/LemonNekoGH/vidot/blob/main/docs/vidot.md) and the [ViKeeper README](../packages/vikeeper/README.md).
 
 ## Target Runtime Topology
 

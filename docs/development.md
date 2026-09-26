@@ -68,7 +68,7 @@ development workflows while the YOLO Mod is disabled.
 
 - Keep the disabled GDScript collector and teacher source under `mods/LemonNekoGH-YoloDataCollector/` as a migration reference; do not install it into active decompiled projects.
 - Store the replacement TypeScript-authored Godot AI mod under `mods/LemonNekoGH-DataCollectorAI/`; keep TypeScript source in `src/` and generated GDScript in `mods-unpacked/LemonNekoGH-DataCollectorAI/`.
-- Store reusable Dome Keeper test infrastructure under `packages/vikeeper/`; keep generic Godot automation under `packages/vidot/`.
+- Store reusable Dome Keeper test infrastructure under `packages/vikeeper/`; generic Godot automation is maintained in the separate [ViDot repository](https://github.com/LemonNekoGH/vidot).
 - Do not put Godot mods under `crates/`.
 
 ## Tooling
@@ -79,7 +79,7 @@ development workflows while the YOLO Mod is disabled.
 - The root pnpm workspace includes `apps/*`, `packages/*`, and `mods/*`. Use `pnpm run build` to build every workspace that exposes a build script; this currently includes the TypeScript-to-GDScript AI mod and the status dashboard.
 - Keep dependency build scripts fail-closed through pnpm's `allowBuilds`. Approve only the reviewed Tree-sitter native bindings required by `typescript-to-gdscript`; explicitly deny optional install-time rewrites that the resolved runtime does not need.
 - Keep pnpm's trust-downgrade policy enabled. Exclude only `chokidar@4.0.3`, the `typescript-to-gdscript` file-watcher dependency already present with the same integrity in the previous lockfile, because that release lacks the provenance evidence present on an earlier release.
-- Build tstogd libraries before running consumers. Libraries own their generated GDScript. Consumers mount complete package roots through `tstogd_modules`.
+- Build tstogd libraries before running consumers. Libraries own their generated GDScript and declare their shared-package dependencies in `package.json`. tstogd follows declared dependencies transitively and links each complete package root under `tstogd_modules/<package-name>`, using `externalPackages` only for a plain folder or a custom mount name.
 
 ## Linting
 
