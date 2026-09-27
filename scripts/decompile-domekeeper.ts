@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, statSync, symlinkSync, unlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { execa } from 'execa'
@@ -62,6 +62,18 @@ catch (error) {
   console.error(error)
   process.exit(1)
 }
+
+const projectPath = path.join(outDir, 'project.godot')
+const projectSource = readFileSync(projectPath, 'utf8')
+const featureDeclaration = projectSource.match(/^_custom_features="([^"]*)"$/m)
+const customFeatures = featureDeclaration?.[1].split(',')
+if (featureDeclaration === null || customFeatures === undefined || !customFeatures.includes('steam')) {
+  console.error(`Recovered project does not declare the expected Steam feature: ${projectPath}`)
+  process.exit(1)
+}
+const editorFeatures = customFeatures.filter(feature => feature !== 'steam')
+writeFileSync(projectPath, projectSource.replace(featureDeclaration[0], `_custom_features="${editorFeatures.join(',')}"`))
+console.log('Disabled the recovered Steam feature for editor tests.')
 
 console.log('\nGenerating TypeScript declarations for the decompiled game...')
 try {
