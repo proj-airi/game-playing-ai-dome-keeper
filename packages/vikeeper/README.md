@@ -18,6 +18,9 @@ build as tstogd libraries. ViDot mounts the libraries under `tstogd_modules`
 before Godot loads the tests.
 The fixture adds a debug label only when `test_name` is nonempty.
 Movie fixtures disable automatic pause on focus loss without activating the window.
+The persistent `Game` node is a direct child of the scene-tree root. Each test
+adds its Mod fixture below `context.root`, so ViDot can release the fixture
+without ending the reused game process.
 
 Run `pnpm run build` to emit ViKeeper's fixture GDScript into the ignored
 `dist/godot/` directory.

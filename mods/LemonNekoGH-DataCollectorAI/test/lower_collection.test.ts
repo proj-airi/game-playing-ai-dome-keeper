@@ -44,7 +44,7 @@ test('collects seeded Lower v0 Sessions', async (context) => {
       const node = instruction === 7 ? attack : fixture
       if (instruction !== 7)
         fixture.configure(taskName, types[instruction % 3], seed)
-      context.tree.root.add_child(node)
+      context.root!.add_child(node)
       const ready = await context.waitUntil(() => node.startup_error !== ''
         || (instruction === 7 ? attack.attack_ready : fixture.ready_for_task()), 60_000)
       if (!expect(ready).toBe(true) || !expect(node.startup_error).toBe(''))

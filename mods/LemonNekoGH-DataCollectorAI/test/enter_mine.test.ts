@@ -15,7 +15,7 @@ test('enters the mine from the dome', async (context) => {
     return
   }
   alternate.free()
-  context.tree.root.add_child(fixture)
+  context.root!.add_child(fixture)
 
   const ready = await context.waitUntil(() => fixture.startup_error !== '' || fixture.ready_for_task(), 60_000)
   if (!expect(ready).toBe(true) || !expect(fixture.startup_error).toBe(''))

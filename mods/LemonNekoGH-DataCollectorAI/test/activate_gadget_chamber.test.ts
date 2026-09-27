@@ -8,7 +8,7 @@ const testName = 'activates a Gadget Chamber and carries its new Gadget'
 test(testName, async (context) => {
   const fixture = new _ActivateGadgetChamberTest()
   fixture.test_name = testName
-  context.tree.root.add_child(fixture)
+  context.root!.add_child(fixture)
   const ready = await context.waitUntil(
     () => fixture.startup_error !== '' || fixture.chamber_ready,
     60_000,

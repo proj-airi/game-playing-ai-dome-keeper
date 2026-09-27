@@ -95,11 +95,10 @@ export class _Fixture extends Node {
       this.add_child(overlay)
     }
 
-    const game = this.get_tree().get_first_node_in_group('vidot-persistent-game')
+    const game = this.get_tree().root.get_node_or_null('Game')
     if (game === null) {
       const newGame = gameScene.instantiate() as Node & Game
       newGame.devMode = false
-      newGame.add_to_group('vidot-persistent-game')
       this.get_tree().root.add_child(newGame)
     }
     else if (StageManager.isInLevel()) {

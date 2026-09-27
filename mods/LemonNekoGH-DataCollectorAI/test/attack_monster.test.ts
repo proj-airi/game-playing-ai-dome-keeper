@@ -8,7 +8,7 @@ const testName = 'aims the Laser Dome and kills one monster'
 test(testName, async (context) => {
   const fixture = new _AttackMonsterTest()
   fixture.test_name = testName
-  context.tree.root.add_child(fixture)
+  context.root!.add_child(fixture)
   const fixtureReady = await context.waitUntil(
     () => fixture.startup_error !== '' || fixture.fixture_ready,
     60_000,
