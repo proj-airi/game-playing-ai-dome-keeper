@@ -21,7 +21,10 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     include: collection ? ['lower_collection.test.ts'] : ['**/*.test.ts'],
-    exclude: collection ? [] : ['lower_collection.test.ts'],
+    exclude: [
+      'tstogd_modules/**',
+      ...(collection ? [] : ['lower_collection.test.ts']),
+    ],
     isolate: false,
     pool: vikeeper({
       projectPath: path.join(repoRoot, 'external', 'domekeeper-decompiled', version),
