@@ -16,7 +16,7 @@ catalog:
   '@proj-airi/ui': ^0.11.3
   '@types/node': ^24.13.3
   '@unocss/reset': ^66.7.5
-  '@vidot/vitest': 0.1.0
+  '@vidot/vitest': 0.2.0
   '@vitejs/plugin-vue': ^6.0.8
   eslint: ^10.0.0
   execa: ^10.0.1
